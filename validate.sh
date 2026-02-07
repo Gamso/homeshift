@@ -17,8 +17,7 @@ echo "✅ Directory structure OK"
 echo "🐍 Checking Python syntax..."
 python_files=$(find custom_components/day_mode -name "*.py")
 for file in $python_files; do
-    python -m py_compile "$file"
-    if [ $? -eq 0 ]; then
+    if python -m py_compile "$file"; then
         echo "  ✅ $file"
     else
         echo "  ❌ $file"
@@ -30,8 +29,7 @@ done
 echo "📋 Checking JSON files..."
 json_files=$(find custom_components/day_mode -name "*.json")
 for file in $json_files; do
-    python -m json.tool "$file" > /dev/null
-    if [ $? -eq 0 ]; then
+    if python -m json.tool "$file" > /dev/null; then
         echo "  ✅ $file"
     else
         echo "  ❌ $file"

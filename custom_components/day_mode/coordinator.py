@@ -138,7 +138,10 @@ class DayModeCoordinator(DataUpdateCoordinator):
                     elif event_message == EVENT_TELETRAVAIL:
                         next_day_type = EVENT_TELETRAVAIL
             except Exception as e:
-                _LOGGER.error(f"Error parsing calendar event: {e}")
+                _LOGGER.error(
+                    f"Error parsing calendar event from {calendar_entity}: {e}. "
+                    f"Event data: start_time={event_start}, message={event_message}"
+                )
         
         return {
             "next_day_type": next_day_type,

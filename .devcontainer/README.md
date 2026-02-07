@@ -38,6 +38,24 @@ The devcontainer includes:
 - **Linting & Formatting**: Ruff for code quality
 - **YAML Support**: For Home Assistant configuration files
 - **VS Code Settings**: Pre-configured for Home Assistant development
+- **Startup Script**: `starts_ha.sh` that sets up the environment automatically
+
+### Configuration Files
+
+The `.devcontainer` directory contains:
+
+- **devcontainer.json**: Main devcontainer configuration
+- **configuration.yaml**: Home Assistant configuration with debug logging for day_mode
+- **starts_ha.sh**: Startup script that:
+  - Creates necessary directories
+  - Copies configuration files to Home Assistant config directory
+  - Sets up the custom component symlink
+  - Copies scheduler.storage if present
+  - Starts Home Assistant
+- **scheduler.storage**: Optional scheduler component storage file
+  - Automatically copied to `/config/.storage/` on container start
+  - Allows pre-configuring scheduler entities for testing
+  - Edit this file to add test schedules for development
 
 ## Accessing Home Assistant
 
@@ -92,6 +110,36 @@ ha core update
 ```
 
 ## Troubleshooting
+
+### Customizing Scheduler Storage
+
+To add pre-configured scheduler entities for testing:
+
+1. Edit `.devcontainer/scheduler.storage`
+2. Add your test schedules in JSON format
+3. Rebuild the container or manually copy the file:
+   ```bash
+   cp .devcontainer/scheduler.storage /config/.storage/scheduler.storage
+   ```
+4. Restart Home Assistant
+
+Example scheduler.storage structure:
+```json
+{
+  "version": 1,
+  "minor_version": 1,
+  "key": "scheduler",
+  "data": {
+    "schedules": [
+      {
+        "schedule_id": "schedule_1",
+        "name": "Test Schedule",
+        "enabled": true
+      }
+    ]
+  }
+}
+```
 
 ### Container won't start
 

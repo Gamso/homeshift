@@ -4,7 +4,7 @@
   "appPort": [
     "8123:8123"
   ],
-  "postCreateCommand": "container install",
+  "postCreateCommand": "bash /workspaces/day_mode/.devcontainer/starts_ha.sh &",
   "extensions": [
     "ms-python.python",
     "ms-python.vscode-pylance",

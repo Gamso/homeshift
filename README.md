@@ -144,7 +144,8 @@ Voir [.devcontainer/README.md](.devcontainer/README.md) pour plus de détails.
 #### Option 2: Docker Compose
 
 ```bash
-# Lancer avec Docker Compose
+# Lancer avec Docker Compose depuis le dossier container
+cd container
 docker-compose up -d
 ```
 

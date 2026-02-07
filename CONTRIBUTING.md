@@ -45,6 +45,7 @@ Voir [.devcontainer/README.md](.devcontainer/README.md) pour plus de détails su
 Si vous préférez Docker Compose sans Dev Container :
 
 ```bash
+cd container
 docker-compose up -d
 ```
 
@@ -59,7 +60,11 @@ day_mode/
 ├── .devcontainer/                  # Configuration Dev Container
 │   ├── devcontainer.json          # Config VS Code
 │   ├── configuration.yaml         # Config Home Assistant
+│   ├── scheduler.storage          # Stockage scheduler
 │   └── README.md                  # Documentation Dev Container
+├── container/                      # Configuration Docker
+│   ├── docker-compose.yml         # Configuration Docker Compose
+│   └── starts_ha.sh              # Script de démarrage HA
 ├── custom_components/day_mode/    # Code du composant
 │   ├── __init__.py               # Point d'entrée
 │   ├── config_flow.py            # Configuration UI
@@ -72,7 +77,6 @@ day_mode/
 │   ├── strings.json              # Traductions
 │   └── translations/             # Fichiers de traduction
 ├── config/                       # Configuration Home Assistant
-├── docker-compose.yml            # Configuration Docker
 ├── README.md                     # Documentation
 ├── EXAMPLES.md                   # Exemples d'usage
 └── CONTRIBUTING.md               # Ce fichier

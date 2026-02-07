@@ -38,7 +38,7 @@ The devcontainer includes:
 - **Linting & Formatting**: Ruff for code quality
 - **YAML Support**: For Home Assistant configuration files
 - **VS Code Settings**: Pre-configured for Home Assistant development
-- **Startup Script**: `starts_ha.sh` that sets up the environment automatically
+- **Startup Script**: `starts_ha.sh` (in `container/` directory) that sets up the environment automatically
 
 ### Configuration Files
 
@@ -46,16 +46,20 @@ The `.devcontainer` directory contains:
 
 - **devcontainer.json**: Main devcontainer configuration
 - **configuration.yaml**: Home Assistant configuration with debug logging for day_mode
+- **scheduler.storage**: Optional scheduler component storage file
+  - Automatically copied to `/config/.storage/` on container start
+  - Allows pre-configuring scheduler entities for testing
+  - Edit this file to add test schedules for development
+
+The `container` directory contains:
+
 - **starts_ha.sh**: Startup script that:
   - Creates necessary directories
   - Copies configuration files to Home Assistant config directory
   - Sets up the custom component symlink
   - Copies scheduler.storage if present
   - Starts Home Assistant
-- **scheduler.storage**: Optional scheduler component storage file
-  - Automatically copied to `/config/.storage/` on container start
-  - Allows pre-configuring scheduler entities for testing
-  - Edit this file to add test schedules for development
+- **docker-compose.yml**: Docker Compose configuration for standalone container deployment
 
 ## Accessing Home Assistant
 

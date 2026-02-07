@@ -1,0 +1,18 @@
+# Loads default set of integrations. Do not remove.
+default_config:
+
+# Load frontend themes from the themes folder
+frontend:
+  themes: !include_dir_merge_named themes
+
+# Text to speech
+tts:
+  - platform: google_translate
+
+logger:
+  default: info
+  logs:
+    custom_components.day_mode: debug
+
+# Enable the day_mode custom component for development
+day_mode:

@@ -118,12 +118,33 @@ Vous pouvez également utiliser des tags sur vos schedulers correspondant aux mo
 
 ### Configuration du développement
 
+#### Option 1: Dev Container (Recommandé)
+
+Le projet inclut une configuration Dev Container pour Visual Studio Code :
+
 ```bash
 # Cloner le repository
 git clone https://github.com/Gamso/day_mode.git
 cd day_mode
 
-# Lancer avec Docker (recommandé)
+# Ouvrir dans VS Code
+code .
+
+# Appuyer sur F1 et sélectionner "Dev Containers: Reopen in Container"
+```
+
+La configuration Dev Container inclut :
+- Home Assistant complet pour les tests
+- Extensions VS Code pré-configurées
+- Environnement Python configuré
+- Accès à Home Assistant sur http://localhost:8123
+
+Voir [.devcontainer/README.md](.devcontainer/README.md) pour plus de détails.
+
+#### Option 2: Docker Compose
+
+```bash
+# Lancer avec Docker Compose
 docker-compose up -d
 ```
 

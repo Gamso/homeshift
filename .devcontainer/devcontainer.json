@@ -1,0 +1,46 @@
+{
+  "name": "Day Mode Development",
+  "image": "ghcr.io/home-assistant/devcontainer:stable",
+  "appPort": [
+    "8123:8123"
+  ],
+  "postCreateCommand": "container install",
+  "extensions": [
+    "ms-python.python",
+    "ms-python.vscode-pylance",
+    "charliermarsh.ruff",
+    "visualstudioexptteam.vscodeintellicode",
+    "redhat.vscode-yaml"
+  ],
+  "settings": {
+    "python.pythonPath": "/usr/local/bin/python",
+    "python.linting.pylintEnabled": true,
+    "python.linting.enabled": true,
+    "python.formatting.provider": "black",
+    "editor.formatOnPaste": false,
+    "editor.formatOnSave": true,
+    "editor.formatOnType": true,
+    "files.trimTrailingWhitespace": true,
+    "terminal.integrated.defaultProfile.linux": "zsh"
+  },
+  "mounts": [
+    "source=${localWorkspaceFolder}/.devcontainer,target=/workspaces/config/.devcontainer,type=bind,readonly"
+  ],
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/day_mode,type=bind",
+  "workspaceFolder": "/workspaces/day_mode",
+  "runArgs": [
+    "--network=host",
+    "--privileged"
+  ],
+  "containerEnv": {
+    "WORKSPACE_DIRECTORY": "${containerWorkspaceFolder}"
+  },
+  "remoteUser": "root",
+  "features": {
+    "ghcr.io/devcontainers/features/common-utils:2": {
+      "installZsh": true,
+      "installOhMyZsh": true,
+      "upgradePackages": true
+    }
+  }
+}

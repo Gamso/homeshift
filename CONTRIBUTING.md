@@ -7,8 +7,13 @@
 - Docker et Docker Compose
 - Python 3.11+
 - Git
+- Visual Studio Code (recommandé pour Dev Container)
 
 ### Démarrage rapide
+
+#### Option 1: Dev Container (Recommandé)
+
+Le projet inclut une configuration complète pour VS Code Dev Containers :
 
 1. Clonez le repository :
 ```bash
@@ -16,12 +21,34 @@ git clone https://github.com/Gamso/day_mode.git
 cd day_mode
 ```
 
-2. Lancez l'environnement de développement avec Docker :
+2. Ouvrez dans VS Code :
+```bash
+code .
+```
+
+3. Lorsque VS Code vous propose d'ouvrir dans un conteneur, acceptez.
+   - Ou appuyez sur `F1` et sélectionnez "Dev Containers: Reopen in Container"
+
+4. Le conteneur va automatiquement :
+   - Installer Home Assistant
+   - Configurer l'environnement de développement
+   - Démarrer Home Assistant sur le port 8123
+
+5. Accédez à Home Assistant :
+   - URL: http://localhost:8123
+   - Créez un compte lors de la première connexion
+
+Voir [.devcontainer/README.md](.devcontainer/README.md) pour plus de détails sur le Dev Container.
+
+#### Option 2: Docker Compose
+
+Si vous préférez Docker Compose sans Dev Container :
+
 ```bash
 docker-compose up -d
 ```
 
-3. Accédez à Home Assistant :
+Accédez à Home Assistant :
 - URL: http://localhost:8123
 - Créez un compte lors de la première connexion
 
@@ -29,6 +56,10 @@ docker-compose up -d
 
 ```
 day_mode/
+├── .devcontainer/                  # Configuration Dev Container
+│   ├── devcontainer.json          # Config VS Code
+│   ├── configuration.yaml         # Config Home Assistant
+│   └── README.md                  # Documentation Dev Container
 ├── custom_components/day_mode/    # Code du composant
 │   ├── __init__.py               # Point d'entrée
 │   ├── config_flow.py            # Configuration UI

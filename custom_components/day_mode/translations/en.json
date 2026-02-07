@@ -1,0 +1,38 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Configure Day Mode",
+        "description": "Set up your Day Mode integration",
+        "data": {
+          "calendar_entity": "Work Calendar Entity",
+          "holiday_calendar": "Holiday Calendar Entity (Optional)",
+          "day_modes": "Day Modes (comma-separated)",
+          "thermostat_modes": "Thermostat Modes (comma-separated)",
+          "check_time": "Daily Check Time (HH:MM:SS)"
+        }
+      }
+    },
+    "error": {
+      "invalid_calendar": "The specified calendar entity does not exist"
+    },
+    "abort": {
+      "already_configured": "Day Mode is already configured"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Configure Day Mode",
+        "description": "Update your Day Mode configuration",
+        "data": {
+          "calendar_entity": "Work Calendar Entity",
+          "holiday_calendar": "Holiday Calendar Entity (Optional)",
+          "day_modes": "Day Modes (comma-separated)",
+          "thermostat_modes": "Thermostat Modes (comma-separated)",
+          "check_time": "Daily Check Time (HH:MM:SS)"
+        }
+      }
+    }
+  }
+}

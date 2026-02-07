@@ -1,0 +1,38 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Configurer Day Mode",
+        "description": "Configurez votre intégration Day Mode",
+        "data": {
+          "calendar_entity": "Entité Calendrier Travail",
+          "holiday_calendar": "Entité Calendrier Jours Fériés (Optionnel)",
+          "day_modes": "Modes de Jour (séparés par des virgules)",
+          "thermostat_modes": "Modes Thermostat (séparés par des virgules)",
+          "check_time": "Heure de Vérification Quotidienne (HH:MM:SS)"
+        }
+      }
+    },
+    "error": {
+      "invalid_calendar": "L'entité calendrier spécifiée n'existe pas"
+    },
+    "abort": {
+      "already_configured": "Day Mode est déjà configuré"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Configurer Day Mode",
+        "description": "Mettez à jour votre configuration Day Mode",
+        "data": {
+          "calendar_entity": "Entité Calendrier Travail",
+          "holiday_calendar": "Entité Calendrier Jours Fériés (Optionnel)",
+          "day_modes": "Modes de Jour (séparés par des virgules)",
+          "thermostat_modes": "Modes Thermostat (séparés par des virgules)",
+          "check_time": "Heure de Vérification Quotidienne (HH:MM:SS)"
+        }
+      }
+    }
+  }
+}

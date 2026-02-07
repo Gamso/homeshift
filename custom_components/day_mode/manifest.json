@@ -1,0 +1,11 @@
+{
+  "domain": "day_mode",
+  "name": "Day Mode",
+  "version": "1.0.0",
+  "documentation": "https://github.com/Gamso/day_mode",
+  "requirements": [],
+  "dependencies": [],
+  "codeowners": ["@Gamso"],
+  "config_flow": true,
+  "iot_class": "calculated"
+}

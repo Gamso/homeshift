@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  homeassistant:
+    container_name: day_mode_dev
+    image: homeassistant/home-assistant:latest
+    volumes:
+      - ./config:/config
+      - ./custom_components/day_mode:/config/custom_components/day_mode
+      - /etc/localtime:/etc/localtime:ro
+    restart: unless-stopped
+    privileged: true
+    network_mode: host
+    environment:
+      - TZ=Europe/Paris

@@ -7,6 +7,12 @@ homeassistant:
   country: FR
   time_zone: Europe/Paris
 
+# Charger la config par défaut SAUF conversation
+default_config:
+
+# Désactiver explicitement conversation
+conversation: null
+
 # Enable development mode
 logger:
   default: info

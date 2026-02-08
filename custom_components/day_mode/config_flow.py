@@ -17,6 +17,7 @@ from .const import (
     CONF_HOLIDAY_CALENDAR,
     CONF_DAY_MODES,
     CONF_THERMOSTAT_MODES,
+    CONF_SCHEDULERS_PER_MODE,
     CONF_CHECK_TIME,
     DEFAULT_DAY_MODES,
     DEFAULT_THERMOSTAT_MODES,
@@ -48,6 +49,9 @@ class DayModeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 errors[CONF_HOLIDAY_CALENDAR] = "invalid_calendar"
             
             if not errors:
+                # Add fixed thermostat modes (not editable by user)
+                user_input[CONF_THERMOSTAT_MODES] = ", ".join(DEFAULT_THERMOSTAT_MODES)
+                
                 return self.async_create_entry(
                     title="Day Mode",
                     data=user_input,
@@ -70,10 +74,6 @@ class DayModeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 vol.Optional(
                     CONF_DAY_MODES,
                     default=", ".join(DEFAULT_DAY_MODES)
-                ): str,
-                vol.Optional(
-                    CONF_THERMOSTAT_MODES,
-                    default=", ".join(DEFAULT_THERMOSTAT_MODES)
                 ): str,
                 vol.Optional(
                     CONF_CHECK_TIME,
@@ -121,6 +121,19 @@ class DayModeOptionsFlow(config_entries.OptionsFlow):
                 errors[CONF_HOLIDAY_CALENDAR] = "invalid_calendar"
             
             if not errors:
+                # Keep thermostat modes fixed
+                user_input[CONF_THERMOSTAT_MODES] = ", ".join(DEFAULT_THERMOSTAT_MODES)
+                
+                # Extract scheduler configuration
+                schedulers_per_mode = {}
+                for mode in DEFAULT_THERMOSTAT_MODES:
+                    mode_key = f"schedulers_{mode.lower().replace(' ', '_')}"
+                    if mode_key in user_input:
+                        schedulers_per_mode[mode] = user_input.pop(mode_key, [])
+                
+                if schedulers_per_mode:
+                    user_input[CONF_SCHEDULERS_PER_MODE] = schedulers_per_mode
+                
                 return self.async_create_entry(title="", data=user_input)
 
         current_calendar = self.config_entry.data.get(CONF_CALENDAR_ENTITY, "")
@@ -128,41 +141,52 @@ class DayModeOptionsFlow(config_entries.OptionsFlow):
         current_day_modes = self.config_entry.data.get(
             CONF_DAY_MODES, ", ".join(DEFAULT_DAY_MODES)
         )
-        current_thermostat_modes = self.config_entry.data.get(
-            CONF_THERMOSTAT_MODES, ", ".join(DEFAULT_THERMOSTAT_MODES)
-        )
         current_check_time = self.config_entry.data.get(
             CONF_CHECK_TIME, DEFAULT_CHECK_TIME
         )
+        current_schedulers = self.config_entry.data.get(CONF_SCHEDULERS_PER_MODE, {})
 
-        options_schema = vol.Schema(
-            {
-                vol.Required(
-                    CONF_CALENDAR_ENTITY,
-                    default=current_calendar
-                ): selector.EntitySelector(
-                    selector.EntitySelectorConfig(domain="calendar")
-                ),
-                vol.Optional(
-                    CONF_HOLIDAY_CALENDAR,
-                    default=current_holiday
-                ): selector.EntitySelector(
-                    selector.EntitySelectorConfig(domain="calendar")
-                ),
-                vol.Optional(
-                    CONF_DAY_MODES,
-                    default=current_day_modes
-                ): str,
-                vol.Optional(
-                    CONF_THERMOSTAT_MODES,
-                    default=current_thermostat_modes
-                ): str,
-                vol.Optional(
-                    CONF_CHECK_TIME,
-                    default=current_check_time
-                ): str,
-            }
-        )
+        # Build schema with general options and scheduler options
+        schema_dict = {
+            vol.Required(
+                CONF_CALENDAR_ENTITY,
+                default=current_calendar
+            ): selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="calendar")
+            ),
+            vol.Optional(
+                CONF_HOLIDAY_CALENDAR,
+                default=current_holiday
+            ): selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="calendar")
+            ),
+            vol.Optional(
+                CONF_DAY_MODES,
+                default=current_day_modes
+            ): str,
+            vol.Optional(
+                CONF_CHECK_TIME,
+                default=current_check_time
+            ): str,
+        }
+        
+        # Add scheduler options for each thermostat mode
+        for mode in DEFAULT_THERMOSTAT_MODES:
+            mode_key = f"schedulers_{mode.lower().replace(' ', '_')}"
+            current_value = current_schedulers.get(mode, [])
+            
+            schema_dict[vol.Optional(
+                mode_key,
+                default=current_value,
+                description=f"Schedulers for '{mode}' mode"
+            )] = selector.EntitySelector(
+                selector.EntitySelectorConfig(
+                    domain="switch",
+                    multiple=True,
+                )
+            )
+
+        options_schema = vol.Schema(schema_dict)
 
         return self.async_show_form(
             step_id="init",

@@ -3,12 +3,11 @@
     "step": {
       "user": {
         "title": "Configurer Day Mode",
-        "description": "Configurez votre intégration Day Mode",
+        "description": "Configurez votre intégration Day Mode. Les modes thermostat (Eteint, Chauffage, Climatisation, Ventilation) sont prédéfinis et ne peuvent pas être modifiés.",
         "data": {
           "calendar_entity": "Entité Calendrier Travail",
           "holiday_calendar": "Entité Calendrier Jours Fériés (Optionnel)",
           "day_modes": "Modes de Jour (séparés par des virgules)",
-          "thermostat_modes": "Modes Thermostat (séparés par des virgules)",
           "check_time": "Heure de Vérification Quotidienne (HH:MM:SS)"
         }
       }
@@ -23,14 +22,17 @@
   "options": {
     "step": {
       "init": {
-        "title": "Configurer Day Mode",
-        "description": "Mettez à jour votre configuration Day Mode",
+        "title": "Configurer les Options Day Mode",
+        "description": "Mettez à jour les paramètres Day Mode. Les modes thermostat (Eteint, Chauffage, Climatisation, Ventilation) sont fixes. Configurez les schedulers pour chaque mode ci-dessous.",
         "data": {
           "calendar_entity": "Entité Calendrier Travail",
           "holiday_calendar": "Entité Calendrier Jours Fériés (Optionnel)",
           "day_modes": "Modes de Jour (séparés par des virgules)",
-          "thermostat_modes": "Modes Thermostat (séparés par des virgules)",
-          "check_time": "Heure de Vérification Quotidienne (HH:MM:SS)"
+          "check_time": "Heure de Vérification Quotidienne (HH:MM:SS)",
+          "schedulers_eteint": "Schedulers pour le mode 'Eteint'",
+          "schedulers_chauffage": "Schedulers pour le mode 'Chauffage'",
+          "schedulers_climatisation": "Schedulers pour le mode 'Climatisation'",
+          "schedulers_ventilation": "Schedulers pour le mode 'Ventilation'"
         }
       }
     }

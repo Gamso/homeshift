@@ -3,12 +3,11 @@
     "step": {
       "user": {
         "title": "Configure Day Mode",
-        "description": "Set up your Day Mode integration",
+        "description": "Set up your Day Mode integration. Thermostat modes (Eteint, Chauffage, Climatisation, Ventilation) are predefined and cannot be modified.",
         "data": {
           "calendar_entity": "Work Calendar Entity",
           "holiday_calendar": "Holiday Calendar Entity (Optional)",
           "day_modes": "Day Modes (comma-separated)",
-          "thermostat_modes": "Thermostat Modes (comma-separated)",
           "check_time": "Daily Check Time (HH:MM:SS)"
         }
       }
@@ -23,14 +22,17 @@
   "options": {
     "step": {
       "init": {
-        "title": "Configure Day Mode",
-        "description": "Update your Day Mode configuration",
+        "title": "Configure Day Mode Options",
+        "description": "Update Day Mode settings. Thermostat modes (Eteint, Chauffage, Climatisation, Ventilation) are fixed. Configure schedulers for each mode below.",
         "data": {
           "calendar_entity": "Work Calendar Entity",
           "holiday_calendar": "Holiday Calendar Entity (Optional)",
           "day_modes": "Day Modes (comma-separated)",
-          "thermostat_modes": "Thermostat Modes (comma-separated)",
-          "check_time": "Daily Check Time (HH:MM:SS)"
+          "check_time": "Daily Check Time (HH:MM:SS)",
+          "schedulers_eteint": "Schedulers for 'Eteint' mode",
+          "schedulers_chauffage": "Schedulers for 'Chauffage' mode",
+          "schedulers_climatisation": "Schedulers for 'Climatisation' mode",
+          "schedulers_ventilation": "Schedulers for 'Ventilation' mode"
         }
       }
     }

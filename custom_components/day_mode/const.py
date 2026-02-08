@@ -6,7 +6,8 @@ DOMAIN = "day_mode"
 CONF_CALENDAR_ENTITY = "calendar_entity"
 CONF_HOLIDAY_CALENDAR = "holiday_calendar"
 CONF_DAY_MODES = "day_modes"
-CONF_THERMOSTAT_MODES = "thermostat_modes"
+CONF_THERMOSTAT_MODES = "thermostat_modes"  # Kept for backward compatibility, but not editable
+CONF_SCHEDULERS_PER_MODE = "schedulers_per_mode"  # New: scheduler entities per thermostat mode
 CONF_CHECK_TIME = "check_time"
 
 # Default values

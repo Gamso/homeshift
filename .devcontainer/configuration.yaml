@@ -16,10 +16,14 @@ logger:
 
 # User interface - use YAML mode to load ui-lovelace.yaml
 lovelace:
-  mode: yaml
-  resources:
-    - url: /local/scheduler-card/scheduler-card.js
-      type: module
+  resource_mode: yaml
+  dashboards:
+    lovelace:
+      mode: yaml
+      filename: ui-lovelace.yaml
+      title: Overview
+      icon: mdi:view-dashboard
+      show_in_sidebar: true
 
 # Scheduler integration
 scheduler:

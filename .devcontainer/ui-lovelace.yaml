@@ -1,4 +1,7 @@
 title: Day Mode Dashboard
+resources:
+  - url: /local/scheduler-card/scheduler-card.js
+    type: module
 views:
   - title: Home
     path: home

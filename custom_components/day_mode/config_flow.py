@@ -177,8 +177,7 @@ class DayModeOptionsFlow(config_entries.OptionsFlow):
             
             schema_dict[vol.Optional(
                 mode_key,
-                default=current_value,
-                description=f"Schedulers for '{mode}' mode"
+                default=current_value
             )] = selector.EntitySelector(
                 selector.EntitySelectorConfig(
                     domain="switch",

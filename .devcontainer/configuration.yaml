@@ -1,18 +1,21 @@
-# Loads default set of integrations. Do not remove.
-default_config:
+homeassistant:
+  name: Day Mode DevContainer
+  latitude: 48.8566
+  longitude: 2.3522
+  elevation: 0
+  unit_system: metric
+  country: FR
+  time_zone: Europe/Paris
 
-# Load frontend themes from the themes folder
-frontend:
-  themes: !include_dir_merge_named themes
-
-# Text to speech
-tts:
-  - platform: google_translate
-
+# Enable development mode
 logger:
   default: info
   logs:
-    custom_components.day_mode: debug
+    homeassistant.components.lovelace: debug
 
-# Enable the day_mode custom component for development
-day_mode:
+# User interface
+lovelace:
+  mode: storage
+  resources:
+    - url: /local/day_mode_card/day-mode-card.js
+      type: module

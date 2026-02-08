@@ -1,0 +1,12 @@
+title: Day Mode Dashboard
+views:
+  - title: Home
+    path: home
+    icon: mdi:home
+
+  - title: Scheduler
+    path: scheduler
+    icon: mdi:calendar-clock
+    cards:
+      - type: custom:scheduler-card
+        title: Schedules

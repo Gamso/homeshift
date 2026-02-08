@@ -12,10 +12,15 @@ logger:
   default: info
   logs:
     homeassistant.components.lovelace: debug
+    custom_components.day_mode: debug
 
-# User interface
+# User interface - use YAML mode to load ui-lovelace.yaml
 lovelace:
-  mode: storage
+  mode: yaml
   resources:
-    - url: /local/day_mode_card/day-mode-card.js
+    - url: /local/scheduler-card/scheduler-card.js
       type: module
+
+# Scheduler integration
+scheduler:
+  # No specific config needed, component will auto-configure

@@ -12,22 +12,32 @@ if [[ ! -d "${PWD}/config" ]]; then
     hass --config "${PWD}/config" --script ensure_config
 fi
 
+echo ""
+echo "🔗 Setting up configuration files..."
+
 # Overwrite configuration.yaml if provided
 if [ -f ${PWD}/.devcontainer/configuration.yaml ]; then
     rm -f ${PWD}/config/configuration.yaml
     ln -s ${PWD}/.devcontainer/configuration.yaml ${PWD}/config/configuration.yaml
+	echo "   ✅ Configuration linked"
 fi
 
+# Link ui-lovelace.yaml for dashboard
 if [ -f ${PWD}/.devcontainer/ui-lovelace.yaml ]; then
     rm -f ${PWD}/config/ui-lovelace.yaml
     ln -s ${PWD}/.devcontainer/ui-lovelace.yaml ${PWD}/config/ui-lovelace.yaml
+	echo "   ✅ Lovelace dashboard linked"
 fi
 
 # Copy scheduler.storage if it exists
 if [ -f ${PWD}/.devcontainer/scheduler.storage ]; then
-	rm -rf ${PWD}/config/.storage
+	# Only create .storage directory if it doesn't exist
 	mkdir -p "${PWD}/config/.storage"
+	# Remove old scheduler.storage symlink/file if it exists
+	rm -f ${PWD}/config/.storage/scheduler.storage
+	# Create new symlink
     ln -s ${PWD}/.devcontainer/scheduler.storage ${PWD}/config/.storage/scheduler.storage
+	echo "   ✅ Scheduler storage linked"
 fi
 
 # Dev-only custom_components

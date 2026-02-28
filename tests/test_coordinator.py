@@ -1,20 +1,24 @@
 """Tests for the HomeShiftCoordinator.
 
 These tests verify:
-- _detect_event_period classifies events correctly
-- _parse_event_mode_map parses event-to-mode mappings
-- _parse_thermostat_mode_map parses thermostat mode mappings
+- detect_event_period classifies events correctly
+- parse_event_mode_map parses event-to-mode mappings
+- parse_thermostat_mode_map parses thermostat mode mappings
 - scan_interval configuration is respected
 - Default and custom mode mappings work
 - Configurable absence mode works
 - Half-day transitions work correctly
 - ICS calendar contains expected events
 """
+
 from __future__ import annotations
 
-import pytest
+import asyncio
 from datetime import datetime, timedelta
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 from custom_components.homeshift.coordinator import HomeShiftCoordinator, MIDDAY_HOUR
 from custom_components.homeshift.const import (
@@ -71,116 +75,102 @@ def _make_mock_hass() -> MagicMock:
 
 
 # ---------------------------------------------------------------------------
-# _detect_event_period unit tests
+# detect_event_period unit tests
 # ---------------------------------------------------------------------------
 
 class TestDetectEventPeriod:
-    """Tests for _detect_event_period static method."""
+    """Tests for detect_event_period static method."""
 
     def test_all_day_event_midnight_to_midnight(self):
-        result = HomeShiftCoordinator._detect_event_period(
-            "2026-03-03 00:00:00", "2026-03-04 00:00:00"
-        )
+        result = HomeShiftCoordinator.detect_event_period("2026-03-03 00:00:00", "2026-03-04 00:00:00")
         assert result == EVENT_PERIOD_ALL_DAY
 
     def test_all_day_event_multi_day(self):
-        result = HomeShiftCoordinator._detect_event_period(
-            "2026-08-03 00:00:00", "2026-08-17 00:00:00"
-        )
+        result = HomeShiftCoordinator.detect_event_period("2026-08-03 00:00:00", "2026-08-17 00:00:00")
         assert result == EVENT_PERIOD_ALL_DAY
 
     def test_morning_event(self):
-        result = HomeShiftCoordinator._detect_event_period(
-            "2026-03-12 08:00:00", "2026-03-12 12:00:00"
-        )
+        result = HomeShiftCoordinator.detect_event_period("2026-03-12 08:00:00", "2026-03-12 12:00:00")
         assert result == EVENT_PERIOD_MORNING
 
     def test_morning_event_ending_at_13(self):
-        result = HomeShiftCoordinator._detect_event_period(
-            "2026-03-12 08:00:00", "2026-03-12 13:00:00"
-        )
+        result = HomeShiftCoordinator.detect_event_period("2026-03-12 08:00:00", "2026-03-12 13:00:00")
         assert result == EVENT_PERIOD_MORNING
 
     def test_afternoon_event(self):
-        result = HomeShiftCoordinator._detect_event_period(
-            "2026-03-04 13:00:00", "2026-03-04 18:00:00"
-        )
+        result = HomeShiftCoordinator.detect_event_period("2026-03-04 13:00:00", "2026-03-04 18:00:00")
         assert result == EVENT_PERIOD_AFTERNOON
 
     def test_afternoon_event_starting_at_14(self):
-        result = HomeShiftCoordinator._detect_event_period(
-            "2026-03-04 14:00:00", "2026-03-04 18:00:00"
-        )
+        result = HomeShiftCoordinator.detect_event_period("2026-03-04 14:00:00", "2026-03-04 18:00:00")
         assert result == EVENT_PERIOD_AFTERNOON
 
     def test_spanning_event_treated_as_all_day(self):
-        result = HomeShiftCoordinator._detect_event_period(
-            "2026-03-04 08:00:00", "2026-03-04 18:00:00"
-        )
+        result = HomeShiftCoordinator.detect_event_period("2026-03-04 08:00:00", "2026-03-04 18:00:00")
         assert result == EVENT_PERIOD_ALL_DAY
 
     def test_invalid_format_defaults_to_all_day(self):
-        result = HomeShiftCoordinator._detect_event_period("invalid", "also-invalid")
+        result = HomeShiftCoordinator.detect_event_period("invalid", "also-invalid")
         assert result == EVENT_PERIOD_ALL_DAY
 
     def test_none_values_default_to_all_day(self):
-        result = HomeShiftCoordinator._detect_event_period(None, None)
+        result = HomeShiftCoordinator.detect_event_period(None, None)
         assert result == EVENT_PERIOD_ALL_DAY
 
     def test_empty_strings_default_to_all_day(self):
-        result = HomeShiftCoordinator._detect_event_period("", "")
+        result = HomeShiftCoordinator.detect_event_period("", "")
         assert result == EVENT_PERIOD_ALL_DAY
 
 
 # ---------------------------------------------------------------------------
-# _parse_event_mode_map unit tests
+# parse_event_mode_map unit tests
 # ---------------------------------------------------------------------------
 
 class TestParseEventModeMap:
-    """Tests for _parse_event_mode_map static method."""
+    """Tests for parse_event_mode_map static method."""
 
     def test_default_map(self):
-        mapping = HomeShiftCoordinator._parse_event_mode_map(DEFAULT_EVENT_MODE_MAP)
+        mapping = HomeShiftCoordinator.parse_event_mode_map(DEFAULT_EVENT_MODE_MAP)
         assert "vacances" in mapping
         assert "télétravail" in mapping
 
     def test_empty_string(self):
-        assert HomeShiftCoordinator._parse_event_mode_map("") == {}
+        assert not HomeShiftCoordinator.parse_event_mode_map("")
 
     def test_none_value(self):
-        assert HomeShiftCoordinator._parse_event_mode_map(None) == {}
+        assert not HomeShiftCoordinator.parse_event_mode_map(None)
 
     def test_single_mapping(self):
-        mapping = HomeShiftCoordinator._parse_event_mode_map("Meeting:Bureau")
+        mapping = HomeShiftCoordinator.parse_event_mode_map("Meeting:Bureau")
         assert mapping == {"meeting": "Bureau"}
 
     def test_multiple_mappings(self):
-        mapping = HomeShiftCoordinator._parse_event_mode_map("A:X, B:Y, C:Z")
+        mapping = HomeShiftCoordinator.parse_event_mode_map("A:X, B:Y, C:Z")
         assert mapping == {"a": "X", "b": "Y", "c": "Z"}
 
     def test_whitespace_handling(self):
-        mapping = HomeShiftCoordinator._parse_event_mode_map("  Foo : Bar  ,  Baz:Qux  ")
+        mapping = HomeShiftCoordinator.parse_event_mode_map("  Foo : Bar  ,  Baz:Qux  ")
         assert mapping == {"foo": "Bar", "baz": "Qux"}
 
     def test_missing_colon_ignored(self):
-        mapping = HomeShiftCoordinator._parse_event_mode_map("Good:Value, BadEntry, Also:OK")
+        mapping = HomeShiftCoordinator.parse_event_mode_map("Good:Value, BadEntry, Also:OK")
         assert mapping == {"good": "Value", "also": "OK"}
 
     def test_empty_key_or_value_ignored(self):
-        mapping = HomeShiftCoordinator._parse_event_mode_map(":Value, Key:, Good:OK")
+        mapping = HomeShiftCoordinator.parse_event_mode_map(":Value, Key:, Good:OK")
         assert mapping == {"good": "OK"}
 
 
 # ---------------------------------------------------------------------------
-# _parse_thermostat_mode_map unit tests
+# parse_thermostat_mode_map unit tests
 # ---------------------------------------------------------------------------
 
 class TestParseThermostatModeMap:
-    """Tests for _parse_thermostat_mode_map static method."""
+    """Tests for parse_thermostat_mode_map static method."""
 
     def test_default_map(self):
         """Default map parses correctly with preserved key case."""
-        mapping = HomeShiftCoordinator._parse_thermostat_mode_map(DEFAULT_THERMOSTAT_MODE_MAP)
+        mapping = HomeShiftCoordinator.parse_thermostat_mode_map(DEFAULT_THERMOSTAT_MODE_MAP)
         assert mapping == {
             "Off": "Eteint",
             "Heating": "Chauffage",
@@ -189,27 +179,27 @@ class TestParseThermostatModeMap:
         }
 
     def test_empty_string(self):
-        assert HomeShiftCoordinator._parse_thermostat_mode_map("") == {}
+        assert not HomeShiftCoordinator.parse_thermostat_mode_map("")
 
     def test_none_value(self):
-        assert HomeShiftCoordinator._parse_thermostat_mode_map(None) == {}
+        assert not HomeShiftCoordinator.parse_thermostat_mode_map(None)
 
     def test_single_mapping(self):
-        mapping = HomeShiftCoordinator._parse_thermostat_mode_map("Off:Éteint")
+        mapping = HomeShiftCoordinator.parse_thermostat_mode_map("Off:Éteint")
         assert mapping == {"Off": "Éteint"}
 
     def test_preserves_key_case(self):
-        """Keys preserve their case (unlike _parse_event_mode_map)."""
-        mapping = HomeShiftCoordinator._parse_thermostat_mode_map("Heating:Chauffage, COOLING:Clim")
+        """Keys preserve their case (unlike parse_event_mode_map)."""
+        mapping = HomeShiftCoordinator.parse_thermostat_mode_map("Heating:Chauffage, COOLING:Clim")
         assert "Heating" in mapping
         assert "COOLING" in mapping
 
     def test_whitespace_handling(self):
-        mapping = HomeShiftCoordinator._parse_thermostat_mode_map("  Off : Eteint  ,  Heat : Chaud  ")
+        mapping = HomeShiftCoordinator.parse_thermostat_mode_map("  Off : Eteint  ,  Heat : Chaud  ")
         assert mapping == {"Off": "Eteint", "Heat": "Chaud"}
 
     def test_missing_colon_ignored(self):
-        mapping = HomeShiftCoordinator._parse_thermostat_mode_map("Off:Eteint, BadEntry, Heat:Chaud")
+        mapping = HomeShiftCoordinator.parse_thermostat_mode_map("Off:Eteint, BadEntry, Heat:Chaud")
         assert mapping == {"Off": "Eteint", "Heat": "Chaud"}
 
     def test_values_become_thermostat_modes(self):
@@ -339,14 +329,13 @@ class TestDefaultModeMapping:
         entry = _make_mock_entry()
         hass.states.get.return_value = _make_calendar_state(state="off")
         coordinator = HomeShiftCoordinator(hass, entry)
-        coordinator._day_mode = "Maison"
+        coordinator.day_mode = "Maison"
 
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
             mock_dt.now.return_value = datetime(2026, 3, 4, 10, 0, 0)  # Wednesday
-            import asyncio
-            asyncio.get_event_loop().run_until_complete(coordinator._async_update_data())
+            asyncio.get_event_loop().run_until_complete(coordinator.async_update_data())
 
-        assert coordinator._day_mode == DEFAULT_MODE_DEFAULT
+        assert coordinator.day_mode == DEFAULT_MODE_DEFAULT
         assert coordinator.data is None or True  # first call
 
     def test_full_day_telework_sets_telework_mode(self):
@@ -357,15 +346,14 @@ class TestDefaultModeMapping:
             start_time="2026-03-03 00:00:00", end_time="2026-03-04 00:00:00",
         )
         coordinator = HomeShiftCoordinator(hass, entry)
-        coordinator._day_mode = DEFAULT_MODE_DEFAULT
+        coordinator.day_mode = DEFAULT_MODE_DEFAULT
 
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
             mock_dt.now.return_value = datetime(2026, 3, 3, 10, 0, 0)
-            import asyncio
-            result = asyncio.get_event_loop().run_until_complete(coordinator._async_update_data())
+            result = asyncio.get_event_loop().run_until_complete(coordinator.async_update_data())
 
-        assert coordinator._day_mode == "Télétravail"
-        assert result["next_day_type"] == EVENT_TELEWORK
+        assert coordinator.day_mode == "Télétravail"
+        assert result["today_type"] == EVENT_TELEWORK
         assert result["event_period"] == EVENT_PERIOD_ALL_DAY
 
     def test_afternoon_telework_active(self):
@@ -376,14 +364,13 @@ class TestDefaultModeMapping:
             start_time="2026-03-04 13:00:00", end_time="2026-03-04 18:00:00",
         )
         coordinator = HomeShiftCoordinator(hass, entry)
-        coordinator._day_mode = DEFAULT_MODE_DEFAULT
+        coordinator.day_mode = DEFAULT_MODE_DEFAULT
 
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
             mock_dt.now.return_value = datetime(2026, 3, 4, 14, 0, 0)
-            import asyncio
-            result = asyncio.get_event_loop().run_until_complete(coordinator._async_update_data())
+            result = asyncio.get_event_loop().run_until_complete(coordinator.async_update_data())
 
-        assert coordinator._day_mode == "Télétravail"
+        assert coordinator.day_mode == "Télétravail"
         assert result["event_period"] == EVENT_PERIOD_AFTERNOON
 
     def test_afternoon_telework_morning_no_event(self):
@@ -391,15 +378,14 @@ class TestDefaultModeMapping:
         entry = _make_mock_entry()
         hass.states.get.return_value = _make_calendar_state(state="off")
         coordinator = HomeShiftCoordinator(hass, entry)
-        coordinator._day_mode = "Maison"
+        coordinator.day_mode = "Maison"
 
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
             mock_dt.now.return_value = datetime(2026, 3, 4, 9, 0, 0)
-            import asyncio
-            result = asyncio.get_event_loop().run_until_complete(coordinator._async_update_data())
+            result = asyncio.get_event_loop().run_until_complete(coordinator.async_update_data())
 
-        assert coordinator._day_mode == DEFAULT_MODE_DEFAULT
-        assert result["next_day_type"] == EVENT_NONE
+        assert coordinator.day_mode == DEFAULT_MODE_DEFAULT
+        assert result["today_type"] == EVENT_NONE
 
     def test_morning_telework_active(self):
         hass = _make_mock_hass()
@@ -409,14 +395,13 @@ class TestDefaultModeMapping:
             start_time="2026-03-12 08:00:00", end_time="2026-03-12 12:00:00",
         )
         coordinator = HomeShiftCoordinator(hass, entry)
-        coordinator._day_mode = DEFAULT_MODE_DEFAULT
+        coordinator.day_mode = DEFAULT_MODE_DEFAULT
 
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
             mock_dt.now.return_value = datetime(2026, 3, 12, 10, 0, 0)
-            import asyncio
-            result = asyncio.get_event_loop().run_until_complete(coordinator._async_update_data())
+            result = asyncio.get_event_loop().run_until_complete(coordinator.async_update_data())
 
-        assert coordinator._day_mode == "Télétravail"
+        assert coordinator.day_mode == "Télétravail"
         assert result["event_period"] == EVENT_PERIOD_MORNING
 
     def test_morning_telework_afternoon_reverts(self):
@@ -424,14 +409,13 @@ class TestDefaultModeMapping:
         entry = _make_mock_entry()
         hass.states.get.return_value = _make_calendar_state(state="off")
         coordinator = HomeShiftCoordinator(hass, entry)
-        coordinator._day_mode = "Télétravail"
+        coordinator.day_mode = "Télétravail"
 
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
             mock_dt.now.return_value = datetime(2026, 3, 12, 14, 0, 0)
-            import asyncio
-            asyncio.get_event_loop().run_until_complete(coordinator._async_update_data())
+            asyncio.get_event_loop().run_until_complete(coordinator.async_update_data())
 
-        assert coordinator._day_mode == DEFAULT_MODE_DEFAULT
+        assert coordinator.day_mode == DEFAULT_MODE_DEFAULT
 
     def test_vacation_event(self):
         hass = _make_mock_hass()
@@ -441,29 +425,27 @@ class TestDefaultModeMapping:
             start_time="2026-08-03 00:00:00", end_time="2026-08-17 00:00:00",
         )
         coordinator = HomeShiftCoordinator(hass, entry)
-        coordinator._day_mode = DEFAULT_MODE_DEFAULT
+        coordinator.day_mode = DEFAULT_MODE_DEFAULT
 
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
             mock_dt.now.return_value = datetime(2026, 8, 5, 10, 0, 0)
-            import asyncio
-            result = asyncio.get_event_loop().run_until_complete(coordinator._async_update_data())
+            result = asyncio.get_event_loop().run_until_complete(coordinator.async_update_data())
 
-        assert coordinator._day_mode == "Maison"
-        assert result["next_day_type"] == EVENT_VACATION
+        assert coordinator.day_mode == "Maison"
+        assert result["today_type"] == EVENT_VACATION
 
     def test_weekend_sets_weekend_mode(self):
         hass = _make_mock_hass()
         entry = _make_mock_entry()
         hass.states.get.return_value = _make_calendar_state(state="off")
         coordinator = HomeShiftCoordinator(hass, entry)
-        coordinator._day_mode = DEFAULT_MODE_DEFAULT
+        coordinator.day_mode = DEFAULT_MODE_DEFAULT
 
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
             mock_dt.now.return_value = datetime(2026, 3, 7, 10, 0, 0)  # Saturday
-            import asyncio
-            asyncio.get_event_loop().run_until_complete(coordinator._async_update_data())
+            asyncio.get_event_loop().run_until_complete(coordinator.async_update_data())
 
-        assert coordinator._day_mode == DEFAULT_MODE_WEEKEND
+        assert coordinator.day_mode == DEFAULT_MODE_WEEKEND
 
     def test_absence_mode_not_overridden(self):
         hass = _make_mock_hass()
@@ -473,14 +455,13 @@ class TestDefaultModeMapping:
             start_time="2026-03-03 00:00:00", end_time="2026-03-04 00:00:00",
         )
         coordinator = HomeShiftCoordinator(hass, entry)
-        coordinator._day_mode = DEFAULT_MODE_ABSENCE
+        coordinator.day_mode = DEFAULT_MODE_ABSENCE
 
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
             mock_dt.now.return_value = datetime(2026, 3, 3, 10, 0, 0)
-            import asyncio
-            asyncio.get_event_loop().run_until_complete(coordinator._async_update_data())
+            asyncio.get_event_loop().run_until_complete(coordinator.async_update_data())
 
-        assert coordinator._day_mode == DEFAULT_MODE_ABSENCE
+        assert coordinator.day_mode == DEFAULT_MODE_ABSENCE
 
     def test_holiday_calendar(self):
         hass = _make_mock_hass()
@@ -495,14 +476,13 @@ class TestDefaultModeMapping:
         hass.states.get.side_effect = get_state
 
         coordinator = HomeShiftCoordinator(hass, entry)
-        coordinator._day_mode = DEFAULT_MODE_DEFAULT
+        coordinator.day_mode = DEFAULT_MODE_DEFAULT
 
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
             mock_dt.now.return_value = datetime(2026, 5, 1, 10, 0, 0)
-            import asyncio
-            asyncio.get_event_loop().run_until_complete(coordinator._async_update_data())
+            asyncio.get_event_loop().run_until_complete(coordinator.async_update_data())
 
-        assert coordinator._day_mode == DEFAULT_MODE_HOLIDAY
+        assert coordinator.day_mode == DEFAULT_MODE_HOLIDAY
 
     def test_build_result_keys(self):
         hass = _make_mock_hass()
@@ -512,12 +492,11 @@ class TestDefaultModeMapping:
 
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
             mock_dt.now.return_value = datetime(2026, 3, 4, 10, 0, 0)
-            import asyncio
-            result = asyncio.get_event_loop().run_until_complete(coordinator._async_update_data())
+            result = asyncio.get_event_loop().run_until_complete(coordinator.async_update_data())
 
         assert "day_mode" in result
         assert "thermostat_mode" in result
-        assert "next_day_type" in result
+        assert "today_type" in result
         assert "current_event" in result
         assert "event_period" in result
 
@@ -534,13 +513,12 @@ class TestCustomModeMapping:
         entry.data[CONF_DAY_MODES] = "Bureau, Maison, Télétravail, Absence"
         hass.states.get.return_value = _make_calendar_state(state="off")
         coordinator = HomeShiftCoordinator(hass, entry)
-        coordinator._day_mode = "Maison"
+        coordinator.day_mode = "Maison"
 
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
             mock_dt.now.return_value = datetime(2026, 3, 4, 10, 0, 0)
-            import asyncio
-            asyncio.get_event_loop().run_until_complete(coordinator._async_update_data())
-        assert coordinator._day_mode == "Bureau"
+            asyncio.get_event_loop().run_until_complete(coordinator.async_update_data())
+        assert coordinator.day_mode == "Bureau"
 
     def test_custom_weekend_mode(self):
         hass = _make_mock_hass()
@@ -548,13 +526,12 @@ class TestCustomModeMapping:
         entry.data[CONF_DAY_MODES] = "Travail, Repos, Maison, Télétravail, Absence"
         hass.states.get.return_value = _make_calendar_state(state="off")
         coordinator = HomeShiftCoordinator(hass, entry)
-        coordinator._day_mode = "Travail"
+        coordinator.day_mode = "Travail"
 
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
             mock_dt.now.return_value = datetime(2026, 3, 7, 10, 0, 0)
-            import asyncio
-            asyncio.get_event_loop().run_until_complete(coordinator._async_update_data())
-        assert coordinator._day_mode == "Repos"
+            asyncio.get_event_loop().run_until_complete(coordinator.async_update_data())
+        assert coordinator.day_mode == "Repos"
 
     def test_custom_holiday_mode(self):
         hass = _make_mock_hass()
@@ -569,13 +546,12 @@ class TestCustomModeMapping:
             return None
         hass.states.get.side_effect = get_state
         coordinator = HomeShiftCoordinator(hass, entry)
-        coordinator._day_mode = "Travail"
+        coordinator.day_mode = "Travail"
 
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
             mock_dt.now.return_value = datetime(2026, 5, 1, 10, 0, 0)
-            import asyncio
-            asyncio.get_event_loop().run_until_complete(coordinator._async_update_data())
-        assert coordinator._day_mode == "Ferie"
+            asyncio.get_event_loop().run_until_complete(coordinator.async_update_data())
+        assert coordinator.day_mode == "Ferie"
 
     def test_custom_event_mode_map(self):
         hass = _make_mock_hass()
@@ -586,13 +562,12 @@ class TestCustomModeMapping:
             start_time="2026-03-04 09:00:00", end_time="2026-03-04 17:00:00",
         )
         coordinator = HomeShiftCoordinator(hass, entry)
-        coordinator._day_mode = "Travail"
+        coordinator.day_mode = "Travail"
 
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
             mock_dt.now.return_value = datetime(2026, 3, 4, 10, 0, 0)
-            import asyncio
-            asyncio.get_event_loop().run_until_complete(coordinator._async_update_data())
-        assert coordinator._day_mode == "Bureau"
+            asyncio.get_event_loop().run_until_complete(coordinator.async_update_data())
+        assert coordinator.day_mode == "Bureau"
 
     def test_event_mode_map_case_insensitive(self):
         hass = _make_mock_hass()
@@ -603,13 +578,12 @@ class TestCustomModeMapping:
             start_time="2026-03-03 00:00:00", end_time="2026-03-04 00:00:00",
         )
         coordinator = HomeShiftCoordinator(hass, entry)
-        coordinator._day_mode = "Travail"
+        coordinator.day_mode = "Travail"
 
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
             mock_dt.now.return_value = datetime(2026, 3, 3, 10, 0, 0)
-            import asyncio
-            asyncio.get_event_loop().run_until_complete(coordinator._async_update_data())
-        assert coordinator._day_mode == "Remote"
+            asyncio.get_event_loop().run_until_complete(coordinator.async_update_data())
+        assert coordinator.day_mode == "Remote"
 
     def test_unmapped_event_weekend(self):
         hass = _make_mock_hass()
@@ -619,13 +593,12 @@ class TestCustomModeMapping:
             start_time="2026-03-07 10:00:00", end_time="2026-03-07 12:00:00",
         )
         coordinator = HomeShiftCoordinator(hass, entry)
-        coordinator._day_mode = "Travail"
+        coordinator.day_mode = "Travail"
 
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
             mock_dt.now.return_value = datetime(2026, 3, 7, 10, 0, 0)
-            import asyncio
-            asyncio.get_event_loop().run_until_complete(coordinator._async_update_data())
-        assert coordinator._day_mode == DEFAULT_MODE_WEEKEND
+            asyncio.get_event_loop().run_until_complete(coordinator.async_update_data())
+        assert coordinator.day_mode == DEFAULT_MODE_WEEKEND
 
     def test_mode_not_in_day_modes_not_applied(self):
         hass = _make_mock_hass()
@@ -635,13 +608,12 @@ class TestCustomModeMapping:
             start_time="2026-03-03 00:00:00", end_time="2026-03-04 00:00:00",
         )
         coordinator = HomeShiftCoordinator(hass, entry)
-        coordinator._day_mode = "Travail"
+        coordinator.day_mode = "Travail"
 
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
             mock_dt.now.return_value = datetime(2026, 3, 3, 10, 0, 0)
-            import asyncio
-            asyncio.get_event_loop().run_until_complete(coordinator._async_update_data())
-        assert coordinator._day_mode == "Travail"
+            asyncio.get_event_loop().run_until_complete(coordinator.async_update_data())
+        assert coordinator.day_mode == "Travail"
 
     def test_event_priority_over_weekend(self):
         hass = _make_mock_hass()
@@ -652,13 +624,12 @@ class TestCustomModeMapping:
             start_time="2026-03-07 00:00:00", end_time="2026-03-08 00:00:00",
         )
         coordinator = HomeShiftCoordinator(hass, entry)
-        coordinator._day_mode = "Maison"
+        coordinator.day_mode = "Maison"
 
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
             mock_dt.now.return_value = datetime(2026, 3, 7, 10, 0, 0)
-            import asyncio
-            asyncio.get_event_loop().run_until_complete(coordinator._async_update_data())
-        assert coordinator._day_mode == "Astreinte"
+            asyncio.get_event_loop().run_until_complete(coordinator.async_update_data())
+        assert coordinator.day_mode == "Astreinte"
 
     def test_event_priority_over_holiday(self):
         hass = _make_mock_hass()
@@ -676,13 +647,12 @@ class TestCustomModeMapping:
             return None
         hass.states.get.side_effect = get_state
         coordinator = HomeShiftCoordinator(hass, entry)
-        coordinator._day_mode = "Travail"
+        coordinator.day_mode = "Travail"
 
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
             mock_dt.now.return_value = datetime(2026, 5, 1, 10, 0, 0)
-            import asyncio
-            asyncio.get_event_loop().run_until_complete(coordinator._async_update_data())
-        assert coordinator._day_mode == "Astreinte"
+            asyncio.get_event_loop().run_until_complete(coordinator.async_update_data())
+        assert coordinator.day_mode == "Astreinte"
 
 
 # ---------------------------------------------------------------------------
@@ -696,13 +666,12 @@ class TestConfigurableAbsenceMode:
         entry = _make_mock_entry()
         hass.states.get.return_value = _make_calendar_state(state="off")
         coordinator = HomeShiftCoordinator(hass, entry)
-        coordinator._day_mode = DEFAULT_MODE_ABSENCE
+        coordinator.day_mode = DEFAULT_MODE_ABSENCE
 
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
             mock_dt.now.return_value = datetime(2026, 3, 4, 10, 0, 0)
-            import asyncio
-            asyncio.get_event_loop().run_until_complete(coordinator._async_update_data())
-        assert coordinator._day_mode == DEFAULT_MODE_ABSENCE
+            asyncio.get_event_loop().run_until_complete(coordinator.async_update_data())
+        assert coordinator.day_mode == DEFAULT_MODE_ABSENCE
 
     def test_custom_absence_blocks_update(self):
         hass = _make_mock_hass()
@@ -710,13 +679,12 @@ class TestConfigurableAbsenceMode:
         entry.data[CONF_DAY_MODES] = "Travail, Maison, Vacances Longues, Télétravail"
         hass.states.get.return_value = _make_calendar_state(state="off")
         coordinator = HomeShiftCoordinator(hass, entry)
-        coordinator._day_mode = "Vacances Longues"
+        coordinator.day_mode = "Vacances Longues"
 
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
             mock_dt.now.return_value = datetime(2026, 3, 4, 10, 0, 0)
-            import asyncio
-            asyncio.get_event_loop().run_until_complete(coordinator._async_update_data())
-        assert coordinator._day_mode == "Vacances Longues"
+            asyncio.get_event_loop().run_until_complete(coordinator.async_update_data())
+        assert coordinator.day_mode == "Vacances Longues"
 
     def test_non_absence_allows_update(self):
         hass = _make_mock_hass()
@@ -724,22 +692,20 @@ class TestConfigurableAbsenceMode:
         entry.data[CONF_DAY_MODES] = "Travail, Maison, Away, Télétravail, Absence"
         hass.states.get.return_value = _make_calendar_state(state="off")
         coordinator = HomeShiftCoordinator(hass, entry)
-        coordinator._day_mode = "Maison"
+        coordinator.day_mode = "Maison"
 
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
             mock_dt.now.return_value = datetime(2026, 3, 4, 10, 0, 0)
-            import asyncio
-            asyncio.get_event_loop().run_until_complete(coordinator._async_update_data())
-        assert coordinator._day_mode == DEFAULT_MODE_DEFAULT
+            asyncio.get_event_loop().run_until_complete(coordinator.async_update_data())
+        assert coordinator.day_mode == DEFAULT_MODE_DEFAULT
 
     def test_absence_skips_check_next_day(self):
         hass = _make_mock_hass()
         entry = _make_mock_entry()
         coordinator = HomeShiftCoordinator(hass, entry)
-        coordinator._day_mode = DEFAULT_MODE_ABSENCE
+        coordinator.day_mode = DEFAULT_MODE_ABSENCE
         coordinator.async_refresh = AsyncMock()
 
-        import asyncio
         asyncio.get_event_loop().run_until_complete(coordinator.async_check_next_day())
         coordinator.async_refresh.assert_not_called()
 
@@ -747,10 +713,9 @@ class TestConfigurableAbsenceMode:
         hass = _make_mock_hass()
         entry = _make_mock_entry()
         coordinator = HomeShiftCoordinator(hass, entry)
-        coordinator._day_mode = DEFAULT_MODE_DEFAULT
+        coordinator.day_mode = DEFAULT_MODE_DEFAULT
         coordinator.async_refresh = AsyncMock()
 
-        import asyncio
         asyncio.get_event_loop().run_until_complete(coordinator.async_check_next_day())
         coordinator.async_refresh.assert_called_once()
 
@@ -765,22 +730,21 @@ class TestHalfDayTransitionSequence:
         hass = _make_mock_hass()
         entry = _make_mock_entry(scan_interval=60)
         coordinator = HomeShiftCoordinator(hass, entry)
-        coordinator._day_mode = "Maison"
-        import asyncio
+        coordinator.day_mode = "Maison"
         loop = asyncio.get_event_loop()
 
         # 00:10 - no event
         hass.states.get.return_value = _make_calendar_state(state="off")
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
             mock_dt.now.return_value = datetime(2026, 3, 4, 0, 10, 0)
-            loop.run_until_complete(coordinator._async_update_data())
-        assert coordinator._day_mode == DEFAULT_MODE_DEFAULT
+            loop.run_until_complete(coordinator.async_update_data())
+        assert coordinator.day_mode == DEFAULT_MODE_DEFAULT
 
         # 09:00 - still no event
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
             mock_dt.now.return_value = datetime(2026, 3, 4, 9, 0, 0)
-            loop.run_until_complete(coordinator._async_update_data())
-        assert coordinator._day_mode == DEFAULT_MODE_DEFAULT
+            loop.run_until_complete(coordinator.async_update_data())
+        assert coordinator.day_mode == DEFAULT_MODE_DEFAULT
 
         # 13:00 - afternoon event starts
         hass.states.get.return_value = _make_calendar_state(
@@ -789,28 +753,27 @@ class TestHalfDayTransitionSequence:
         )
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
             mock_dt.now.return_value = datetime(2026, 3, 4, 13, 0, 0)
-            loop.run_until_complete(coordinator._async_update_data())
-        assert coordinator._day_mode == "Télétravail"
+            loop.run_until_complete(coordinator.async_update_data())
+        assert coordinator.day_mode == "Télétravail"
 
         # 15:00 - still active
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
             mock_dt.now.return_value = datetime(2026, 3, 4, 15, 0, 0)
-            loop.run_until_complete(coordinator._async_update_data())
-        assert coordinator._day_mode == "Télétravail"
+            loop.run_until_complete(coordinator.async_update_data())
+        assert coordinator.day_mode == "Télétravail"
 
         # 18:00 - event ended
         hass.states.get.return_value = _make_calendar_state(state="off")
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
             mock_dt.now.return_value = datetime(2026, 3, 4, 18, 0, 0)
-            loop.run_until_complete(coordinator._async_update_data())
-        assert coordinator._day_mode == DEFAULT_MODE_DEFAULT
+            loop.run_until_complete(coordinator.async_update_data())
+        assert coordinator.day_mode == DEFAULT_MODE_DEFAULT
 
     def test_full_day_sequence_morning_telework(self):
         hass = _make_mock_hass()
         entry = _make_mock_entry(scan_interval=60)
         coordinator = HomeShiftCoordinator(hass, entry)
-        coordinator._day_mode = "Maison"
-        import asyncio
+        coordinator.day_mode = "Maison"
         loop = asyncio.get_event_loop()
 
         # 08:00 - morning event active
@@ -820,27 +783,27 @@ class TestHalfDayTransitionSequence:
         )
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
             mock_dt.now.return_value = datetime(2026, 3, 12, 8, 0, 0)
-            loop.run_until_complete(coordinator._async_update_data())
-        assert coordinator._day_mode == "Télétravail"
+            loop.run_until_complete(coordinator.async_update_data())
+        assert coordinator.day_mode == "Télétravail"
 
         # 10:00 - still active
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
             mock_dt.now.return_value = datetime(2026, 3, 12, 10, 0, 0)
-            loop.run_until_complete(coordinator._async_update_data())
-        assert coordinator._day_mode == "Télétravail"
+            loop.run_until_complete(coordinator.async_update_data())
+        assert coordinator.day_mode == "Télétravail"
 
         # 12:00 - event ended
         hass.states.get.return_value = _make_calendar_state(state="off")
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
             mock_dt.now.return_value = datetime(2026, 3, 12, 12, 0, 0)
-            loop.run_until_complete(coordinator._async_update_data())
-        assert coordinator._day_mode == DEFAULT_MODE_DEFAULT
+            loop.run_until_complete(coordinator.async_update_data())
+        assert coordinator.day_mode == DEFAULT_MODE_DEFAULT
 
         # 14:00 - no event
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
             mock_dt.now.return_value = datetime(2026, 3, 12, 14, 0, 0)
-            loop.run_until_complete(coordinator._async_update_data())
-        assert coordinator._day_mode == DEFAULT_MODE_DEFAULT
+            loop.run_until_complete(coordinator.async_update_data())
+        assert coordinator.day_mode == DEFAULT_MODE_DEFAULT
 
 
 # ---------------------------------------------------------------------------
@@ -849,7 +812,7 @@ class TestHalfDayTransitionSequence:
 
 
 class TestTodayTypePersistence:
-    """Verify that next_day_type in the result persists for the full day.
+    """Verify that today_type in the result persists for the full day.
 
     Once a telework/vacation event is seen during any part of the day,
     the sensor value should remain set until midnight (not revert to 'Aucun'
@@ -861,7 +824,6 @@ class TestTodayTypePersistence:
         hass = _make_mock_hass()
         entry = _make_mock_entry(scan_interval=60)
         coordinator = HomeShiftCoordinator(hass, entry)
-        import asyncio
 
         loop = asyncio.get_event_loop()
 
@@ -874,23 +836,22 @@ class TestTodayTypePersistence:
         )
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
             mock_dt.now.return_value = datetime(2026, 3, 12, 8, 0, 0)
-            result = loop.run_until_complete(coordinator._async_update_data())
-        assert result["next_day_type"] == EVENT_TELEWORK
+            result = loop.run_until_complete(coordinator.async_update_data())
+        assert result["today_type"] == EVENT_TELEWORK
 
         # 14:00 - event ended, calendar is off
         hass.states.get.return_value = _make_calendar_state(state="off")
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
             mock_dt.now.return_value = datetime(2026, 3, 12, 14, 0, 0)
-            result = loop.run_until_complete(coordinator._async_update_data())
+            result = loop.run_until_complete(coordinator.async_update_data())
         # Sensor should still show TELEWORK (persists until midnight)
-        assert result["next_day_type"] == EVENT_TELEWORK
+        assert result["today_type"] == EVENT_TELEWORK
 
     def test_today_type_persists_after_afternoon_event_ends(self):
         """Sensor keeps EVENT_TELEWORK after the afternoon event window closes."""
         hass = _make_mock_hass()
         entry = _make_mock_entry(scan_interval=60)
         coordinator = HomeShiftCoordinator(hass, entry)
-        import asyncio
 
         loop = asyncio.get_event_loop()
 
@@ -903,22 +864,21 @@ class TestTodayTypePersistence:
         )
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
             mock_dt.now.return_value = datetime(2026, 3, 4, 13, 0, 0)
-            result = loop.run_until_complete(coordinator._async_update_data())
-        assert result["next_day_type"] == EVENT_TELEWORK
+            result = loop.run_until_complete(coordinator.async_update_data())
+        assert result["today_type"] == EVENT_TELEWORK
 
         # 20:00 - event ended
         hass.states.get.return_value = _make_calendar_state(state="off")
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
             mock_dt.now.return_value = datetime(2026, 3, 4, 20, 0, 0)
-            result = loop.run_until_complete(coordinator._async_update_data())
-        assert result["next_day_type"] == EVENT_TELEWORK
+            result = loop.run_until_complete(coordinator.async_update_data())
+        assert result["today_type"] == EVENT_TELEWORK
 
     def test_today_type_resets_at_midnight(self):
         """Sensor resets to EVENT_NONE when the calendar date changes."""
         hass = _make_mock_hass()
         entry = _make_mock_entry(scan_interval=60)
         coordinator = HomeShiftCoordinator(hass, entry)
-        import asyncio
 
         loop = asyncio.get_event_loop()
 
@@ -931,22 +891,21 @@ class TestTodayTypePersistence:
         )
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
             mock_dt.now.return_value = datetime(2026, 3, 12, 9, 0, 0)
-            result = loop.run_until_complete(coordinator._async_update_data())
-        assert result["next_day_type"] == EVENT_TELEWORK
+            result = loop.run_until_complete(coordinator.async_update_data())
+        assert result["today_type"] == EVENT_TELEWORK
 
         # Day 2: no event — type should reset
         hass.states.get.return_value = _make_calendar_state(state="off")
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
             mock_dt.now.return_value = datetime(2026, 3, 13, 9, 0, 0)
-            result = loop.run_until_complete(coordinator._async_update_data())
-        assert result["next_day_type"] == EVENT_NONE
+            result = loop.run_until_complete(coordinator.async_update_data())
+        assert result["today_type"] == EVENT_NONE
 
     def test_no_event_day_stays_none(self):
         """Sensor returns EVENT_NONE on a day with no events."""
         hass = _make_mock_hass()
         entry = _make_mock_entry(scan_interval=60)
         coordinator = HomeShiftCoordinator(hass, entry)
-        import asyncio
 
         loop = asyncio.get_event_loop()
 
@@ -954,8 +913,8 @@ class TestTodayTypePersistence:
         for hour in [8, 12, 17]:
             with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
                 mock_dt.now.return_value = datetime(2026, 3, 4, hour, 0, 0)
-                result = loop.run_until_complete(coordinator._async_update_data())
-            assert result["next_day_type"] == EVENT_NONE
+                result = loop.run_until_complete(coordinator.async_update_data())
+            assert result["today_type"] == EVENT_NONE
 
 
 # ---------------------------------------------------------------------------
@@ -969,7 +928,6 @@ except ImportError:
     HAS_ICALENDAR = False
     Calendar = None
 
-from pathlib import Path
 TELETRAVAIL_ICS = Path(__file__).parent.parent / "calendars" / "teletravail.ics"
 
 
@@ -1040,7 +998,6 @@ class TestManualOverrideDuration:
         hass = _make_mock_hass()
         entry = _make_mock_entry(override_duration=120)
         coordinator = HomeShiftCoordinator(hass, entry)
-        import asyncio
 
         loop = asyncio.get_event_loop()
         base_time = datetime(2026, 3, 12, 9, 0, 0)
@@ -1061,7 +1018,7 @@ class TestManualOverrideDuration:
         )
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
             mock_dt.now.return_value = datetime(2026, 3, 12, 10, 0, 0)
-            loop.run_until_complete(coordinator._async_update_data())
+            loop.run_until_complete(coordinator.async_update_data())
 
         # Mode must still be Télétravail (override is active)
         assert coordinator.day_mode == "Télétravail"
@@ -1071,7 +1028,6 @@ class TestManualOverrideDuration:
         hass = _make_mock_hass()
         entry = _make_mock_entry(override_duration=60)
         coordinator = HomeShiftCoordinator(hass, entry)
-        import asyncio
 
         loop = asyncio.get_event_loop()
         base_time = datetime(2026, 3, 12, 9, 0, 0)
@@ -1090,7 +1046,7 @@ class TestManualOverrideDuration:
         )
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
             mock_dt.now.return_value = datetime(2026, 3, 12, 10, 1, 0)
-            loop.run_until_complete(coordinator._async_update_data())
+            loop.run_until_complete(coordinator.async_update_data())
 
         # Override should be cleared
         assert coordinator.override_until is None
@@ -1102,7 +1058,6 @@ class TestManualOverrideDuration:
         hass = _make_mock_hass()
         entry = _make_mock_entry(override_duration=0)
         coordinator = HomeShiftCoordinator(hass, entry)
-        import asyncio
 
         loop = asyncio.get_event_loop()
 
@@ -1122,7 +1077,7 @@ class TestManualOverrideDuration:
         )
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
             mock_dt.now.return_value = datetime(2026, 3, 12, 9, 5, 0)
-            loop.run_until_complete(coordinator._async_update_data())
+            loop.run_until_complete(coordinator.async_update_data())
 
         assert coordinator.day_mode == "Maison"  # Vacances maps to Maison
 
@@ -1131,7 +1086,6 @@ class TestManualOverrideDuration:
         hass = _make_mock_hass()
         entry = _make_mock_entry(override_duration=60)
         coordinator = HomeShiftCoordinator(hass, entry)
-        import asyncio
 
         loop = asyncio.get_event_loop()
 
@@ -1159,10 +1113,9 @@ class TestManualOverrideDuration:
         hass.states.get.return_value = _make_calendar_state(state="off")
         entry = _make_mock_entry(override_duration=60)
         coordinator = HomeShiftCoordinator(hass, entry)
-        import asyncio
 
         loop = asyncio.get_event_loop()
-        result = loop.run_until_complete(coordinator._async_update_data())
+        result = loop.run_until_complete(coordinator.async_update_data())
         # Before manual change: no override
         assert result.get("override_until") is None
 
@@ -1189,7 +1142,6 @@ class TestManualOverrideDuration:
         hass = _make_mock_hass()
         entry = _make_mock_entry(override_duration=0)  # starts disabled
         coordinator = HomeShiftCoordinator(hass, entry)
-        import asyncio
 
         loop = asyncio.get_event_loop()
 
@@ -1230,7 +1182,6 @@ class TestThermostatModeKeyResolution:
         """Setting by display value (existing behaviour) still works."""
         hass = _make_mock_hass()
         coordinator = HomeShiftCoordinator(hass, _make_mock_entry())
-        import asyncio
 
         loop = asyncio.get_event_loop()
         loop.run_until_complete(coordinator.async_set_thermostat_mode("Chauffage"))
@@ -1241,7 +1192,6 @@ class TestThermostatModeKeyResolution:
         """Setting by exact-case internal key resolves to the display value."""
         hass = _make_mock_hass()
         coordinator = HomeShiftCoordinator(hass, _make_mock_entry())
-        import asyncio
 
         loop = asyncio.get_event_loop()
         loop.run_until_complete(coordinator.async_set_thermostat_mode("Heating"))
@@ -1252,7 +1202,6 @@ class TestThermostatModeKeyResolution:
         """Setting by lowercase internal key is accepted (case-insensitive)."""
         hass = _make_mock_hass()
         coordinator = HomeShiftCoordinator(hass, _make_mock_entry())
-        import asyncio
 
         loop = asyncio.get_event_loop()
         loop.run_until_complete(coordinator.async_set_thermostat_mode("heating"))
@@ -1262,7 +1211,6 @@ class TestThermostatModeKeyResolution:
         """'off' key resolves to the configured Off display value."""
         hass = _make_mock_hass()
         coordinator = HomeShiftCoordinator(hass, _make_mock_entry())
-        import asyncio
 
         loop = asyncio.get_event_loop()
         loop.run_until_complete(coordinator.async_set_thermostat_mode("off"))
@@ -1274,7 +1222,6 @@ class TestThermostatModeKeyResolution:
         hass = _make_mock_hass()
         coordinator = HomeShiftCoordinator(hass, _make_mock_entry())
         initial = coordinator.thermostat_mode
-        import asyncio
 
         loop = asyncio.get_event_loop()
         loop.run_until_complete(coordinator.async_set_thermostat_mode("unknown_mode"))
@@ -1285,10 +1232,9 @@ class TestThermostatModeKeyResolution:
         hass = _make_mock_hass()
         hass.states.get.return_value = _make_calendar_state(state="off")
         coordinator = HomeShiftCoordinator(hass, _make_mock_entry())
-        import asyncio
 
         loop = asyncio.get_event_loop()
-        result = loop.run_until_complete(coordinator._async_update_data())
+        result = loop.run_until_complete(coordinator.async_update_data())
         assert "thermostat_mode_key" in result
         assert result["thermostat_mode_key"] in ("Off", "Heating", "Cooling", "Ventilation")
 
@@ -1305,7 +1251,6 @@ class TestSchedulerRefresh:
 
     def test_active_schedulers_turned_on_others_off(self):
         """Switches for the active mode are turned ON; all others are turned OFF."""
-        import asyncio
         schedulers = {
             "Maison": ["switch.sched_maison"],
             "Travail": ["switch.sched_travail_a", "switch.sched_travail_b"],
@@ -1315,7 +1260,7 @@ class TestSchedulerRefresh:
         coordinator = HomeShiftCoordinator(
             hass, _make_mock_entry(schedulers_per_mode=schedulers)
         )
-        coordinator._day_mode = "Travail"
+        coordinator.day_mode = "Travail"
 
         asyncio.get_event_loop().run_until_complete(coordinator.async_refresh_schedulers())
 
@@ -1336,7 +1281,6 @@ class TestSchedulerRefresh:
 
     def test_no_schedulers_configured_does_nothing(self):
         """With an empty schedulers map, no service calls are made."""
-        import asyncio
         hass = self._hass()
         coordinator = HomeShiftCoordinator(hass, _make_mock_entry(schedulers_per_mode={}))
         asyncio.get_event_loop().run_until_complete(coordinator.async_refresh_schedulers())
@@ -1344,7 +1288,6 @@ class TestSchedulerRefresh:
 
     def test_active_mode_with_no_switches_only_turns_off_others(self):
         """Active mode has no switches → only the other modes' switches are turned off."""
-        import asyncio
         schedulers = {
             "Maison": ["switch.sched_maison"],
             "Travail": [],           # active mode — nothing to turn on
@@ -1354,7 +1297,7 @@ class TestSchedulerRefresh:
         coordinator = HomeShiftCoordinator(
             hass, _make_mock_entry(schedulers_per_mode=schedulers)
         )
-        coordinator._day_mode = "Travail"
+        coordinator.day_mode = "Travail"
 
         asyncio.get_event_loop().run_until_complete(coordinator.async_refresh_schedulers())
 
@@ -1371,7 +1314,6 @@ class TestSchedulerRefresh:
 
     def test_shared_switch_not_turned_off(self):
         """A switch also assigned to the active mode is never turned off."""
-        import asyncio
         shared = "switch.shared"
         schedulers = {
             "Maison": [shared, "switch.maison_only"],
@@ -1381,7 +1323,7 @@ class TestSchedulerRefresh:
         coordinator = HomeShiftCoordinator(
             hass, _make_mock_entry(schedulers_per_mode=schedulers)
         )
-        coordinator._day_mode = "Travail"
+        coordinator.day_mode = "Travail"
 
         asyncio.get_event_loop().run_until_complete(coordinator.async_refresh_schedulers())
 
@@ -1393,7 +1335,6 @@ class TestSchedulerRefresh:
 
     def test_mode_change_triggers_scheduler_refresh(self):
         """async_set_day_mode triggers a scheduler refresh with the right switches."""
-        import asyncio
         schedulers = {
             "Maison": ["switch.sched_maison"],
             "Télétravail": ["switch.sched_teletravail"],

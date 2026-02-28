@@ -96,7 +96,7 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
 
         # Parse thermostat mode map (InternalKey:DisplayValue, ...)
         thermostat_map_str = entry.data.get(CONF_THERMOSTAT_MODE_MAP, DEFAULT_THERMOSTAT_MODE_MAP)
-        self._thermostat_mode_map = self._parse_thermostat_mode_map(thermostat_map_str)
+        self._thermostat_mode_map = self.parse_thermostat_mode_map(thermostat_map_str)
         self._thermostat_modes = list(self._thermostat_mode_map.values())
         self._thermostat_mode: str = self._thermostat_modes[0] if self._thermostat_modes else "Off"
 
@@ -104,7 +104,7 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
         self._mode_default = entry.data.get(CONF_MODE_DEFAULT, DEFAULT_MODE_DEFAULT)
         self._mode_weekend = entry.data.get(CONF_MODE_WEEKEND, DEFAULT_MODE_WEEKEND)
         self._mode_holiday = entry.data.get(CONF_MODE_HOLIDAY, DEFAULT_MODE_HOLIDAY)
-        self._event_mode_map = self._parse_event_mode_map(entry.data.get(CONF_EVENT_MODE_MAP, DEFAULT_EVENT_MODE_MAP))
+        self._event_mode_map = self.parse_event_mode_map(entry.data.get(CONF_EVENT_MODE_MAP, DEFAULT_EVENT_MODE_MAP))
         self._mode_absence = entry.data.get(CONF_MODE_ABSENCE, DEFAULT_MODE_ABSENCE)
 
         _LOGGER.info(
@@ -126,7 +126,7 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
         )
 
     @staticmethod
-    def _parse_event_mode_map(raw: str) -> dict[str, str]:
+    def parse_event_mode_map(raw: str) -> dict[str, str]:
         """Parse 'Event1:Mode1, Event2:Mode2' into a dict.
 
         Returns a case-insensitive-lookup dict (keys are lowered).
@@ -146,7 +146,7 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
         return mapping
 
     @staticmethod
-    def _parse_thermostat_mode_map(raw: str) -> dict[str, str]:
+    def parse_thermostat_mode_map(raw: str) -> dict[str, str]:
         """Parse 'Key1:Display1, Key2:Display2' into an ordered dict.
 
         Keys are internal English identifiers (case preserved).
@@ -185,6 +185,14 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
     def day_mode(self) -> str:
         """Return current day mode."""
         return self._day_mode
+
+    @day_mode.setter
+    def day_mode(self, value: str) -> None:
+        """Set day mode directly (no override logic or scheduler refresh).
+
+        Intended for test setup only. Use async_set_day_mode() at runtime.
+        """
+        self._day_mode = value
 
     @property
     def thermostat_mode(self) -> str:
@@ -305,7 +313,7 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
         self.async_set_updated_data(self._build_result())
 
     @staticmethod
-    def _detect_event_period(start_time_str: str, end_time_str: str) -> str:
+    def detect_event_period(start_time_str: str, end_time_str: str) -> str:
         """Detect whether the event is all-day, morning, or afternoon.
 
         All-day events have times at midnight boundaries (00:00:00).
@@ -332,6 +340,13 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
 
         # Spans entire day or both halves
         return EVENT_PERIOD_ALL_DAY
+
+    async def async_update_data(self) -> dict:
+        """Public entry point for fetching data (delegates to _async_update_data).
+
+        Exposed so that tests can call this without accessing a protected member.
+        """
+        return await self._async_update_data()
 
     async def _async_update_data(self) -> dict:
         """Fetch data from calendar and determine current mode.
@@ -388,7 +403,7 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
 
             if event_message:
                 self._current_event = event_message
-                self._event_period = self._detect_event_period(event_start, event_end)
+                self._event_period = self.detect_event_period(event_start, event_end)
 
                 if self._event_vacation.lower() in event_message.lower():
                     today_type = self._event_vacation

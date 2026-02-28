@@ -1,4 +1,6 @@
 {
   "name": "HomeShift",
-  "render_readme": true
+  "domain": "home_shift",
+  "render_readme": true,
+  "homeassistant": "2026.2.2"
 }

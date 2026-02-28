@@ -1,6 +1,6 @@
-"""Constants for the Day Mode integration."""
+"""Constants for the HomeShift integration."""
 
-DOMAIN = "day_mode"
+DOMAIN = "homeshift"
 
 # Configuration keys
 CONF_CALENDAR_ENTITY = "calendar_entity"
@@ -9,6 +9,7 @@ CONF_DAY_MODES = "day_modes"
 CONF_THERMOSTAT_MODE_MAP = "thermostat_mode_map"  # Mapping: internal key → display/scheduler tag
 CONF_SCHEDULERS_PER_MODE = "schedulers_per_mode"  # Scheduler entities per day mode
 CONF_SCAN_INTERVAL = "scan_interval"
+CONF_OVERRIDE_DURATION = "override_duration"  # minutes to lock auto-update after manual change
 
 # Mode mapping configuration
 CONF_MODE_DEFAULT = "mode_default"  # Mode for regular work days
@@ -21,6 +22,7 @@ CONF_MODE_ABSENCE = "mode_absence"  # Mode that blocks automatic updates
 DEFAULT_DAY_MODES = ["Maison", "Travail", "Télétravail", "Absence"]
 DEFAULT_THERMOSTAT_MODE_MAP = "Off:Eteint, Heating:Chauffage, Cooling:Climatisation, Ventilation:Ventilation"
 DEFAULT_SCAN_INTERVAL = 60  # minutes
+DEFAULT_OVERRIDE_DURATION = 0  # 0 = disabled
 DEFAULT_MODE_DEFAULT = "Travail"
 DEFAULT_MODE_WEEKEND = "Maison"
 DEFAULT_MODE_HOLIDAY = "Maison"
@@ -31,6 +33,7 @@ DEFAULT_MODE_ABSENCE = "Absence"
 SELECT_DAY_MODE = "day_mode"
 SELECT_THERMOSTAT_MODE = "thermostat_mode"
 SENSOR_NEXT_DAY_TYPE = "next_day_type"
+NUMBER_OVERRIDE_DURATION = "override_duration"
 
 # Calendar events
 EVENT_NONE = "Aucun"

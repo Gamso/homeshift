@@ -1,4 +1,4 @@
-"""Sensor platform for Day Mode integration."""
+"""Sensor platform for HomeShift integration."""
 from __future__ import annotations
 
 import logging
@@ -10,7 +10,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN, SENSOR_NEXT_DAY_TYPE, EVENT_NONE
-from .coordinator import DayModeCoordinator
+from .coordinator import HomeShiftCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -21,18 +21,18 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up Day Mode sensor entities."""
-    coordinator: DayModeCoordinator = hass.data[DOMAIN][entry.entry_id]
+    coordinator: HomeShiftCoordinator = hass.data[DOMAIN][entry.entry_id]
 
-    async_add_entities([NextDayTypeSensor(coordinator, entry)])
+    async_add_entities([HomeShiftNextDayTypeSensor(coordinator, entry)])
 
 
-class NextDayTypeSensor(CoordinatorEntity, SensorEntity):
+class HomeShiftNextDayTypeSensor(CoordinatorEntity, SensorEntity):
     """Sensor for next day type detection."""
 
     _attr_has_entity_name = True
-    _attr_translation_key = "next_day_type"
+    _attr_name = "Next Day Type"
 
-    def __init__(self, coordinator: DayModeCoordinator, entry: ConfigEntry) -> None:
+    def __init__(self, coordinator: HomeShiftCoordinator, entry: ConfigEntry) -> None:
         """Initialize the sensor."""
         super().__init__(coordinator)
         self._attr_unique_id = f"{entry.entry_id}_{SENSOR_NEXT_DAY_TYPE}"
@@ -48,9 +48,9 @@ class NextDayTypeSensor(CoordinatorEntity, SensorEntity):
         """Return device information."""
         return {
             "identifiers": {(DOMAIN, self._entry.entry_id)},
-            "name": "Day Mode",
+            "name": "HomeShift",
             "manufacturer": "Gamso",
-            "model": "Day Mode Controller",
+            "model": "HomeShift Controller",
         }
 
     @property
@@ -59,6 +59,8 @@ class NextDayTypeSensor(CoordinatorEntity, SensorEntity):
         return {
             "day_mode": self.coordinator.day_mode,
             "thermostat_mode": self.coordinator.thermostat_mode,
+            "thermostat_mode_key": self.coordinator.thermostat_mode_key,
             "current_event": self.coordinator.current_event,
             "event_period": self.coordinator.event_period,
+            "override_until": self.coordinator.data.get("override_until") if self.coordinator.data else None,
         }

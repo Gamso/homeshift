@@ -1,8 +1,8 @@
-"""Coordinator for Day Mode integration."""
+"""Coordinator for HomeShift integration."""
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta, time
+from datetime import datetime, date, timedelta
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
@@ -16,6 +16,7 @@ from .const import (
     CONF_DAY_MODES,
     CONF_THERMOSTAT_MODE_MAP,
     CONF_SCAN_INTERVAL,
+    CONF_OVERRIDE_DURATION,
     CONF_MODE_DEFAULT,
     CONF_MODE_WEEKEND,
     CONF_MODE_HOLIDAY,
@@ -24,6 +25,7 @@ from .const import (
     DEFAULT_DAY_MODES,
     DEFAULT_THERMOSTAT_MODE_MAP,
     DEFAULT_SCAN_INTERVAL,
+    DEFAULT_OVERRIDE_DURATION,
     DEFAULT_MODE_DEFAULT,
     DEFAULT_MODE_WEEKEND,
     DEFAULT_MODE_HOLIDAY,
@@ -43,8 +45,8 @@ _LOGGER = logging.getLogger(__name__)
 MIDDAY_HOUR = 13
 
 
-class DayModeCoordinator(DataUpdateCoordinator):
-    """Class to manage fetching Day Mode data."""
+class HomeShiftCoordinator(DataUpdateCoordinator):
+    """Class to manage fetching HomeShift data."""
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         """Initialize."""
@@ -65,6 +67,18 @@ class DayModeCoordinator(DataUpdateCoordinator):
         self._day_mode: str = DEFAULT_DAY_MODES[0]
         self._current_event: str | None = None
         self._event_period: str | None = None  # all_day, morning, afternoon
+        # Day-level event type: persists until midnight so the sensor doesn't
+        # flicker back to 'Aucun' between half-day events
+        self._today_type: str = EVENT_NONE
+        self._today_date: date | None = None
+        # Manual override duration (minutes) — mutable at runtime via number entity
+        override_raw = entry.data.get(CONF_OVERRIDE_DURATION, DEFAULT_OVERRIDE_DURATION)
+        try:
+            self._override_duration_minutes: int = int(override_raw or 0)
+        except (ValueError, TypeError):
+            self._override_duration_minutes = DEFAULT_OVERRIDE_DURATION
+        # Manual override: blocks auto-update until this datetime
+        self._override_until: datetime | None = None
 
         # Parse day modes from config
         day_modes_str = entry.data.get(CONF_DAY_MODES, ", ".join(DEFAULT_DAY_MODES))
@@ -84,7 +98,7 @@ class DayModeCoordinator(DataUpdateCoordinator):
         self._mode_absence = entry.data.get(CONF_MODE_ABSENCE, DEFAULT_MODE_ABSENCE)
 
         _LOGGER.info(
-            "Day Mode coordinator initialized — "
+            "HomeShift coordinator initialized — "
             "calendar=%s, holiday_calendar=%s, scan_interval=%s min | "
             "day_modes=%s | "
             "mode_default=%s, mode_weekend=%s, mode_holiday=%s, mode_absence=%s | "
@@ -177,6 +191,24 @@ class DayModeCoordinator(DataUpdateCoordinator):
         """Return current event period (all_day, morning, afternoon)."""
         return self._event_period
 
+    @property
+    def override_duration_minutes(self) -> int:
+        """Return the current override duration in minutes (0 = disabled)."""
+        return self._override_duration_minutes
+
+    @property
+    def override_until(self) -> datetime | None:
+        """Return the datetime when the manual override expires, or None."""
+        return self._override_until
+
+    def set_override_duration_minutes(self, minutes: int) -> None:
+        """Update the override duration (called by the number entity)."""
+        self._override_duration_minutes = max(0, int(minutes))
+        _LOGGER.info(
+            "Override duration updated: %d min",
+            self._override_duration_minutes,
+        )
+
     async def async_set_day_mode(self, mode: str) -> None:
         """Set day mode manually (from UI select or service call)."""
         if mode not in self._day_modes:
@@ -188,22 +220,78 @@ class DayModeCoordinator(DataUpdateCoordinator):
             return
         old_mode = self._day_mode
         self._day_mode = mode
-        _LOGGER.info("Manual change: day_mode '%s' -> '%s'", old_mode, mode)
+        # Activate override to block automatic changes for the configured duration
+        override_minutes = self._override_duration_minutes
+        if override_minutes > 0:
+            self._override_until = dt_util.now() + timedelta(minutes=override_minutes)
+            _LOGGER.info(
+                "Manual change: day_mode '%s' -> '%s' | override active for %d min (until %s)",
+                old_mode,
+                mode,
+                override_minutes,
+                self._override_until.strftime("%H:%M:%S"),
+            )
+        else:
+            self._override_until = None
+            _LOGGER.info("Manual change: day_mode '%s' -> '%s'", old_mode, mode)
         await self.async_refresh_schedulers()
-        self.async_set_updated_data(self.data)
+        # Rebuild and broadcast the full data dict so downstream sensors pick up
+        # the new day_mode and override_until immediately (rather than stale data).
+        self.async_set_updated_data(self._build_result(self._today_type))
+
+    @property
+    def thermostat_mode_key(self) -> str | None:
+        """Return the internal key (e.g. 'Off', 'Heating') for the current thermostat mode.
+
+        This is the language-independent identifier used for automation and
+        service calls regardless of the configured display language.
+        """
+        for key, display in self._thermostat_mode_map.items():
+            if display == self._thermostat_mode:
+                return key
+        return None
+
+    def _resolve_thermostat_display(self, mode: str) -> str | None:
+        """Resolve a thermostat mode value to its display string.
+
+        Accepts either:
+        - A display value (e.g. 'Chauffage') — returned as-is.
+        - An internal key (e.g. 'heating', 'Heating') — resolved to its display value.
+
+        Returns None if no match is found.
+        """
+        if mode in self._thermostat_modes:
+            return mode
+        mode_lower = mode.lower()
+        for key, display in self._thermostat_mode_map.items():
+            if key.lower() == mode_lower:
+                return display
+        return None
 
     async def async_set_thermostat_mode(self, mode: str) -> None:
-        """Set thermostat mode manually (from UI select or service call)."""
-        if mode not in self._thermostat_modes:
+        """Set thermostat mode manually (from UI select or service call).
+
+        Accepts both the display value (language-specific, e.g. 'Chauffage') and
+        the internal key (language-independent, e.g. 'heating' or 'Heating').
+        """
+        resolved = self._resolve_thermostat_display(mode)
+        if resolved is None:
             _LOGGER.warning(
-                "Manual change ignored: thermostat_mode '%s' is not in configured modes %s",
+                "Manual change ignored: thermostat_mode '%s' does not match any " "configured display value or internal key. " "Configured modes: %s | keys: %s",
                 mode,
                 self._thermostat_modes,
+                list(self._thermostat_mode_map.keys()),
             )
             return
         old_mode = self._thermostat_mode
-        self._thermostat_mode = mode
-        _LOGGER.info("Manual change: thermostat_mode '%s' -> '%s'", old_mode, mode)
+        self._thermostat_mode = resolved
+        _LOGGER.info(
+            "Manual change: thermostat_mode '%s' -> '%s' (key=%s)",
+            old_mode,
+            resolved,
+            self.thermostat_mode_key,
+        )
+        self.async_set_updated_data(self._build_result(self._today_type))
 
     @staticmethod
     def _detect_event_period(start_time_str: str, end_time_str: str) -> str:
@@ -275,6 +363,13 @@ class DayModeCoordinator(DataUpdateCoordinator):
         self._event_period = None
         next_day_type = EVENT_NONE
 
+        # Reset day-level event type at midnight (new calendar day)
+        today = now.date()
+        if today != self._today_date:
+            _LOGGER.debug("New calendar day (%s), resetting today_type", today)
+            self._today_type = EVENT_NONE
+            self._today_date = today
+
         if calendar_state.state == "on":
             event_message = calendar_state.attributes.get("message", "")
             event_start = calendar_state.attributes.get("start_time", "")
@@ -290,14 +385,30 @@ class DayModeCoordinator(DataUpdateCoordinator):
                     next_day_type = EVENT_TELEWORK
                 else:
                     next_day_type = event_message
+                # Persist the day-level type: once a known event is seen
+                # for today it stays visible until midnight
+                if next_day_type != EVENT_NONE:
+                    self._today_type = next_day_type
 
-        # Auto-update mode (skip if manually set to absence mode)
+        # Auto-update mode (skip if absence mode or manual override is active)
         if self._day_mode == self._mode_absence:
             _LOGGER.debug(
                 "Periodic check: auto-update skipped, absence mode active ('%s')",
                 self._day_mode,
             )
+        elif self._override_until is not None and now < self._override_until:
+            remaining = int((self._override_until - now).total_seconds() / 60) + 1
+            _LOGGER.debug(
+                "Periodic check: auto-update skipped, manual override active for ~%d more min",
+                remaining,
+            )
         else:
+            if self._override_until is not None:
+                _LOGGER.info(
+                    "Manual override expired at %s, resuming automatic mode changes",
+                    self._override_until.strftime("%H:%M:%S"),
+                )
+                self._override_until = None
             new_mode = await self._determine_mode(next_day_type)
             if new_mode and new_mode != self._day_mode and new_mode in self._day_modes:
                 _LOGGER.info(
@@ -320,13 +431,20 @@ class DayModeCoordinator(DataUpdateCoordinator):
         return self._build_result(next_day_type=next_day_type)
 
     def _build_result(self, next_day_type: str) -> dict:
-        """Build the data dict returned by the coordinator."""
+        """Build the data dict returned by the coordinator.
+
+        'next_day_type' in the result reflects the full-day event type
+        (_today_type) so the sensor stays non-None after a half-day event ends.
+        The raw next_day_type is only used internally for mode decisions.
+        """
         return {
-            "next_day_type": next_day_type,
+            "next_day_type": self._today_type,
             "current_event": self._current_event,
             "event_period": self._event_period,
             "day_mode": self._day_mode,
             "thermostat_mode": self._thermostat_mode,
+            "thermostat_mode_key": self.thermostat_mode_key,
+            "override_until": self._override_until.isoformat() if self._override_until else None,
         }
 
     async def _determine_mode(self, next_day_type: str) -> str | None:

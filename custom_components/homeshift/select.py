@@ -1,4 +1,4 @@
-"""Select platform for Day Mode integration."""
+"""Select platform for HomeShift integration."""
 from __future__ import annotations
 
 import logging
@@ -11,7 +11,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN, SELECT_DAY_MODE, SELECT_THERMOSTAT_MODE
-from .coordinator import DayModeCoordinator
+from .coordinator import HomeShiftCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -22,23 +22,23 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up Day Mode select entities."""
-    coordinator: DayModeCoordinator = hass.data[DOMAIN][entry.entry_id]
+    coordinator: HomeShiftCoordinator = hass.data[DOMAIN][entry.entry_id]
 
     async_add_entities(
         [
-            DayModeSelect(coordinator, entry),
-            ThermostatModeSelect(coordinator, entry),
+            HomeShiftSelect(coordinator, entry),
+            HomeShiftThermostatSelect(coordinator, entry),
         ]
     )
 
 
-class DayModeSelect(CoordinatorEntity, SelectEntity):
+class HomeShiftSelect(CoordinatorEntity, SelectEntity):
     """Representation of Day Mode select entity."""
 
     _attr_has_entity_name = True
-    _attr_translation_key = "day_mode"
+    _attr_name = "Day Mode"
 
-    def __init__(self, coordinator: DayModeCoordinator, entry: ConfigEntry) -> None:
+    def __init__(self, coordinator: HomeShiftCoordinator, entry: ConfigEntry) -> None:
         """Initialize the select entity."""
         super().__init__(coordinator)
         self._attr_unique_id = f"{entry.entry_id}_{SELECT_DAY_MODE}"
@@ -59,19 +59,19 @@ class DayModeSelect(CoordinatorEntity, SelectEntity):
         """Return device information."""
         return {
             "identifiers": {(DOMAIN, self._entry.entry_id)},
-            "name": "Day Mode",
+            "name": "HomeShift",
             "manufacturer": "Gamso",
-            "model": "Day Mode Controller",
+            "model": "HomeShift Controller",
         }
 
 
-class ThermostatModeSelect(CoordinatorEntity, SelectEntity):
+class HomeShiftThermostatSelect(CoordinatorEntity, SelectEntity):
     """Representation of Thermostat Mode select entity."""
 
     _attr_has_entity_name = True
-    _attr_translation_key = "thermostat_mode"
+    _attr_name = "Thermostat Mode"
 
-    def __init__(self, coordinator: DayModeCoordinator, entry: ConfigEntry) -> None:
+    def __init__(self, coordinator: HomeShiftCoordinator, entry: ConfigEntry) -> None:
         """Initialize the select entity."""
         super().__init__(coordinator)
         self._attr_unique_id = f"{entry.entry_id}_{SELECT_THERMOSTAT_MODE}"
@@ -92,7 +92,7 @@ class ThermostatModeSelect(CoordinatorEntity, SelectEntity):
         """Return device information."""
         return {
             "identifiers": {(DOMAIN, self._entry.entry_id)},
-            "name": "Day Mode",
+            "name": "HomeShift",
             "manufacturer": "Gamso",
-            "model": "Day Mode Controller",
+            "model": "HomeShift Controller",
         }

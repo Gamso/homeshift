@@ -1,4 +1,4 @@
-"""Config flow for Day Mode integration."""
+"""Config flow for HomeShift integration."""
 from __future__ import annotations
 
 import logging
@@ -236,8 +236,8 @@ def _extract_schedulers(user_input: dict[str, Any], data: dict[str, Any]) -> dic
 # ---------------------------------------------------------------------------
 
 
-class DayModeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
-    """Handle a config flow for Day Mode."""
+class HomeShiftConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
+    """Handle a config flow for HomeShift."""
 
     VERSION = 1
 
@@ -338,7 +338,7 @@ class DayModeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         user_input: dict[str, Any] | None = None,
     ) -> config_entries.FlowResult:
         """Create the config entry."""
-        return self.async_create_entry(title="Day Mode", data=self._data)
+        return self.async_create_entry(title="HomeShift", data=self._data)
 
     # -- options flow accessor ---------------------------------------------
 
@@ -346,9 +346,9 @@ class DayModeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     @callback
     def async_get_options_flow(
         config_entry: config_entries.ConfigEntry,
-    ) -> DayModeOptionsFlow:
+    ) -> HomeShiftOptionsFlow:
         """Get the options flow for this handler."""
-        return DayModeOptionsFlow()
+        return HomeShiftOptionsFlow()
 
 
 # ---------------------------------------------------------------------------
@@ -356,8 +356,8 @@ class DayModeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 # ---------------------------------------------------------------------------
 
 
-class DayModeOptionsFlow(config_entries.OptionsFlow):
-    """Handle options flow for Day Mode."""
+class HomeShiftOptionsFlow(config_entries.OptionsFlow):
+    """Handle options flow for HomeShift."""
 
     def __init__(self) -> None:
         """Initialize options flow."""

@@ -1,4 +1,4 @@
-"""The Day Mode integration."""
+"""The HomeShift integration."""
 from __future__ import annotations
 
 import logging
@@ -8,11 +8,11 @@ from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 
 from .const import DOMAIN
-from .coordinator import DayModeCoordinator
+from .coordinator import HomeShiftCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS: list[Platform] = [Platform.SELECT, Platform.SENSOR]
+PLATFORMS: list[Platform] = [Platform.SELECT, Platform.SENSOR, Platform.NUMBER]
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -20,7 +20,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data.setdefault(DOMAIN, {})
 
     # Create coordinator
-    coordinator = DayModeCoordinator(hass, entry)
+    coordinator = HomeShiftCoordinator(hass, entry)
     await coordinator.async_config_entry_first_refresh()
 
     hass.data[DOMAIN][entry.entry_id] = coordinator
@@ -31,7 +31,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Register services
     await async_setup_services(hass, coordinator)
 
-    _LOGGER.info("Day Mode integration loaded successfully (entry_id=%s)", entry.entry_id)
+    _LOGGER.info("HomeShift integration loaded successfully (entry_id=%s)", entry.entry_id)
 
     return True
 
@@ -44,7 +44,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     return unload_ok
 
 
-async def async_setup_services(hass: HomeAssistant, coordinator: DayModeCoordinator) -> None:
+async def async_setup_services(hass: HomeAssistant, coordinator: HomeShiftCoordinator) -> None:
     """Set up services for the Day Mode integration."""
     from .const import SERVICE_REFRESH_SCHEDULERS, SERVICE_CHECK_NEXT_DAY
 

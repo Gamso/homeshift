@@ -18,7 +18,7 @@ When you first add the Day Mode integration:
 
 1. Go to **Settings** → **Devices & Services**
 2. Click **Add Integration**
-3. Search for "Day Mode"
+3. Search for "HomeShift"
 4. Fill in the configuration form:
    - **Work Calendar Entity**: Select your work calendar
    - **Holiday Calendar Entity**: (Optional) Select holiday calendar

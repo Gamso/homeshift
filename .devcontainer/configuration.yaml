@@ -18,7 +18,7 @@ logger:
   default: info
   logs:
     homeassistant.components.lovelace: debug
-    custom_components.day_mode: debug
+    custom_components.homeshift: debug
 
 # User interface - use YAML mode to load ui-lovelace.yaml
 lovelace:

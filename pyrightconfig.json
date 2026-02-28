@@ -1,6 +1,6 @@
 {
     "include": [
-        "custom_components/day_mode/**",
+        "custom_components/homeshift/**",
         "homeassistant/**",
         "tests/**",
     ],

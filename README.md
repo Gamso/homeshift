@@ -27,12 +27,12 @@ Ce composant permet de :
 5. Ajoutez `https://github.com/Gamso/day_mode` comme repository
 6. Sélectionnez "Integration" comme catégorie
 7. Cliquez sur "Add"
-8. Recherchez "Day Mode" et installez-le
+8. Recherchez "HomeShift" et installez-le
 9. Redémarrez Home Assistant
 
 ### Installation Manuelle
 
-1. Téléchargez le dossier `custom_components/day_mode`
+1. Téléchargez le dossier `custom_components/homeshift`
 2. Copiez-le dans le dossier `custom_components` de votre configuration Home Assistant
 3. Redémarrez Home Assistant
 
@@ -42,7 +42,7 @@ Ce composant permet de :
 
 1. Allez dans Configuration → Intégrations
 2. Cliquez sur "+ Ajouter une intégration"
-3. Recherchez "Day Mode"
+3. Recherchez "HomeShift"
 4. Suivez les étapes de configuration :
    - **Calendrier Travail** : Sélectionnez l'entité calendrier contenant vos événements de travail
    - **Calendrier Jours Fériés** (Optionnel) : Sélectionnez l'entité calendrier des jours fériés
@@ -152,7 +152,7 @@ docker-compose up -d
 ### Structure du projet
 
 ```
-custom_components/day_mode/
+custom_components/homeshift/
 ├── __init__.py           # Point d'entrée de l'intégration
 ├── config_flow.py        # Configuration via l'interface utilisateur
 ├── const.py              # Constantes

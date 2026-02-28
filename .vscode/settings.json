@@ -14,7 +14,7 @@
     "python.testing.pytestEnabled": true,
     "python.analysis.extraPaths": [
         //    "/home/vscode/core",
-        "/workspaces/day_mode/custom_components/day_mode",
+        "/workspaces/day_mode/custom_components/homeshift",
         "/home/vscode/.local/lib/python3.13/site-packages/homeassistant"
     ]
 }

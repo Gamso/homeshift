@@ -13,11 +13,11 @@ Gestion automatique des modes de jour et des schedulers pour Home Assistant.
 
 ## Installation
 
-1. Installez via HACS ou copiez manuellement le dossier `custom_components/day_mode`
+1. Installez via HACS ou copiez manuellement le dossier `custom_components/homeshift`
 2. Redémarrez Home Assistant
 3. Allez dans Configuration → Intégrations
 4. Cliquez sur "+ Ajouter une intégration"
-5. Recherchez "Day Mode"
+5. Recherchez "HomeShift"
 
 ## Configuration
 

@@ -55,3 +55,36 @@ SERVICE_CHECK_NEXT_DAY = "check_next_day"
 # Attributes
 ATTR_DAY_MODE = "day_mode"
 ATTR_THERMOSTAT_MODE = "thermostat_mode"
+
+
+# ---------------------------------------------------------------------------
+# Localized defaults (keyed by ISO 639-1 language code)
+# ---------------------------------------------------------------------------
+
+LOCALIZED_DEFAULTS: dict[str, dict] = {
+    "en": {
+        CONF_DAY_MODES: "Home, Work, Telework, Absence",
+        CONF_MODE_DEFAULT: "Work",
+        CONF_MODE_WEEKEND: "Home",
+        CONF_MODE_HOLIDAY: "Home",
+        CONF_MODE_ABSENCE: "Absence",
+        CONF_EVENT_MODE_MAP: "Vacation:Home, Telework:Telework",
+        CONF_THERMOSTAT_MODE_MAP: "Off:Off, Heating:Heating, Cooling:Cooling, Ventilation:Ventilation",
+    },
+    "fr": {
+        CONF_DAY_MODES: "Maison, Travail, T\u00e9l\u00e9travail, Absence",
+        CONF_MODE_DEFAULT: "Travail",
+        CONF_MODE_WEEKEND: "Maison",
+        CONF_MODE_HOLIDAY: "Maison",
+        CONF_MODE_ABSENCE: "Absence",
+        CONF_EVENT_MODE_MAP: "Vacances:Maison, T\u00e9l\u00e9travail:T\u00e9l\u00e9travail",
+        CONF_THERMOSTAT_MODE_MAP: "Off:Eteint, Heating:Chauffage, Cooling:Climatisation, Ventilation:Ventilation",
+    },
+}
+
+
+def get_localized_defaults(hass) -> dict:
+    """Return defaults localized to the HA instance language."""
+    lang = getattr(hass.config, "language", "en") or "en"
+    lang_code = lang.split("-")[0].lower()
+    return LOCALIZED_DEFAULTS.get(lang_code, LOCALIZED_DEFAULTS["en"])

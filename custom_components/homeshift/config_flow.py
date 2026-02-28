@@ -32,42 +32,15 @@ from .const import (
     DEFAULT_MODE_HOLIDAY,
     DEFAULT_MODE_ABSENCE,
     DEFAULT_EVENT_MODE_MAP,
+    LOCALIZED_DEFAULTS,
+    get_localized_defaults,
 )
 
 _LOGGER = logging.getLogger(__name__)
 
-
-# ---------------------------------------------------------------------------
-# Localized defaults
-# ---------------------------------------------------------------------------
-
-_LOCALIZED_DEFAULTS: dict[str, dict] = {
-    "en": {
-        CONF_DAY_MODES: "Home, Work, Telework, Absence",
-        CONF_MODE_DEFAULT: "Work",
-        CONF_MODE_WEEKEND: "Home",
-        CONF_MODE_HOLIDAY: "Home",
-        CONF_MODE_ABSENCE: "Absence",
-        CONF_EVENT_MODE_MAP: "Vacation:Home, Telework:Telework",
-        CONF_THERMOSTAT_MODE_MAP: "Off:Off, Heating:Heating, Cooling:Cooling, Ventilation:Ventilation",
-    },
-    "fr": {
-        CONF_DAY_MODES: "Maison, Travail, Télétravail, Absence",
-        CONF_MODE_DEFAULT: "Travail",
-        CONF_MODE_WEEKEND: "Maison",
-        CONF_MODE_HOLIDAY: "Maison",
-        CONF_MODE_ABSENCE: "Absence",
-        CONF_EVENT_MODE_MAP: "Vacances:Maison, Télétravail:Télétravail",
-        CONF_THERMOSTAT_MODE_MAP: "Off:Eteint, Heating:Chauffage, Cooling:Climatisation, Ventilation:Ventilation",
-    },
-}
-
-
-def _get_localized_defaults(hass) -> dict:
-    """Return defaults localized to the HA instance language."""
-    lang = getattr(hass.config, "language", "en") or "en"
-    lang_code = lang.split("-")[0].lower()
-    return _LOCALIZED_DEFAULTS.get(lang_code, _LOCALIZED_DEFAULTS["en"])
+# Aliases for backwards compatibility
+_LOCALIZED_DEFAULTS = LOCALIZED_DEFAULTS
+_get_localized_defaults = get_localized_defaults
 
 
 # ---------------------------------------------------------------------------

@@ -38,11 +38,11 @@ from custom_components.homeshift.const import (
     EVENT_PERIOD_ALL_DAY,
     EVENT_PERIOD_MORNING,
     EVENT_PERIOD_AFTERNOON,
+    LOCALIZED_DEFAULTS,
 )
-from custom_components.homeshift.config_flow import _LOCALIZED_DEFAULTS
 
 # Use French locale defaults for all tests
-_FR = _LOCALIZED_DEFAULTS["fr"]
+_FR = LOCALIZED_DEFAULTS["fr"]
 DEFAULT_DAY_MODES: list[str] = [m.strip() for m in _FR[CONF_DAY_MODES].split(",")]
 DEFAULT_THERMOSTAT_MODE_MAP: str = _FR[CONF_THERMOSTAT_MODE_MAP]
 DEFAULT_MODE_DEFAULT: str = _FR[CONF_MODE_DEFAULT]

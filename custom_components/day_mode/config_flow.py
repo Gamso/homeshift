@@ -7,24 +7,233 @@ from typing import Any
 import voluptuous as vol
 
 from homeassistant import config_entries
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.core import callback
+from homeassistant.data_entry_flow import section
 from homeassistant.helpers import selector
-from homeassistant.helpers import config_validation as cv
 
 from .const import (
     DOMAIN,
     CONF_CALENDAR_ENTITY,
     CONF_HOLIDAY_CALENDAR,
     CONF_DAY_MODES,
-    CONF_THERMOSTAT_MODES,
+    CONF_THERMOSTAT_MODE_MAP,
     CONF_SCHEDULERS_PER_MODE,
-    CONF_CHECK_TIME,
+    CONF_SCAN_INTERVAL,
+    CONF_MODE_DEFAULT,
+    CONF_MODE_WEEKEND,
+    CONF_MODE_HOLIDAY,
+    CONF_EVENT_MODE_MAP,
+    CONF_MODE_ABSENCE,
     DEFAULT_DAY_MODES,
-    DEFAULT_THERMOSTAT_MODES,
-    DEFAULT_CHECK_TIME,
+    DEFAULT_THERMOSTAT_MODE_MAP,
+    DEFAULT_SCAN_INTERVAL,
+    DEFAULT_MODE_DEFAULT,
+    DEFAULT_MODE_WEEKEND,
+    DEFAULT_MODE_HOLIDAY,
+    DEFAULT_MODE_ABSENCE,
+    DEFAULT_EVENT_MODE_MAP,
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def _calendars_schema(data: dict[str, Any]) -> vol.Schema:
+    """Build the calendars & schedule form schema."""
+    return vol.Schema(
+        {
+            vol.Required(
+                CONF_CALENDAR_ENTITY,
+                default=data.get(CONF_CALENDAR_ENTITY, ""),
+            ): selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="calendar"),
+            ),
+            vol.Optional(
+                CONF_HOLIDAY_CALENDAR,
+                default=data.get(CONF_HOLIDAY_CALENDAR, ""),
+            ): selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="calendar"),
+            ),
+            vol.Optional(
+                CONF_SCAN_INTERVAL,
+                default=data.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL),
+            ): selector.NumberSelector(
+                selector.NumberSelectorConfig(
+                    min=5,
+                    max=1440,
+                    step=5,
+                    unit_of_measurement="min",
+                    mode=selector.NumberSelectorMode.BOX,
+                ),
+            ),
+        }
+    )
+
+
+def _parse_thermostat_map(map_str: str) -> dict[str, str]:
+    """Parse 'Key:Display, ...' string into an ordered dict."""
+    result: dict[str, str] = {}
+    for pair in map_str.split(","):
+        pair = pair.strip()
+        if ":" in pair:
+            key, _, display = pair.partition(":")
+            result[key.strip()] = display.strip()
+    return result
+
+
+def _thermostat_display_fields(data: dict[str, Any]) -> dict:
+    """Return one TextSelector field per thermostat key (key = label)."""
+    current_map = _parse_thermostat_map(data.get(CONF_THERMOSTAT_MODE_MAP, DEFAULT_THERMOSTAT_MODE_MAP))
+    fields: dict = {}
+    for key, display in current_map.items():
+        field_name = f"thermostat_display_{key.lower()}"
+        fields[
+            vol.Optional(
+                field_name,
+                default=display,
+            )
+        ] = selector.TextSelector(selector.TextSelectorConfig(type=selector.TextSelectorType.TEXT))
+    return fields
+
+
+def _rebuild_thermostat_map(user_input: dict[str, Any], data: dict[str, Any]) -> str:
+    """Reconstruct CONF_THERMOSTAT_MODE_MAP from individual display fields."""
+    current_map = _parse_thermostat_map(data.get(CONF_THERMOSTAT_MODE_MAP, DEFAULT_THERMOSTAT_MODE_MAP))
+    pairs: list[str] = []
+    for key, default_display in current_map.items():
+        field_name = f"thermostat_display_{key.lower()}"
+        display = user_input.pop(field_name, default_display)
+        pairs.append(f"{key}:{display}")
+    return ", ".join(pairs)
+
+
+def _mapping_schema(data: dict[str, Any]) -> vol.Schema:
+    """Build the mode-mapping form schema with collapsible sections."""
+    text = selector.TextSelector(selector.TextSelectorConfig(type=selector.TextSelectorType.TEXT))
+
+    # Section 1: day modes + default modes
+    day_modes_schema = vol.Schema(
+        {
+            vol.Optional(
+                CONF_DAY_MODES,
+                default=data.get(CONF_DAY_MODES, ", ".join(DEFAULT_DAY_MODES)),
+            ): str,
+            vol.Optional(
+                CONF_MODE_DEFAULT,
+                default=data.get(CONF_MODE_DEFAULT, DEFAULT_MODE_DEFAULT),
+            ): text,
+            vol.Optional(
+                CONF_MODE_ABSENCE,
+                default=data.get(CONF_MODE_ABSENCE, DEFAULT_MODE_ABSENCE),
+            ): text,
+            vol.Optional(
+                CONF_MODE_WEEKEND,
+                default=data.get(CONF_MODE_WEEKEND, DEFAULT_MODE_WEEKEND),
+            ): text,
+            vol.Optional(
+                CONF_MODE_HOLIDAY,
+                default=data.get(CONF_MODE_HOLIDAY, DEFAULT_MODE_HOLIDAY),
+            ): text,
+        }
+    )
+
+    # Section 2: event map + thermostat display names
+    thermostat_fields_dict: dict = {
+        vol.Optional(
+            CONF_EVENT_MODE_MAP,
+            default=data.get(CONF_EVENT_MODE_MAP, DEFAULT_EVENT_MODE_MAP),
+        ): str,
+    }
+    thermostat_fields_dict.update(_thermostat_display_fields(data))
+    thermostat_schema = vol.Schema(thermostat_fields_dict)
+
+    return vol.Schema(
+        {
+            vol.Required("day_modes_section"): section(day_modes_schema, {"collapsed": False}),
+            vol.Required("thermostat_section"): section(thermostat_schema, {"collapsed": False}),
+        }
+    )
+
+
+def _validate_calendars(hass, user_input: dict[str, Any]) -> dict[str, str]:
+    """Return form errors for bad calendar entities."""
+    errors: dict[str, str] = {}
+    cal = user_input.get(CONF_CALENDAR_ENTITY)
+    if cal and not hass.states.get(cal):
+        errors[CONF_CALENDAR_ENTITY] = "invalid_calendar"
+    hol = user_input.get(CONF_HOLIDAY_CALENDAR)
+    if hol and not hass.states.get(hol):
+        errors[CONF_HOLIDAY_CALENDAR] = "invalid_calendar"
+    return errors
+
+
+def _parse_day_modes(data: dict[str, Any]) -> list[str]:
+    """Return the list of configured day modes."""
+    raw = data.get(CONF_DAY_MODES, ", ".join(DEFAULT_DAY_MODES))
+    return [m.strip() for m in raw.split(",") if m.strip()]
+
+
+def _get_scheduler_options(hass) -> list[dict[str, str]]:
+    """Return SelectSelector options for scheduler-like switch entities."""
+    options: list[dict[str, str]] = []
+    for state in hass.states.async_all("switch"):
+        if "schedule" in state.entity_id.lower() or state.attributes.get("next_trigger") is not None:
+            friendly = state.attributes.get("friendly_name", state.entity_id)
+            options.append(
+                {
+                    "value": state.entity_id,
+                    "label": f"{friendly} ({state.entity_id})",
+                }
+            )
+    options.sort(key=lambda x: x["label"])
+    return options
+
+
+def _scheduler_selector(hass) -> selector.SelectSelector | selector.EntitySelector:
+    """Return the best selector for scheduler entities."""
+    opts = _get_scheduler_options(hass)
+    if opts:
+        return selector.SelectSelector(
+            selector.SelectSelectorConfig(
+                options=opts,
+                multiple=True,
+                mode=selector.SelectSelectorMode.DROPDOWN,
+            )
+        )
+    return selector.EntitySelector(selector.EntitySelectorConfig(domain="switch", multiple=True))
+
+
+def _schedulers_schema(hass, data: dict[str, Any]) -> vol.Schema:
+    """Build scheduler form schema – one multi-select per day mode."""
+    day_modes = _parse_day_modes(data)
+    current_schedulers: dict[str, list] = data.get(CONF_SCHEDULERS_PER_MODE, {})
+    sel = _scheduler_selector(hass)
+    schema_dict: dict = {}
+    for mode in day_modes:
+        current_value = current_schedulers.get(mode, [])
+        schema_dict[vol.Optional(mode, default=current_value)] = sel
+    return vol.Schema(schema_dict)
+
+
+def _extract_schedulers(user_input: dict[str, Any], data: dict[str, Any]) -> dict[str, list]:
+    """Extract scheduler assignments from form user_input."""
+    day_modes = _parse_day_modes(data)
+    result: dict[str, list] = {}
+    for mode in day_modes:
+        value = user_input.get(mode, [])
+        if isinstance(value, str):
+            value = [value] if value else []
+        result[mode] = value
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Config flow (initial setup) – menu-based
+# ---------------------------------------------------------------------------
 
 
 class DayModeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -32,61 +241,106 @@ class DayModeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     VERSION = 1
 
+    def __init__(self) -> None:
+        """Initialise the config flow."""
+        self._data: dict[str, Any] = {}
+
+    # -- helpers -----------------------------------------------------------
+
+    def _is_config_complete(self) -> bool:
+        """Return True when the minimum required configuration is present."""
+        return bool(self._data.get(CONF_CALENDAR_ENTITY))
+
+    # -- entry point -------------------------------------------------------
+
     async def async_step_user(
-        self, user_input: dict[str, Any] | None = None
+        self,
+        user_input: dict[str, Any] | None = None,
     ) -> config_entries.FlowResult:
-        """Handle the initial step."""
+        """Entry point – redirect to the menu."""
+        return await self.async_step_menu()
+
+    # -- menu --------------------------------------------------------------
+
+    async def async_step_menu(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> config_entries.FlowResult:
+        """Show the configuration menu."""
+        menu_options = ["calendars", "mapping", "schedulers"]
+        if self._is_config_complete():
+            menu_options.append("finalize")
+        return self.async_show_menu(step_id="menu", menu_options=menu_options)
+
+    # -- calendars ---------------------------------------------------------
+
+    async def async_step_calendars(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> config_entries.FlowResult:
+        """Configure calendar entities and scan interval."""
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            # Validate the calendar entity exists
-            calendar_entity = user_input.get(CONF_CALENDAR_ENTITY)
-            if calendar_entity and not self.hass.states.get(calendar_entity):
-                errors[CONF_CALENDAR_ENTITY] = "invalid_calendar"
-            
-            holiday_calendar = user_input.get(CONF_HOLIDAY_CALENDAR)
-            if holiday_calendar and not self.hass.states.get(holiday_calendar):
-                errors[CONF_HOLIDAY_CALENDAR] = "invalid_calendar"
-            
+            errors = _validate_calendars(self.hass, user_input)
             if not errors:
-                # Add fixed thermostat modes (not editable by user)
-                user_input[CONF_THERMOSTAT_MODES] = ", ".join(DEFAULT_THERMOSTAT_MODES)
-                
-                return self.async_create_entry(
-                    title="Day Mode",
-                    data=user_input,
-                )
-
-        data_schema = vol.Schema(
-            {
-                vol.Required(
-                    CONF_CALENDAR_ENTITY,
-                    default=""
-                ): selector.EntitySelector(
-                    selector.EntitySelectorConfig(domain="calendar")
-                ),
-                vol.Optional(
-                    CONF_HOLIDAY_CALENDAR,
-                    default=""
-                ): selector.EntitySelector(
-                    selector.EntitySelectorConfig(domain="calendar")
-                ),
-                vol.Optional(
-                    CONF_DAY_MODES,
-                    default=", ".join(DEFAULT_DAY_MODES)
-                ): str,
-                vol.Optional(
-                    CONF_CHECK_TIME,
-                    default=DEFAULT_CHECK_TIME
-                ): str,
-            }
-        )
+                self._data.update(user_input)
+                return await self.async_step_menu()
 
         return self.async_show_form(
-            step_id="user",
-            data_schema=data_schema,
+            step_id="calendars",
+            data_schema=_calendars_schema(self._data),
             errors=errors,
         )
+
+    # -- mapping -----------------------------------------------------------
+
+    async def async_step_mapping(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> config_entries.FlowResult:
+        """Configure day-mode & thermostat-mode mapping."""
+        if user_input is not None:
+            # Flatten section-nested input from the two sections
+            flat: dict[str, Any] = {
+                **user_input.get("day_modes_section", {}),
+                **user_input.get("thermostat_section", {}),
+            }
+            flat[CONF_THERMOSTAT_MODE_MAP] = _rebuild_thermostat_map(flat, self._data)
+            self._data.update(flat)
+            return await self.async_step_menu()
+
+        return self.async_show_form(
+            step_id="mapping",
+            data_schema=_mapping_schema(self._data),
+        )
+
+    # -- schedulers --------------------------------------------------------
+
+    async def async_step_schedulers(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> config_entries.FlowResult:
+        """Assign scheduler entities to each day mode."""
+        if user_input is not None:
+            self._data[CONF_SCHEDULERS_PER_MODE] = _extract_schedulers(user_input, self._data)
+            return await self.async_step_menu()
+
+        return self.async_show_form(
+            step_id="schedulers",
+            data_schema=_schedulers_schema(self.hass, self._data),
+        )
+
+    # -- finalize ----------------------------------------------------------
+
+    async def async_step_finalize(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> config_entries.FlowResult:
+        """Create the config entry."""
+        return self.async_create_entry(title="Day Mode", data=self._data)
+
+    # -- options flow accessor ---------------------------------------------
 
     @staticmethod
     @callback
@@ -94,101 +348,113 @@ class DayModeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         config_entry: config_entries.ConfigEntry,
     ) -> DayModeOptionsFlow:
         """Get the options flow for this handler."""
-        return DayModeOptionsFlow(config_entry)
+        return DayModeOptionsFlow()
+
+
+# ---------------------------------------------------------------------------
+# Options flow – menu-based
+# ---------------------------------------------------------------------------
 
 
 class DayModeOptionsFlow(config_entries.OptionsFlow):
     """Handle options flow for Day Mode."""
 
-    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
+    def __init__(self) -> None:
         """Initialize options flow."""
-        self.config_entry = config_entry
+        self._data: dict[str, Any] = {}
+
+    # -- helpers -----------------------------------------------------------
+
+    def _is_config_complete(self) -> bool:
+        """Return True when the minimum required configuration is present."""
+        return bool(self._data.get(CONF_CALENDAR_ENTITY))
+
+    # -- entry point -------------------------------------------------------
 
     async def async_step_init(
-        self, user_input: dict[str, Any] | None = None
+        self,
+        user_input: dict[str, Any] | None = None,
     ) -> config_entries.FlowResult:
-        """Manage the options."""
+        """Entry point – pre-populate from existing entry, then show menu."""
+        self._data = dict(self.config_entry.data)
+        return await self.async_step_menu()
+
+    # -- menu --------------------------------------------------------------
+
+    async def async_step_menu(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> config_entries.FlowResult:
+        """Show the options menu."""
+        menu_options = ["calendars", "mapping", "schedulers"]
+        if self._is_config_complete():
+            menu_options.append("finalize")
+        return self.async_show_menu(step_id="menu", menu_options=menu_options)
+
+    # -- calendars ---------------------------------------------------------
+
+    async def async_step_calendars(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> config_entries.FlowResult:
+        """Configure calendar entities and scan interval."""
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            # Validate the calendar entity exists
-            calendar_entity = user_input.get(CONF_CALENDAR_ENTITY)
-            if calendar_entity and not self.hass.states.get(calendar_entity):
-                errors[CONF_CALENDAR_ENTITY] = "invalid_calendar"
-            
-            holiday_calendar = user_input.get(CONF_HOLIDAY_CALENDAR)
-            if holiday_calendar and not self.hass.states.get(holiday_calendar):
-                errors[CONF_HOLIDAY_CALENDAR] = "invalid_calendar"
-            
+            errors = _validate_calendars(self.hass, user_input)
             if not errors:
-                # Keep thermostat modes fixed
-                user_input[CONF_THERMOSTAT_MODES] = ", ".join(DEFAULT_THERMOSTAT_MODES)
-                
-                # Extract scheduler configuration
-                schedulers_per_mode = {}
-                for mode in DEFAULT_THERMOSTAT_MODES:
-                    mode_key = f"schedulers_{mode.lower().replace(' ', '_')}"
-                    if mode_key in user_input:
-                        schedulers_per_mode[mode] = user_input.pop(mode_key, [])
-                
-                if schedulers_per_mode:
-                    user_input[CONF_SCHEDULERS_PER_MODE] = schedulers_per_mode
-                
-                return self.async_create_entry(title="", data=user_input)
-
-        current_calendar = self.config_entry.data.get(CONF_CALENDAR_ENTITY, "")
-        current_holiday = self.config_entry.data.get(CONF_HOLIDAY_CALENDAR, "")
-        current_day_modes = self.config_entry.data.get(
-            CONF_DAY_MODES, ", ".join(DEFAULT_DAY_MODES)
-        )
-        current_check_time = self.config_entry.data.get(
-            CONF_CHECK_TIME, DEFAULT_CHECK_TIME
-        )
-        current_schedulers = self.config_entry.data.get(CONF_SCHEDULERS_PER_MODE, {})
-
-        # Build schema with general options and scheduler options
-        schema_dict = {
-            vol.Required(
-                CONF_CALENDAR_ENTITY,
-                default=current_calendar
-            ): selector.EntitySelector(
-                selector.EntitySelectorConfig(domain="calendar")
-            ),
-            vol.Optional(
-                CONF_HOLIDAY_CALENDAR,
-                default=current_holiday
-            ): selector.EntitySelector(
-                selector.EntitySelectorConfig(domain="calendar")
-            ),
-            vol.Optional(
-                CONF_DAY_MODES,
-                default=current_day_modes
-            ): str,
-            vol.Optional(
-                CONF_CHECK_TIME,
-                default=current_check_time
-            ): str,
-        }
-        
-        # Add scheduler options for each thermostat mode
-        for mode in DEFAULT_THERMOSTAT_MODES:
-            mode_key = f"schedulers_{mode.lower().replace(' ', '_')}"
-            current_value = current_schedulers.get(mode, [])
-            
-            schema_dict[vol.Optional(
-                mode_key,
-                default=current_value
-            )] = selector.EntitySelector(
-                selector.EntitySelectorConfig(
-                    domain="switch",
-                    multiple=True,
-                )
-            )
-
-        options_schema = vol.Schema(schema_dict)
+                self._data.update(user_input)
+                return await self.async_step_menu()
 
         return self.async_show_form(
-            step_id="init",
-            data_schema=options_schema,
+            step_id="calendars",
+            data_schema=_calendars_schema(self._data),
             errors=errors,
         )
+
+    # -- mapping -----------------------------------------------------------
+
+    async def async_step_mapping(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> config_entries.FlowResult:
+        """Configure day-mode & thermostat-mode mapping."""
+        if user_input is not None:
+            # Flatten section-nested input from the two sections
+            flat: dict[str, Any] = {
+                **user_input.get("day_modes_section", {}),
+                **user_input.get("thermostat_section", {}),
+            }
+            flat[CONF_THERMOSTAT_MODE_MAP] = _rebuild_thermostat_map(flat, self._data)
+            self._data.update(flat)
+            return await self.async_step_menu()
+
+        return self.async_show_form(
+            step_id="mapping",
+            data_schema=_mapping_schema(self._data),
+        )
+
+    # -- schedulers --------------------------------------------------------
+
+    async def async_step_schedulers(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> config_entries.FlowResult:
+        """Assign scheduler entities to each day mode."""
+        if user_input is not None:
+            self._data[CONF_SCHEDULERS_PER_MODE] = _extract_schedulers(user_input, self._data)
+            return await self.async_step_menu()
+
+        return self.async_show_form(
+            step_id="schedulers",
+            data_schema=_schedulers_schema(self.hass, self._data),
+        )
+
+    # -- finalize ----------------------------------------------------------
+
+    async def async_step_finalize(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> config_entries.FlowResult:
+        """Save options."""
+        return self.async_create_entry(title="", data=self._data)

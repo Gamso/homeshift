@@ -1,15 +1,60 @@
 {
   "config": {
     "step": {
-      "user": {
-        "title": "Configure Day Mode",
-        "description": "Set up your Day Mode integration. Thermostat modes (Eteint, Chauffage, Climatisation, Ventilation) are predefined and cannot be modified.",
+      "menu": {
+        "title": "Day Mode Configuration",
+        "description": "Select a section to configure.",
+        "menu_options": {
+          "calendars": "Calendars & Schedule",
+          "mapping": "Mode Mapping",
+          "schedulers": "Schedulers",
+          "finalize": "Save Configuration"
+        }
+      },
+      "calendars": {
+        "title": "Calendars & Schedule",
+        "description": "Configure the calendar entities and scan interval.",
         "data": {
           "calendar_entity": "Work Calendar Entity",
           "holiday_calendar": "Holiday Calendar Entity (Optional)",
-          "day_modes": "Day Modes (comma-separated)",
-          "check_time": "Daily Check Time (HH:MM:SS)"
+          "scan_interval": "Calendar Scan Interval (minutes)"
         }
+      },
+      "mapping": {
+        "title": "Mode Mapping",
+        "description": "Configure day modes and event-to-mode mapping.",
+        "sections": {
+          "day_modes_section": {
+            "name": "Day Modes",
+            "data": {
+              "day_modes": "Day Modes (comma-separated)",
+              "mode_default": "Default Mode (work day)",
+              "mode_absence": "Absence Mode (blocks auto-update)",
+              "mode_weekend": "Weekend Mode",
+              "mode_holiday": "Holiday Mode"
+            }
+          },
+          "thermostat_section": {
+            "name": "Thermostat & Event Mapping",
+            "data": {
+              "event_mode_map": "Event-to-Mode Mapping (Event:Mode, ...)",
+              "thermostat_display_off": "Off",
+              "thermostat_display_heating": "Heating",
+              "thermostat_display_cooling": "Cooling",
+              "thermostat_display_ventilation": "Ventilation"
+            },
+            "data_description": {
+              "thermostat_display_off": "Display name for key Off",
+              "thermostat_display_heating": "Display name for key Heating",
+              "thermostat_display_cooling": "Display name for key Cooling",
+              "thermostat_display_ventilation": "Display name for key Ventilation"
+            }
+          }
+        }
+      },
+      "schedulers": {
+        "title": "Schedulers",
+        "description": "Assign scheduler switch entities to each day mode."
       }
     },
     "error": {
@@ -21,17 +66,64 @@
   },
   "options": {
     "step": {
-      "init": {
-        "title": "Configure Day Mode Options",
-        "description": "Update Day Mode settings. Thermostat modes (Eteint, Chauffage, Climatisation, Ventilation) are fixed. Configure schedulers for each mode below.",
+      "menu": {
+        "title": "Day Mode Options",
+        "description": "Select a section to configure.",
+        "menu_options": {
+          "calendars": "Calendars & Schedule",
+          "mapping": "Mode Mapping",
+          "schedulers": "Schedulers",
+          "finalize": "Save Configuration"
+        }
+      },
+      "calendars": {
+        "title": "Calendars & Schedule",
+        "description": "Configure the calendar entities and scan interval.",
         "data": {
           "calendar_entity": "Work Calendar Entity",
           "holiday_calendar": "Holiday Calendar Entity (Optional)",
-          "day_modes": "Day Modes (comma-separated)",
-          "check_time": "Daily Check Time (HH:MM:SS)",
-          "schedulers_eteint": "Schedulers for 'Eteint' mode",
-          "schedulers_chauffage": "Schedulers for 'Chauffage' mode",
-          "schedulers_climatisation": "Schedulers for 'Climatisation' mode",
+          "scan_interval": "Calendar Scan Interval (minutes)"
+        }
+      },
+      "mapping": {
+        "title": "Mode Mapping",
+        "description": "Configure day modes and event-to-mode mapping.",
+        "sections": {
+          "day_modes_section": {
+            "name": "Day Modes",
+            "data": {
+              "day_modes": "Day Modes (comma-separated)",
+              "mode_default": "Default Mode (work day)",
+              "mode_absence": "Absence Mode (blocks auto-update)",
+              "mode_weekend": "Weekend Mode",
+              "mode_holiday": "Holiday Mode"
+            }
+          },
+          "thermostat_section": {
+            "name": "Thermostat & Event Mapping",
+            "data": {
+              "event_mode_map": "Event-to-Mode Mapping (Event:Mode, ...)",
+              "thermostat_display_off": "Off",
+              "thermostat_display_heating": "Heating",
+              "thermostat_display_cooling": "Cooling",
+              "thermostat_display_ventilation": "Ventilation"
+            },
+            "data_description": {
+              "thermostat_display_off": "Display name for key Off",
+              "thermostat_display_heating": "Display name for key Heating",
+              "thermostat_display_cooling": "Display name for key Cooling",
+              "thermostat_display_ventilation": "Display name for key Ventilation"
+            }
+          }
+        }
+      },
+      "schedulers": {
+        "title": "Schedulers",
+        "description": "Assign scheduler switch entities to each day mode.",
+        "data": {
+          "schedulers_off": "Schedulers for 'Off' mode",
+          "schedulers_heating": "Schedulers for 'Heating' mode",
+          "schedulers_cooling": "Schedulers for 'Cooling' mode",
           "schedulers_ventilation": "Schedulers for 'Ventilation' mode"
         }
       }
@@ -39,10 +131,10 @@
   },
   "entity": {
     "select": {
-      "mode_jour": {
+      "day_mode": {
         "name": "Day Mode"
       },
-      "mode_thermostat": {
+      "thermostat_mode": {
         "name": "Thermostat Mode"
       }
     },

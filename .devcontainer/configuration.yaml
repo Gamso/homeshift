@@ -1,5 +1,5 @@
 homeassistant:
-  name: Day Mode DevContainer
+  name: HomeShift DevContainer
   latitude: 48.8566
   longitude: 2.3522
   elevation: 0

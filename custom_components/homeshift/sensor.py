@@ -20,7 +20,7 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up Day Mode sensor entities."""
+    """Set up HomeShift sensor entities."""
     coordinator: HomeShiftCoordinator = hass.data[DOMAIN][entry.entry_id]
 
     async_add_entities([HomeShiftNextDayTypeSensor(coordinator, entry)])

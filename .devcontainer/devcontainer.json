@@ -4,7 +4,7 @@
     "build": {
         "dockerfile": "Dockerfile"
     },
-    "name": "Day Mode Dev Container",
+    "name": "HomeShift Dev Container",
     "appPort": [
         "8123:8123"
     ],

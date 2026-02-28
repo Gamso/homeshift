@@ -2,7 +2,7 @@
   "config": {
     "step": {
       "menu": {
-        "title": "Configuration Day Mode",
+        "title": "Configuration HomeShift",
         "description": "Sélectionnez une section à configurer.",
         "menu_options": {
           "calendars": "Calendriers et planification",
@@ -61,13 +61,13 @@
       "invalid_calendar": "L'entité calendrier spécifiée n'existe pas"
     },
     "abort": {
-      "already_configured": "Day Mode est déjà configuré"
+      "already_configured": "HomeShift est déjà configuré"
     }
   },
   "options": {
     "step": {
       "menu": {
-        "title": "Options Day Mode",
+        "title": "Options HomeShift",
         "description": "Sélectionnez une section à configurer.",
         "menu_options": {
           "calendars": "Calendriers et planification",

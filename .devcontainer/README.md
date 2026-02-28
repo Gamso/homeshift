@@ -1,6 +1,6 @@
-# Day Mode Development Container
+# HomeShift Development Container
 
-This directory contains configuration for developing the Day Mode custom component using Visual Studio Code Dev Containers or GitHub Codespaces.
+This directory contains configuration for developing the HomeShift custom component using Visual Studio Code Dev Containers or GitHub Codespaces.
 
 ## Prerequisites
 
@@ -68,7 +68,7 @@ Once the container is running:
 1. Open your browser to http://localhost:8123
 2. Complete the initial Home Assistant setup
 3. Navigate to Settings → Integrations
-4. Click "Add Integration" and search for "Day Mode"
+4. Click "Add Integration" and search for "HomeShift"
 
 ## Development Workflow
 
@@ -165,4 +165,4 @@ Example scheduler.storage structure:
 
 - [Home Assistant Developer Docs](https://developers.home-assistant.io/)
 - [Dev Containers Documentation](https://code.visualstudio.com/docs/devcontainers/containers)
-- [Day Mode Documentation](../README.md)
+- [HomeShift Documentation](../README.md)

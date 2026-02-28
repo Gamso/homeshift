@@ -1,9 +1,9 @@
 #!/bin/bash
-# Validation script for Day Mode custom component
+# Validation script for HomeShift custom component
 
 set -e
 
-echo "🔍 Validating Day Mode custom component..."
+echo "🔍 Validating HomeShift custom component..."
 
 # Check if custom_components directory exists
 if [ ! -d "custom_components/day_mode" ]; then

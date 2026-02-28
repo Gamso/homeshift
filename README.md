@@ -1,4 +1,4 @@
-# Day Mode - Home Assistant Custom Component
+# HomeShift - Home Assistant Custom Component
 
 Un composant personnalisé pour Home Assistant qui gère automatiquement les modes de jour et les modes de thermostat en fonction d'un calendrier.
 

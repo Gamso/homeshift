@@ -5,7 +5,7 @@ import logging
 from datetime import datetime, date, timedelta
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.util import dt as dt_util
 
@@ -239,7 +239,7 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
         await self.async_refresh_schedulers()
         # Rebuild and broadcast the full data dict so downstream sensors pick up
         # the new day_mode and override_until immediately (rather than stale data).
-        self.async_set_updated_data(self._build_result(self._today_type))
+        self.async_set_updated_data(self._build_result())
 
     @property
     def thermostat_mode_key(self) -> str | None:
@@ -294,7 +294,7 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
             self.thermostat_mode_key,
         )
         await self.async_refresh_schedulers()
-        self.async_set_updated_data(self._build_result(self._today_type))
+        self.async_set_updated_data(self._build_result())
 
     @staticmethod
     def _detect_event_period(start_time_str: str, end_time_str: str) -> str:
@@ -344,13 +344,13 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
 
         if not calendar_entity:
             _LOGGER.warning("No calendar entity configured, skipping sync")
-            return self._build_result(next_day_type=EVENT_NONE)
+            return self._build_result()
 
         # Get calendar state
         calendar_state = self.hass.states.get(calendar_entity)
         if not calendar_state:
             _LOGGER.warning("Calendar entity '%s' not found in Home Assistant states", calendar_entity)
-            return self._build_result(next_day_type=EVENT_NONE)
+            return self._build_result()
 
         _LOGGER.debug(
             "Calendar '%s' -> state=%s | event='%s' | start=%s end=%s",
@@ -431,15 +431,10 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
                     self._event_period,
                 )
 
-        return self._build_result(next_day_type=next_day_type)
+        return self._build_result()
 
-    def _build_result(self, next_day_type: str) -> dict:
-        """Build the data dict returned by the coordinator.
-
-        'next_day_type' in the result reflects the full-day event type
-        (_today_type) so the sensor stays non-None after a half-day event ends.
-        The raw next_day_type is only used internally for mode decisions.
-        """
+    def _build_result(self) -> dict:
+        """Build the data dict returned by the coordinator."""
         return {
             "next_day_type": self._today_type,
             "current_event": self._current_event,

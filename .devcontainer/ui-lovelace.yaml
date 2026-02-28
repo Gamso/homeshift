@@ -1,4 +1,4 @@
-title: Day Mode Dashboard
+title: HomeShift Dashboard
 resources:
   - url: /local/scheduler-card/scheduler-card.js
     type: module

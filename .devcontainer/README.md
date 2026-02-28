@@ -45,7 +45,7 @@ The devcontainer includes:
 The `.devcontainer` directory contains:
 
 - **devcontainer.json**: Main devcontainer configuration
-- **configuration.yaml**: Home Assistant configuration with debug logging for day_mode
+- **configuration.yaml**: Home Assistant configuration with debug logging for homeshift
 - **scheduler.storage**: Optional scheduler component storage file
   - Automatically copied to `/config/.storage/` on container start
   - Allows pre-configuring scheduler entities for testing
@@ -74,7 +74,7 @@ Once the container is running:
 
 ### Making Changes
 
-1. Edit files in the `custom_components/day_mode` directory
+1. Edit files in the `custom_components/homeshift` directory
 2. Changes are automatically reflected in the running container
 3. Restart Home Assistant to reload the integration:
    - Go to Developer Tools → YAML → Restart
@@ -83,7 +83,7 @@ Once the container is running:
 
 1. Check logs in VS Code terminal: `ha logs`
 2. Or view in Home Assistant UI: Settings → System → Logs
-3. The devcontainer is configured with debug logging for `day_mode`
+3. The devcontainer is configured with debug logging for `homeshift`
 
 ### Running Tests
 

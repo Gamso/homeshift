@@ -62,8 +62,8 @@ L'intégration crée les entités suivantes :
 
 ### Services
 
-- **day_mode.refresh_schedulers** : Rafraîchit manuellement l'état des schedulers
-- **day_mode.check_next_day** : Vérifie et met à jour manuellement le mode du lendemain
+- **homeshift.refresh_schedulers** : Rafraîchit manuellement l'état des schedulers
+- **homeshift.check_next_day** : Vérifie et met à jour manuellement le mode du lendemain
 
 ### Événements du calendrier
 
@@ -95,7 +95,7 @@ automation:
       - platform: state
         entity_id: select.mode_jour
     action:
-      - service: day_mode.refresh_schedulers
+      - service: homeshift.refresh_schedulers
 ```
 
 ## Organisation des schedulers

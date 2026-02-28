@@ -6,8 +6,8 @@ set -e
 echo "🔍 Validating HomeShift custom component..."
 
 # Check if custom_components directory exists
-if [ ! -d "custom_components/day_mode" ]; then
-    echo "❌ Error: custom_components/day_mode directory not found"
+if [ ! -d "custom_components/day_homeshiftmode" ]; then
+    echo "❌ Error: custom_components/homeshift directory not found"
     exit 1
 fi
 
@@ -15,7 +15,7 @@ echo "✅ Directory structure OK"
 
 # Validate Python syntax
 echo "🐍 Checking Python syntax..."
-python_files=$(find custom_components/day_mode -name "*.py")
+python_files=$(find custom_components/homeshift -name "*.py")
 for file in $python_files; do
     if python -m py_compile "$file"; then
         echo "  ✅ $file"
@@ -27,7 +27,7 @@ done
 
 # Validate JSON files
 echo "📋 Checking JSON files..."
-json_files=$(find custom_components/day_mode -name "*.json")
+json_files=$(find custom_components/homeshift -name "*.json")
 for file in $json_files; do
     if python -m json.tool "$file" > /dev/null; then
         echo "  ✅ $file"
@@ -40,10 +40,10 @@ done
 # Check required files
 echo "📁 Checking required files..."
 required_files=(
-    "custom_components/day_mode/__init__.py"
-    "custom_components/day_mode/manifest.json"
-    "custom_components/day_mode/config_flow.py"
-    "custom_components/day_mode/const.py"
+    "custom_components/homeshift/__init__.py"
+    "custom_components/homeshift/manifest.json"
+    "custom_components/homeshift/config_flow.py"
+    "custom_components/homeshift/const.py"
     "README.md"
 )
 

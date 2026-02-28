@@ -32,9 +32,9 @@ from custom_components.homeshift.const import (
     CONF_MODE_ABSENCE,
     DEFAULT_SCAN_INTERVAL,
     DEFAULT_OVERRIDE_DURATION,
-    EVENT_NONE,
-    EVENT_VACATION,
-    EVENT_TELEWORK,
+    KEY_EVENT_NONE,
+    KEY_EVENT_VACATION,
+    KEY_EVENT_TELEWORK,
     EVENT_PERIOD_ALL_DAY,
     EVENT_PERIOD_MORNING,
     EVENT_PERIOD_AFTERNOON,
@@ -43,6 +43,9 @@ from custom_components.homeshift.const import (
 
 # Use French locale defaults for all tests
 _FR = LOCALIZED_DEFAULTS["fr"]
+EVENT_NONE: str = _FR[KEY_EVENT_NONE]
+EVENT_VACATION: str = _FR[KEY_EVENT_VACATION]
+EVENT_TELEWORK: str = _FR[KEY_EVENT_TELEWORK]
 DEFAULT_DAY_MODES: list[str] = [m.strip() for m in _FR[CONF_DAY_MODES].split(",")]
 DEFAULT_THERMOSTAT_MODE_MAP: str = _FR[CONF_THERMOSTAT_MODE_MAP]
 DEFAULT_MODE_DEFAULT: str = _FR[CONF_MODE_DEFAULT]
@@ -58,6 +61,13 @@ _FRAME_PATCH = patch(
     create=True,
 )
 _FRAME_PATCH.start()
+
+
+def _make_mock_hass() -> MagicMock:
+    """Return a MagicMock hass with language='fr' for get_localized_defaults."""
+    hass = MagicMock()
+    hass.config.language = "fr"
+    return hass
 
 
 # ---------------------------------------------------------------------------
@@ -204,21 +214,21 @@ class TestParseThermostatModeMap:
 
     def test_values_become_thermostat_modes(self):
         """Parsed values should become the thermostat_modes list."""
-        hass = MagicMock()
+        hass = _make_mock_hass()
         entry = _make_mock_entry()
         coordinator = HomeShiftCoordinator(hass, entry)
         assert coordinator.thermostat_modes == ["Eteint", "Chauffage", "Climatisation", "Ventilation"]
 
     def test_initial_thermostat_mode_is_first_value(self):
         """Initial thermostat mode should be the first display value."""
-        hass = MagicMock()
+        hass = _make_mock_hass()
         entry = _make_mock_entry()
         coordinator = HomeShiftCoordinator(hass, entry)
         assert coordinator.thermostat_mode == "Eteint"
 
     def test_custom_map_changes_options(self):
         """Custom map changes thermostat modes and initial value."""
-        hass = MagicMock()
+        hass = _make_mock_hass()
         entry = _make_mock_entry(thermostat_mode_map="Eco:Économique, Comfort:Confort")
         coordinator = HomeShiftCoordinator(hass, entry)
         assert coordinator.thermostat_modes == ["Économique", "Confort"]
@@ -226,7 +236,7 @@ class TestParseThermostatModeMap:
 
     def test_thermostat_mode_map_property(self):
         """The thermostat_mode_map property returns the full mapping."""
-        hass = MagicMock()
+        hass = _make_mock_hass()
         entry = _make_mock_entry()
         coordinator = HomeShiftCoordinator(hass, entry)
         assert coordinator.thermostat_mode_map == {
@@ -244,7 +254,7 @@ class TestParseThermostatModeMap:
 
 def _make_mock_entry(
     calendar_entity: str = "calendar.teletravail",
-    holiday_calendar: str = "",
+    holiday_calendar: str = "calendar.jours_feries",
     scan_interval: int = DEFAULT_SCAN_INTERVAL,
     override_duration: int = DEFAULT_OVERRIDE_DURATION,
     schedulers_per_mode: dict | None = None,
@@ -299,19 +309,19 @@ def _make_calendar_state(
 class TestScanIntervalConfig:
 
     def test_default_scan_interval(self):
-        hass = MagicMock()
+        hass = _make_mock_hass()
         entry = _make_mock_entry(scan_interval=DEFAULT_SCAN_INTERVAL)
         coordinator = HomeShiftCoordinator(hass, entry)
         assert coordinator.update_interval == timedelta(minutes=DEFAULT_SCAN_INTERVAL)
 
     def test_custom_scan_interval(self):
-        hass = MagicMock()
+        hass = _make_mock_hass()
         entry = _make_mock_entry(scan_interval=15)
         coordinator = HomeShiftCoordinator(hass, entry)
         assert coordinator.update_interval == timedelta(minutes=15)
 
     def test_invalid_scan_interval_falls_back(self):
-        hass = MagicMock()
+        hass = _make_mock_hass()
         entry = _make_mock_entry()
         entry.data[CONF_SCAN_INTERVAL] = "not_a_number"
         coordinator = HomeShiftCoordinator(hass, entry)
@@ -325,7 +335,7 @@ class TestScanIntervalConfig:
 class TestDefaultModeMapping:
 
     def test_no_event_weekday_sets_default(self):
-        hass = MagicMock()
+        hass = _make_mock_hass()
         entry = _make_mock_entry()
         hass.states.get.return_value = _make_calendar_state(state="off")
         coordinator = HomeShiftCoordinator(hass, entry)
@@ -340,7 +350,7 @@ class TestDefaultModeMapping:
         assert coordinator.data is None or True  # first call
 
     def test_full_day_telework_sets_telework_mode(self):
-        hass = MagicMock()
+        hass = _make_mock_hass()
         entry = _make_mock_entry()
         hass.states.get.return_value = _make_calendar_state(
             state="on", message="Télétravail",
@@ -359,7 +369,7 @@ class TestDefaultModeMapping:
         assert result["event_period"] == EVENT_PERIOD_ALL_DAY
 
     def test_afternoon_telework_active(self):
-        hass = MagicMock()
+        hass = _make_mock_hass()
         entry = _make_mock_entry()
         hass.states.get.return_value = _make_calendar_state(
             state="on", message="Télétravail",
@@ -377,7 +387,7 @@ class TestDefaultModeMapping:
         assert result["event_period"] == EVENT_PERIOD_AFTERNOON
 
     def test_afternoon_telework_morning_no_event(self):
-        hass = MagicMock()
+        hass = _make_mock_hass()
         entry = _make_mock_entry()
         hass.states.get.return_value = _make_calendar_state(state="off")
         coordinator = HomeShiftCoordinator(hass, entry)
@@ -392,7 +402,7 @@ class TestDefaultModeMapping:
         assert result["next_day_type"] == EVENT_NONE
 
     def test_morning_telework_active(self):
-        hass = MagicMock()
+        hass = _make_mock_hass()
         entry = _make_mock_entry()
         hass.states.get.return_value = _make_calendar_state(
             state="on", message="Télétravail",
@@ -410,7 +420,7 @@ class TestDefaultModeMapping:
         assert result["event_period"] == EVENT_PERIOD_MORNING
 
     def test_morning_telework_afternoon_reverts(self):
-        hass = MagicMock()
+        hass = _make_mock_hass()
         entry = _make_mock_entry()
         hass.states.get.return_value = _make_calendar_state(state="off")
         coordinator = HomeShiftCoordinator(hass, entry)
@@ -424,7 +434,7 @@ class TestDefaultModeMapping:
         assert coordinator._day_mode == DEFAULT_MODE_DEFAULT
 
     def test_vacation_event(self):
-        hass = MagicMock()
+        hass = _make_mock_hass()
         entry = _make_mock_entry()
         hass.states.get.return_value = _make_calendar_state(
             state="on", message="Vacances",
@@ -442,7 +452,7 @@ class TestDefaultModeMapping:
         assert result["next_day_type"] == EVENT_VACATION
 
     def test_weekend_sets_weekend_mode(self):
-        hass = MagicMock()
+        hass = _make_mock_hass()
         entry = _make_mock_entry()
         hass.states.get.return_value = _make_calendar_state(state="off")
         coordinator = HomeShiftCoordinator(hass, entry)
@@ -456,7 +466,7 @@ class TestDefaultModeMapping:
         assert coordinator._day_mode == DEFAULT_MODE_WEEKEND
 
     def test_absence_mode_not_overridden(self):
-        hass = MagicMock()
+        hass = _make_mock_hass()
         entry = _make_mock_entry()
         hass.states.get.return_value = _make_calendar_state(
             state="on", message="Télétravail",
@@ -473,7 +483,7 @@ class TestDefaultModeMapping:
         assert coordinator._day_mode == DEFAULT_MODE_ABSENCE
 
     def test_holiday_calendar(self):
-        hass = MagicMock()
+        hass = _make_mock_hass()
         entry = _make_mock_entry(holiday_calendar="calendar.jours_feries")
 
         def get_state(entity_id):
@@ -495,7 +505,7 @@ class TestDefaultModeMapping:
         assert coordinator._day_mode == DEFAULT_MODE_HOLIDAY
 
     def test_build_result_keys(self):
-        hass = MagicMock()
+        hass = _make_mock_hass()
         entry = _make_mock_entry()
         hass.states.get.return_value = _make_calendar_state(state="off")
         coordinator = HomeShiftCoordinator(hass, entry)
@@ -519,7 +529,7 @@ class TestDefaultModeMapping:
 class TestCustomModeMapping:
 
     def test_custom_default_mode(self):
-        hass = MagicMock()
+        hass = _make_mock_hass()
         entry = _make_mock_entry(mode_default="Bureau")
         entry.data[CONF_DAY_MODES] = "Bureau, Maison, Télétravail, Absence"
         hass.states.get.return_value = _make_calendar_state(state="off")
@@ -533,7 +543,7 @@ class TestCustomModeMapping:
         assert coordinator._day_mode == "Bureau"
 
     def test_custom_weekend_mode(self):
-        hass = MagicMock()
+        hass = _make_mock_hass()
         entry = _make_mock_entry(mode_weekend="Repos")
         entry.data[CONF_DAY_MODES] = "Travail, Repos, Maison, Télétravail, Absence"
         hass.states.get.return_value = _make_calendar_state(state="off")
@@ -547,7 +557,7 @@ class TestCustomModeMapping:
         assert coordinator._day_mode == "Repos"
 
     def test_custom_holiday_mode(self):
-        hass = MagicMock()
+        hass = _make_mock_hass()
         entry = _make_mock_entry(holiday_calendar="calendar.jours_feries", mode_holiday="Ferie")
         entry.data[CONF_DAY_MODES] = "Travail, Maison, Ferie, Télétravail, Absence"
 
@@ -568,7 +578,7 @@ class TestCustomModeMapping:
         assert coordinator._day_mode == "Ferie"
 
     def test_custom_event_mode_map(self):
-        hass = MagicMock()
+        hass = _make_mock_hass()
         entry = _make_mock_entry(event_mode_map="Formation:Bureau, Conférence:Bureau")
         entry.data[CONF_DAY_MODES] = "Travail, Bureau, Maison, Télétravail, Absence"
         hass.states.get.return_value = _make_calendar_state(
@@ -585,7 +595,7 @@ class TestCustomModeMapping:
         assert coordinator._day_mode == "Bureau"
 
     def test_event_mode_map_case_insensitive(self):
-        hass = MagicMock()
+        hass = _make_mock_hass()
         entry = _make_mock_entry(event_mode_map="télétravail:Remote")
         entry.data[CONF_DAY_MODES] = "Travail, Remote, Maison, Absence"
         hass.states.get.return_value = _make_calendar_state(
@@ -602,7 +612,7 @@ class TestCustomModeMapping:
         assert coordinator._day_mode == "Remote"
 
     def test_unmapped_event_weekend(self):
-        hass = MagicMock()
+        hass = _make_mock_hass()
         entry = _make_mock_entry(event_mode_map="")
         hass.states.get.return_value = _make_calendar_state(
             state="on", message="RandomEvent",
@@ -618,7 +628,7 @@ class TestCustomModeMapping:
         assert coordinator._day_mode == DEFAULT_MODE_WEEKEND
 
     def test_mode_not_in_day_modes_not_applied(self):
-        hass = MagicMock()
+        hass = _make_mock_hass()
         entry = _make_mock_entry(event_mode_map="Télétravail:NonExistent")
         hass.states.get.return_value = _make_calendar_state(
             state="on", message="Télétravail",
@@ -634,7 +644,7 @@ class TestCustomModeMapping:
         assert coordinator._day_mode == "Travail"
 
     def test_event_priority_over_weekend(self):
-        hass = MagicMock()
+        hass = _make_mock_hass()
         entry = _make_mock_entry(event_mode_map="Astreinte:Astreinte")
         entry.data[CONF_DAY_MODES] = "Travail, Maison, Astreinte, Télétravail, Absence"
         hass.states.get.return_value = _make_calendar_state(
@@ -651,7 +661,7 @@ class TestCustomModeMapping:
         assert coordinator._day_mode == "Astreinte"
 
     def test_event_priority_over_holiday(self):
-        hass = MagicMock()
+        hass = _make_mock_hass()
         entry = _make_mock_entry(holiday_calendar="calendar.jours_feries", event_mode_map="Astreinte:Astreinte")
         entry.data[CONF_DAY_MODES] = "Travail, Maison, Astreinte, Télétravail, Absence"
 
@@ -682,7 +692,7 @@ class TestCustomModeMapping:
 class TestConfigurableAbsenceMode:
 
     def test_default_absence_blocks_update(self):
-        hass = MagicMock()
+        hass = _make_mock_hass()
         entry = _make_mock_entry()
         hass.states.get.return_value = _make_calendar_state(state="off")
         coordinator = HomeShiftCoordinator(hass, entry)
@@ -695,7 +705,7 @@ class TestConfigurableAbsenceMode:
         assert coordinator._day_mode == DEFAULT_MODE_ABSENCE
 
     def test_custom_absence_blocks_update(self):
-        hass = MagicMock()
+        hass = _make_mock_hass()
         entry = _make_mock_entry(mode_absence="Vacances Longues")
         entry.data[CONF_DAY_MODES] = "Travail, Maison, Vacances Longues, Télétravail"
         hass.states.get.return_value = _make_calendar_state(state="off")
@@ -709,7 +719,7 @@ class TestConfigurableAbsenceMode:
         assert coordinator._day_mode == "Vacances Longues"
 
     def test_non_absence_allows_update(self):
-        hass = MagicMock()
+        hass = _make_mock_hass()
         entry = _make_mock_entry(mode_absence="Away")
         entry.data[CONF_DAY_MODES] = "Travail, Maison, Away, Télétravail, Absence"
         hass.states.get.return_value = _make_calendar_state(state="off")
@@ -723,7 +733,7 @@ class TestConfigurableAbsenceMode:
         assert coordinator._day_mode == DEFAULT_MODE_DEFAULT
 
     def test_absence_skips_check_next_day(self):
-        hass = MagicMock()
+        hass = _make_mock_hass()
         entry = _make_mock_entry()
         coordinator = HomeShiftCoordinator(hass, entry)
         coordinator._day_mode = DEFAULT_MODE_ABSENCE
@@ -734,7 +744,7 @@ class TestConfigurableAbsenceMode:
         coordinator.async_refresh.assert_not_called()
 
     def test_non_absence_runs_check_next_day(self):
-        hass = MagicMock()
+        hass = _make_mock_hass()
         entry = _make_mock_entry()
         coordinator = HomeShiftCoordinator(hass, entry)
         coordinator._day_mode = DEFAULT_MODE_DEFAULT
@@ -752,7 +762,7 @@ class TestConfigurableAbsenceMode:
 class TestHalfDayTransitionSequence:
 
     def test_full_day_sequence_afternoon_telework(self):
-        hass = MagicMock()
+        hass = _make_mock_hass()
         entry = _make_mock_entry(scan_interval=60)
         coordinator = HomeShiftCoordinator(hass, entry)
         coordinator._day_mode = "Maison"
@@ -796,7 +806,7 @@ class TestHalfDayTransitionSequence:
         assert coordinator._day_mode == DEFAULT_MODE_DEFAULT
 
     def test_full_day_sequence_morning_telework(self):
-        hass = MagicMock()
+        hass = _make_mock_hass()
         entry = _make_mock_entry(scan_interval=60)
         coordinator = HomeShiftCoordinator(hass, entry)
         coordinator._day_mode = "Maison"
@@ -848,7 +858,7 @@ class TestTodayTypePersistence:
 
     def test_today_type_persists_after_morning_event_ends(self):
         """Sensor keeps EVENT_TELEWORK after the morning event window closes."""
-        hass = MagicMock()
+        hass = _make_mock_hass()
         entry = _make_mock_entry(scan_interval=60)
         coordinator = HomeShiftCoordinator(hass, entry)
         import asyncio
@@ -877,7 +887,7 @@ class TestTodayTypePersistence:
 
     def test_today_type_persists_after_afternoon_event_ends(self):
         """Sensor keeps EVENT_TELEWORK after the afternoon event window closes."""
-        hass = MagicMock()
+        hass = _make_mock_hass()
         entry = _make_mock_entry(scan_interval=60)
         coordinator = HomeShiftCoordinator(hass, entry)
         import asyncio
@@ -905,7 +915,7 @@ class TestTodayTypePersistence:
 
     def test_today_type_resets_at_midnight(self):
         """Sensor resets to EVENT_NONE when the calendar date changes."""
-        hass = MagicMock()
+        hass = _make_mock_hass()
         entry = _make_mock_entry(scan_interval=60)
         coordinator = HomeShiftCoordinator(hass, entry)
         import asyncio
@@ -933,7 +943,7 @@ class TestTodayTypePersistence:
 
     def test_no_event_day_stays_none(self):
         """Sensor returns EVENT_NONE on a day with no events."""
-        hass = MagicMock()
+        hass = _make_mock_hass()
         entry = _make_mock_entry(scan_interval=60)
         coordinator = HomeShiftCoordinator(hass, entry)
         import asyncio
@@ -1027,7 +1037,7 @@ class TestManualOverrideDuration:
 
     def test_override_blocks_auto_update(self):
         """After a manual change with override_duration=120, auto-update is blocked."""
-        hass = MagicMock()
+        hass = _make_mock_hass()
         entry = _make_mock_entry(override_duration=120)
         coordinator = HomeShiftCoordinator(hass, entry)
         import asyncio
@@ -1058,7 +1068,7 @@ class TestManualOverrideDuration:
 
     def test_override_expiry_resumes_auto_update(self):
         """After the override expires, automatic mode changes resume."""
-        hass = MagicMock()
+        hass = _make_mock_hass()
         entry = _make_mock_entry(override_duration=60)
         coordinator = HomeShiftCoordinator(hass, entry)
         import asyncio
@@ -1089,7 +1099,7 @@ class TestManualOverrideDuration:
 
     def test_override_zero_does_not_block(self):
         """When override_duration is 0 (disabled), auto-update works immediately."""
-        hass = MagicMock()
+        hass = _make_mock_hass()
         entry = _make_mock_entry(override_duration=0)
         coordinator = HomeShiftCoordinator(hass, entry)
         import asyncio
@@ -1118,7 +1128,7 @@ class TestManualOverrideDuration:
 
     def test_new_manual_change_resets_override_timer(self):
         """A second manual change resets (extends) the override deadline."""
-        hass = MagicMock()
+        hass = _make_mock_hass()
         entry = _make_mock_entry(override_duration=60)
         coordinator = HomeShiftCoordinator(hass, entry)
         import asyncio
@@ -1145,7 +1155,7 @@ class TestManualOverrideDuration:
 
     def test_override_until_appears_in_coordinator_data(self):
         """override_until is exposed in coordinator.data after a manual change."""
-        hass = MagicMock()
+        hass = _make_mock_hass()
         hass.states.get.return_value = _make_calendar_state(state="off")
         entry = _make_mock_entry(override_duration=60)
         coordinator = HomeShiftCoordinator(hass, entry)
@@ -1166,7 +1176,7 @@ class TestManualOverrideDuration:
 
     def test_set_override_duration_via_setter_updates_runtime_value(self):
         """set_override_duration_minutes() changes the runtime override duration."""
-        hass = MagicMock()
+        hass = _make_mock_hass()
         entry = _make_mock_entry(override_duration=0)
         coordinator = HomeShiftCoordinator(hass, entry)
 
@@ -1176,7 +1186,7 @@ class TestManualOverrideDuration:
 
     def test_runtime_override_duration_takes_effect_on_next_manual_change(self):
         """After set_override_duration_minutes(90), the next manual change uses 90 min."""
-        hass = MagicMock()
+        hass = _make_mock_hass()
         entry = _make_mock_entry(override_duration=0)  # starts disabled
         coordinator = HomeShiftCoordinator(hass, entry)
         import asyncio
@@ -1197,7 +1207,7 @@ class TestManualOverrideDuration:
 
     def test_set_override_duration_zero_clamps_correctly(self):
         """set_override_duration_minutes(0) is valid and disables the override."""
-        hass = MagicMock()
+        hass = _make_mock_hass()
         entry = _make_mock_entry(override_duration=120)
         coordinator = HomeShiftCoordinator(hass, entry)
 
@@ -1206,7 +1216,7 @@ class TestManualOverrideDuration:
 
     def test_set_override_duration_negative_clamps_to_zero(self):
         """Negative values are clamped to 0."""
-        hass = MagicMock()
+        hass = _make_mock_hass()
         entry = _make_mock_entry()
         coordinator = HomeShiftCoordinator(hass, entry)
         coordinator.set_override_duration_minutes(-5)
@@ -1218,7 +1228,7 @@ class TestThermostatModeKeyResolution:
 
     def test_set_thermostat_mode_by_display_value(self):
         """Setting by display value (existing behaviour) still works."""
-        hass = MagicMock()
+        hass = _make_mock_hass()
         coordinator = HomeShiftCoordinator(hass, _make_mock_entry())
         import asyncio
 
@@ -1229,7 +1239,7 @@ class TestThermostatModeKeyResolution:
 
     def test_set_thermostat_mode_by_internal_key_exact_case(self):
         """Setting by exact-case internal key resolves to the display value."""
-        hass = MagicMock()
+        hass = _make_mock_hass()
         coordinator = HomeShiftCoordinator(hass, _make_mock_entry())
         import asyncio
 
@@ -1240,7 +1250,7 @@ class TestThermostatModeKeyResolution:
 
     def test_set_thermostat_mode_by_internal_key_lowercase(self):
         """Setting by lowercase internal key is accepted (case-insensitive)."""
-        hass = MagicMock()
+        hass = _make_mock_hass()
         coordinator = HomeShiftCoordinator(hass, _make_mock_entry())
         import asyncio
 
@@ -1250,7 +1260,7 @@ class TestThermostatModeKeyResolution:
 
     def test_set_thermostat_mode_off_key(self):
         """'off' key resolves to the configured Off display value."""
-        hass = MagicMock()
+        hass = _make_mock_hass()
         coordinator = HomeShiftCoordinator(hass, _make_mock_entry())
         import asyncio
 
@@ -1261,7 +1271,7 @@ class TestThermostatModeKeyResolution:
 
     def test_set_thermostat_mode_unknown_rejected(self):
         """An unrecognised value is rejected and the mode stays unchanged."""
-        hass = MagicMock()
+        hass = _make_mock_hass()
         coordinator = HomeShiftCoordinator(hass, _make_mock_entry())
         initial = coordinator.thermostat_mode
         import asyncio
@@ -1272,7 +1282,7 @@ class TestThermostatModeKeyResolution:
 
     def test_thermostat_mode_key_in_coordinator_data(self):
         """thermostat_mode_key appears in coordinator.data after an update."""
-        hass = MagicMock()
+        hass = _make_mock_hass()
         hass.states.get.return_value = _make_calendar_state(state="off")
         coordinator = HomeShiftCoordinator(hass, _make_mock_entry())
         import asyncio
@@ -1288,7 +1298,7 @@ class TestSchedulerRefresh:
 
     def _hass(self):
         """Return a MagicMock hass with an AsyncMock service call."""
-        hass = MagicMock()
+        hass = _make_mock_hass()
         hass.services.async_call = AsyncMock()
         hass.states.get.return_value = _make_calendar_state(state="off")
         return hass

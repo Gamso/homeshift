@@ -32,9 +32,10 @@ from .const import (
     DEFAULT_MODE_HOLIDAY,
     DEFAULT_EVENT_MODE_MAP,
     DEFAULT_MODE_ABSENCE,
-    EVENT_NONE,
-    EVENT_VACATION,
-    EVENT_TELEWORK,
+    KEY_EVENT_NONE,
+    KEY_EVENT_VACATION,
+    KEY_EVENT_TELEWORK,
+    get_localized_defaults,
     EVENT_PERIOD_ALL_DAY,
     EVENT_PERIOD_MORNING,
     EVENT_PERIOD_AFTERNOON,
@@ -66,12 +67,19 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
             update_interval=timedelta(minutes=scan_interval),
         )
         self.entry = entry
+
+        # Localized event type strings (e.g. "None"/"Aucun", "Vacation"/"Vacances", ...)
+        _loc = get_localized_defaults(hass)
+        self._event_none: str = _loc[KEY_EVENT_NONE]
+        self._event_vacation: str = _loc[KEY_EVENT_VACATION]
+        self._event_telework: str = _loc[KEY_EVENT_TELEWORK]
+
         self._day_mode: str = DEFAULT_DAY_MODES[0]
         self._current_event: str | None = None
         self._event_period: str | None = None  # all_day, morning, afternoon
         # Day-level event type: persists until midnight so the sensor doesn't
-        # flicker back to 'Aucun' between half-day events
-        self._today_type: str = EVENT_NONE
+        # flicker back to EVENT_NONE between half-day events
+        self._today_type: str = self._event_none
         self._today_date: date | None = None
         # Manual override duration (minutes) — mutable at runtime via number entity
         override_raw = entry.data.get(CONF_OVERRIDE_DURATION, DEFAULT_OVERRIDE_DURATION)
@@ -106,7 +114,7 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
             "mode_default=%s, mode_weekend=%s, mode_holiday=%s, mode_absence=%s | "
             "thermostat_modes=%s | event_mode_map=%s",
             entry.data.get(CONF_CALENDAR_ENTITY),
-            entry.data.get(CONF_HOLIDAY_CALENDAR) or "(none)",
+            entry.data.get(CONF_HOLIDAY_CALENDAR, "(missing)"),
             scan_interval,
             self._day_modes,
             self._mode_default,
@@ -364,13 +372,13 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
         # Determine current event from calendar
         self._current_event = None
         self._event_period = None
-        next_day_type = EVENT_NONE
+        next_day_type = self._event_none
 
         # Reset day-level event type at midnight (new calendar day)
         today = now.date()
         if today != self._today_date:
             _LOGGER.debug("New calendar day (%s), resetting today_type", today)
-            self._today_type = EVENT_NONE
+            self._today_type = self._event_none
             self._today_date = today
 
         if calendar_state.state == "on":
@@ -382,15 +390,15 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
                 self._current_event = event_message
                 self._event_period = self._detect_event_period(event_start, event_end)
 
-                if EVENT_VACATION.lower() in event_message.lower():
-                    next_day_type = EVENT_VACATION
-                elif EVENT_TELEWORK.lower() in event_message.lower():
-                    next_day_type = EVENT_TELEWORK
+                if self._event_vacation.lower() in event_message.lower():
+                    next_day_type = self._event_vacation
+                elif self._event_telework.lower() in event_message.lower():
+                    next_day_type = self._event_telework
                 else:
                     next_day_type = event_message
                 # Persist the day-level type: once a known event is seen
                 # for today it stays visible until midnight
-                if next_day_type != EVENT_NONE:
+                if next_day_type != self._event_none:
                     self._today_type = next_day_type
 
         # Auto-update mode (skip if absence mode or manual override is active)
@@ -459,15 +467,14 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
         is_weekend = now.weekday() in [5, 6]
 
         # Check holiday calendar
-        holiday_calendar = self.entry.data.get(CONF_HOLIDAY_CALENDAR)
+        holiday_calendar = self.entry.data.get(CONF_HOLIDAY_CALENDAR, "")
         is_holiday = False
-        if holiday_calendar:
-            holiday_state = self.hass.states.get(holiday_calendar)
-            if holiday_state and holiday_state.state == "on":
-                is_holiday = True
+        holiday_state = self.hass.states.get(holiday_calendar)
+        if holiday_state and holiday_state.state == "on":
+            is_holiday = True
 
         # 1. Check event_mode_map for the current event type
-        if next_day_type and next_day_type != EVENT_NONE:
+        if next_day_type and next_day_type != self._event_none:
             mapped_mode = self._event_mode_map.get(next_day_type.lower())
             if mapped_mode:
                 return mapped_mode

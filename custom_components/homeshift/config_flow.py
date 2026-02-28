@@ -171,8 +171,8 @@ def _validate_calendars(hass, user_input: dict[str, Any]) -> dict[str, str]:
     cal = user_input.get(CONF_CALENDAR_ENTITY)
     if cal and not hass.states.get(cal):
         errors[CONF_CALENDAR_ENTITY] = "invalid_calendar"
-    hol = user_input.get(CONF_HOLIDAY_CALENDAR)
-    if hol and not hass.states.get(hol):
+    hol = user_input.get(CONF_HOLIDAY_CALENDAR, "")
+    if not hass.states.get(hol):
         errors[CONF_HOLIDAY_CALENDAR] = "invalid_calendar"
     return errors
 

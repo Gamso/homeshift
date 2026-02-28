@@ -38,10 +38,15 @@ SELECT_THERMOSTAT_MODE = "thermostat_mode"
 SENSOR_NEXT_DAY_TYPE = "next_day_type"
 NUMBER_OVERRIDE_DURATION = "override_duration"
 
-# Calendar events
-EVENT_NONE = "Aucun"
-EVENT_VACATION = "Vacances"
-EVENT_TELEWORK = "Télétravail"
+# Calendar events (English baseline — localized values are in LOCALIZED_DEFAULTS)
+EVENT_NONE = "None"
+EVENT_VACATION = "Vacation"
+EVENT_TELEWORK = "Telework"
+
+# Keys for localized event strings inside LOCALIZED_DEFAULTS
+KEY_EVENT_NONE = "event_none"
+KEY_EVENT_VACATION = "event_vacation"
+KEY_EVENT_TELEWORK = "event_telework"
 
 # Event period types
 EVENT_PERIOD_ALL_DAY = "all_day"
@@ -70,6 +75,9 @@ LOCALIZED_DEFAULTS: dict[str, dict] = {
         CONF_MODE_ABSENCE: "Absence",
         CONF_EVENT_MODE_MAP: "Vacation:Home, Telework:Telework",
         CONF_THERMOSTAT_MODE_MAP: "Off:Off, Heating:Heating, Cooling:Cooling, Ventilation:Ventilation",
+        KEY_EVENT_NONE: "None",
+        KEY_EVENT_VACATION: "Vacation",
+        KEY_EVENT_TELEWORK: "Telework",
     },
     "fr": {
         CONF_DAY_MODES: "Maison, Travail, T\u00e9l\u00e9travail, Absence",
@@ -79,6 +87,9 @@ LOCALIZED_DEFAULTS: dict[str, dict] = {
         CONF_MODE_ABSENCE: "Absence",
         CONF_EVENT_MODE_MAP: "Vacances:Maison, T\u00e9l\u00e9travail:T\u00e9l\u00e9travail",
         CONF_THERMOSTAT_MODE_MAP: "Off:Eteint, Heating:Chauffage, Cooling:Climatisation, Ventilation:Ventilation",
+        KEY_EVENT_NONE: "Aucun",
+        KEY_EVENT_VACATION: "Vacances",
+        KEY_EVENT_TELEWORK: "T\u00e9l\u00e9travail",
     },
 }
 

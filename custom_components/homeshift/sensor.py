@@ -9,7 +9,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN, SENSOR_NEXT_DAY_TYPE, EVENT_NONE
+from .const import DOMAIN, SENSOR_NEXT_DAY_TYPE
 from .coordinator import HomeShiftCoordinator
 
 _LOGGER = logging.getLogger(__name__)
@@ -41,7 +41,7 @@ class HomeShiftNextDayTypeSensor(CoordinatorEntity[HomeShiftCoordinator], Sensor
     @property
     def native_value(self) -> str | None:
         """Return the state of the sensor."""
-        return self.coordinator.data.get("next_day_type", EVENT_NONE)
+        return self.coordinator.data.get("next_day_type", self.coordinator._event_none)
 
     @property
     def device_info(self):

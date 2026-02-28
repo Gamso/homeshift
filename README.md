@@ -24,7 +24,7 @@ Ce composant permet de :
 2. Allez dans "Integrations"
 3. Cliquez sur le menu trois points en haut à droite
 4. Sélectionnez "Custom repositories"
-5. Ajoutez `https://github.com/Gamso/day_mode` comme repository
+5. Ajoutez `https://github.com/Gamso/homeshift` comme repository
 6. Sélectionnez "Integration" comme catégorie
 7. Cliquez sur "Add"
 8. Recherchez "HomeShift" et installez-le
@@ -124,8 +124,8 @@ Le projet inclut une configuration Dev Container pour Visual Studio Code :
 
 ```bash
 # Cloner le repository
-git clone https://github.com/Gamso/day_mode.git
-cd day_mode
+git clone https://github.com/Gamso/homeshift.git
+cd homeshift
 
 # Ouvrir dans VS Code
 code .

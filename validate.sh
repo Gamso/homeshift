@@ -6,7 +6,7 @@ set -e
 echo "🔍 Validating HomeShift custom component..."
 
 # Check if custom_components directory exists
-if [ ! -d "custom_components/day_homeshiftmode" ]; then
+if [ ! -d "custom_components/homeshift" ]; then
     echo "❌ Error: custom_components/homeshift directory not found"
     exit 1
 fi

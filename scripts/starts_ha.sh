@@ -40,6 +40,134 @@ if [ -f ${PWD}/.devcontainer/scheduler.storage ]; then
 	echo "   ✅ Scheduler storage linked"
 fi
 
+# Merge calendars configuration if present
+if [ -f ${PWD}/.devcontainer/calendars.yaml ]; then
+	python3 << PYTHON_SCRIPT
+import json
+import yaml
+from datetime import datetime, timezone
+import os
+import secrets
+
+devcontainer_path = "${PWD}/.devcontainer/calendars.yaml"
+config_entries_path = "${PWD}/config/.storage/core.config_entries"
+
+def generate_entry_id():
+    """Generate a unique entry_id similar to Home Assistant format"""
+    return secrets.token_urlsafe(20).upper().replace('-', '').replace('_', '')[:26]
+
+# Load calendar configuration from .devcontainer
+with open(devcontainer_path, 'r') as f:
+    calendars_config = yaml.safe_load(f)
+
+if calendars_config:
+    # Load or create core.config_entries
+    if os.path.exists(config_entries_path):
+        with open(config_entries_path, 'r') as f:
+            config_entries = json.load(f)
+    else:
+        config_entries = {
+            "version": 1,
+            "minor_version": 5,
+            "key": "core.config_entries",
+            "data": {"entries": []}
+        }
+
+    now = datetime.now(timezone.utc).isoformat()
+    added_count = 0
+
+    # Add calendar entries
+    if 'calendars' in calendars_config:
+        # Check existing calendars by storage_key
+        existing_storage_keys = {e['data'].get('storage_key') for e in config_entries['data']['entries']
+                                if e.get('domain') == 'local_calendar' and 'storage_key' in e.get('data', {})}
+
+        for cal in calendars_config['calendars']:
+            if cal.get('storage_key') not in existing_storage_keys:
+                entry = {
+                    "created_at": now,
+                    "data": {
+                        "calendar_name": cal['calendar_name'],
+                        "import": cal.get('import', 'import_ics_file'),
+                        "storage_key": cal['storage_key']
+                    },
+                    "disabled_by": None,
+                    "discovery_keys": {},
+                    "domain": "local_calendar",
+                    "entry_id": generate_entry_id(),
+                    "minor_version": 1,
+                    "modified_at": now,
+                    "options": {},
+                    "pref_disable_new_entities": False,
+                    "pref_disable_polling": False,
+                    "source": "user",
+                    "subentries": [],
+                    "title": cal['title'],
+                    "unique_id": None,
+                    "version": 1
+                }
+                config_entries['data']['entries'].append(entry)
+                added_count += 1
+                print(f"   ✓ {cal['title']} calendar added")
+
+    # Add other integrations (like scheduler)
+    if 'integrations' in calendars_config:
+        existing_domains = {(e.get('domain'), e.get('unique_id')) for e in config_entries['data']['entries']}
+
+        for integration in calendars_config['integrations']:
+            domain = integration.get('domain')
+            unique_id = integration.get('unique_id')
+
+            if (domain, unique_id) not in existing_domains:
+                entry = {
+                    "created_at": now,
+                    "data": integration.get('data', {}),
+                    "disabled_by": None,
+                    "discovery_keys": {},
+                    "domain": domain,
+                    "entry_id": generate_entry_id(),
+                    "minor_version": 1,
+                    "modified_at": now,
+                    "options": {},
+                    "pref_disable_new_entities": False,
+                    "pref_disable_polling": False,
+                    "source": "user",
+                    "subentries": [],
+                    "title": integration['title'],
+                    "unique_id": unique_id,
+                    "version": integration.get('version', 1)
+                }
+                config_entries['data']['entries'].append(entry)
+                added_count += 1
+                print(f"   ✓ {integration['title']} integration added")
+
+    if added_count > 0:
+        # Save updated config
+        with open(config_entries_path, 'w') as f:
+            json.dump(config_entries, f, indent=2)
+        print(f"   ✅ {added_count} integration(s) configured")
+    else:
+        print("   ℹ️  All integrations already exist")
+PYTHON_SCRIPT
+	echo "   ✅ Integrations merged"
+fi
+
+# Link automations from .devcontainer
+if [ -d ${PWD}/.devcontainer/automations ]; then
+	# Create automations directory if it doesn't exist
+	mkdir -p ${PWD}/config/automations
+
+	# Link each automation file
+	for automation_file in ${PWD}/.devcontainer/automations/*.yaml; do
+		if [ -f "$automation_file" ]; then
+			filename=$(basename "$automation_file")
+			rm -f ${PWD}/config/automations/"$filename"
+			ln -s "$automation_file" ${PWD}/config/automations/"$filename"
+		fi
+	done
+	echo "   ✅ Automations linked"
+fi
+
 # Dev-only custom_components
 if [ ! -d ${PWD}/config/custom_components ]; then
     mkdir -p ${PWD}/config/custom_components

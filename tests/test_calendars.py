@@ -57,11 +57,11 @@ class TestCalendarsWithIcalendar:
         with open(TELETRAVAIL_ICS, "rb") as f:
             cal = Calendar.from_ical(f.read())
             events = [comp for comp in cal.walk() if comp.name == "VEVENT"]
-            
+
             # Cherche un événement avec RRULE (récurrent)
             recurring_events = [e for e in events if "RRULE" in e]
             assert len(recurring_events) > 0, "Aucun événement récurrent trouvé"
-            
+
             # Vérifie que c'est bien 'Télétravail'
             teletravail_event = [e for e in recurring_events if "Télétravail" in str(e.get("SUMMARY"))]
             assert len(teletravail_event) > 0, "Événement récurrent 'Télétravail' non trouvé"
@@ -71,7 +71,7 @@ class TestCalendarsWithIcalendar:
         with open(TELETRAVAIL_ICS, "rb") as f:
             cal = Calendar.from_ical(f.read())
             events = [comp for comp in cal.walk() if comp.name == "VEVENT"]
-            
+
             # Cherche les événements 'Vacances'
             vacation_events = [e for e in events if "Vacances" in str(e.get("SUMMARY"))]
             assert len(vacation_events) >= 2, f"Attendu au moins 2 périodes de vacances, trouvé {len(vacation_events)}"
@@ -95,12 +95,12 @@ class TestCalendarsWithIcalendar:
             "Armistice",
             "Noël"
         ]
-        
+
         with open(JOURS_FERIES_ICS, "rb") as f:
             cal = Calendar.from_ical(f.read())
             events = [comp for comp in cal.walk() if comp.name == "VEVENT"]
             summaries = [str(e.get("SUMMARY")) for e in events]
-            
+
             for holiday in mandatory_holidays:
                 assert any(holiday in s for s in summaries), f"Jour férié '{holiday}' non trouvé"
 
@@ -134,7 +134,7 @@ class TestCalendarsBasic:
         assert "END:VCALENDAR" in content
         assert "BEGIN:VEVENT" in content
         assert "END:VEVENT" in content
-        
+
         # Vérifie quelques jours fériés
         assert "SUMMARY:Nouvel An" in content
         assert "SUMMARY:Fête du Travail" in content
@@ -159,7 +159,7 @@ class TestCalendarsBasic:
         content = TELETRAVAIL_ICS.read_text(encoding="utf-8")
         assert "Télétravail" in content
         assert "été" in content or "Noël" in content
-        
+
         # Test jours fériés
         content = JOURS_FERIES_ICS.read_text(encoding="utf-8")
         assert "français" in content or "Noël" in content
@@ -168,10 +168,10 @@ class TestCalendarsBasic:
         """Vérifie que les calendriers sont copiés dans www/calendars."""
         www_dir = Path(__file__).parent.parent / "config" / "www" / "calendars"
         assert www_dir.exists(), "Le dossier www/calendars n'existe pas"
-        
+
         www_teletravail = www_dir / "teletravail.ics"
         www_feries = www_dir / "jours_feries_fr.ics"
-        
+
         assert www_teletravail.exists(), f"{www_teletravail} n'existe pas"
         assert www_feries.exists(), f"{www_feries} n'existe pas"
 
@@ -188,7 +188,7 @@ class TestHomeAssistantCompatibility:
     def test_ics_accessible_via_www(self):
         """Vérifie que les fichiers sont accessibles via www/."""
         www_calendars = Path(__file__).parent.parent / "config" / "www" / "calendars"
-        
+
         if www_calendars.exists():
             www_files = list(www_calendars.glob("*.ics"))
             assert len(www_files) >= 2, f"Attendu au moins 2 fichiers ICS dans www/calendars, trouvé {len(www_files)}"

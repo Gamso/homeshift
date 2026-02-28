@@ -1,0 +1,22 @@
+# Configuration des calendriers locaux pour Home Assistant
+# Ce fichier définit les entrées de calendrier local à créer au démarrage
+# Il est fusionné avec core.config_entries par le script starts_ha.sh
+
+calendars:
+  - calendar_name: "Télétravail"
+    title: "Télétravail"
+    storage_key: "teletravail"
+    import: "import_ics_file"
+    description: "Télétravail (mardis) et vacances"
+
+  - calendar_name: " Jours fériés "
+    title: " Jours fériés "
+    storage_key: "jours_feries"
+    import: "import_ics_file"
+    description: "Jours fériés français"
+
+integrations:
+  - domain: "scheduler"
+    title: "Scheduler"
+    unique_id: "3d7666922c11"
+    version: 2

@@ -15,6 +15,7 @@ from .const import (
     CONF_HOLIDAY_CALENDAR,
     CONF_DAY_MODES,
     CONF_THERMOSTAT_MODE_MAP,
+    CONF_SCHEDULERS_PER_MODE,
     CONF_SCAN_INTERVAL,
     CONF_OVERRIDE_DURATION,
     CONF_MODE_DEFAULT,
@@ -37,6 +38,7 @@ from .const import (
     EVENT_PERIOD_ALL_DAY,
     EVENT_PERIOD_MORNING,
     EVENT_PERIOD_AFTERNOON,
+    THERMOSTAT_OFF_KEY,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -291,6 +293,7 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
             resolved,
             self.thermostat_mode_key,
         )
+        await self.async_refresh_schedulers()
         self.async_set_updated_data(self._build_result(self._today_type))
 
     @staticmethod
@@ -499,16 +502,80 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
         await self.async_refresh()
 
     async def async_refresh_schedulers(self) -> None:
-        """Refresh schedulers based on current modes."""
+        """Turn on scheduler switches for the active day mode, turn off all others.
+
+        The configuration maps each day mode to a list of switch entity IDs
+        (stored under CONF_SCHEDULERS_PER_MODE).  When the day mode changes we:
+          1. Collect the switches that should be ON  (active mode).
+          2. Collect the switches that should be OFF (every other mode),
+             excluding any that are also in the active list.
+          3. Fire the switch.turn_on / switch.turn_off service calls.
+        """
+        schedulers_per_mode: dict[str, list[str]] = self.entry.data.get(
+            CONF_SCHEDULERS_PER_MODE, {}
+        )
+
+        if not schedulers_per_mode:
+            _LOGGER.debug("No schedulers configured, skipping refresh")
+            return
+
         _LOGGER.info(
             "Refreshing schedulers: day_mode=%s, thermostat_mode=%s",
             self._day_mode,
             self._thermostat_mode,
         )
 
-        # This is a placeholder for scheduler refresh logic
-        # In a real implementation, this would:
-        # 1. Find all scheduler switches with matching tags
-        # 2. Turn off all schedulers
-        # 3. Turn on schedulers matching current day_mode and thermostat_mode
-        pass
+        # Build activate / deactivate sets
+        to_enable: set[str] = set(schedulers_per_mode.get(self._day_mode, []))
+        to_disable: set[str] = set()
+        for mode, switches in schedulers_per_mode.items():
+            if mode != self._day_mode:
+                for sw in switches:
+                    if sw not in to_enable:  # never disable a shared switch
+                        to_disable.add(sw)
+
+        # When thermostat mode is Off, force-disable every scheduler that carries
+        # a thermostat-mode tag (e.g. "Chauffage", "Climatisation", …).
+        # Schedulers without any thermostat tag are left untouched.
+        thermostat_key = self.thermostat_mode_key
+        if thermostat_key == THERMOSTAT_OFF_KEY and self._thermostat_mode_map:
+            thermostat_tags: set[str] = set(self._thermostat_mode_map.values())
+            all_switches: set[str] = set()
+            for swlist in schedulers_per_mode.values():
+                all_switches.update(swlist)
+            for entity_id in all_switches:
+                state = self.hass.states.get(entity_id)
+                if state is None:
+                    continue
+                entity_tags: list = state.attributes.get("tags", []) or []
+                if set(entity_tags) & thermostat_tags:
+                    _LOGGER.debug(
+                        "Thermostat OFF: force-disabling scheduler '%s' (tags=%s)",
+                        entity_id,
+                        entity_tags,
+                    )
+                    to_disable.add(entity_id)
+                    to_enable.discard(entity_id)
+
+        # Turn off first so we don't have conflicting schedulers briefly active
+        if to_disable:
+            _LOGGER.debug("Turning OFF schedulers: %s", sorted(to_disable))
+            await self.hass.services.async_call(
+                "switch",
+                "turn_off",
+                {"entity_id": sorted(to_disable)},
+                blocking=False,
+            )
+
+        if to_enable:
+            _LOGGER.debug("Turning ON schedulers: %s", sorted(to_enable))
+            await self.hass.services.async_call(
+                "switch",
+                "turn_on",
+                {"entity_id": sorted(to_enable)},
+                blocking=False,
+            )
+        elif self._day_mode and schedulers_per_mode.get(self._day_mode) is not None:
+            _LOGGER.debug(
+                "No schedulers assigned to day_mode '%s'", self._day_mode
+            )

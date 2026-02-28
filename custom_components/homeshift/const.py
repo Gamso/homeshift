@@ -21,6 +21,9 @@ CONF_MODE_ABSENCE = "mode_absence"  # Mode that blocks automatic updates
 # Default values
 DEFAULT_DAY_MODES = ["Maison", "Travail", "Télétravail", "Absence"]
 DEFAULT_THERMOSTAT_MODE_MAP = "Off:Eteint, Heating:Chauffage, Cooling:Climatisation, Ventilation:Ventilation"
+# Internal key that means 'thermostat is off' — schedulers with any thermostat
+# tag are disabled when the thermostat mode matches this key.
+THERMOSTAT_OFF_KEY = "Off"
 DEFAULT_SCAN_INTERVAL = 60  # minutes
 DEFAULT_OVERRIDE_DURATION = 0  # 0 = disabled
 DEFAULT_MODE_DEFAULT = "Travail"

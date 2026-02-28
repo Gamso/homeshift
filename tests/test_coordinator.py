@@ -24,6 +24,7 @@ from custom_components.homeshift.const import (
     CONF_THERMOSTAT_MODE_MAP,
     CONF_SCAN_INTERVAL,
     CONF_OVERRIDE_DURATION,
+    CONF_SCHEDULERS_PER_MODE,
     CONF_MODE_DEFAULT,
     CONF_MODE_WEEKEND,
     CONF_MODE_HOLIDAY,
@@ -241,6 +242,7 @@ def _make_mock_entry(
     holiday_calendar: str = "",
     scan_interval: int = DEFAULT_SCAN_INTERVAL,
     override_duration: int = DEFAULT_OVERRIDE_DURATION,
+    schedulers_per_mode: dict | None = None,
     mode_default: str | None = None,
     mode_weekend: str | None = None,
     mode_holiday: str | None = None,
@@ -258,6 +260,7 @@ def _make_mock_entry(
         CONF_THERMOSTAT_MODE_MAP: thermostat_mode_map or DEFAULT_THERMOSTAT_MODE_MAP,
         CONF_SCAN_INTERVAL: scan_interval,
         CONF_OVERRIDE_DURATION: override_duration,
+        CONF_SCHEDULERS_PER_MODE: schedulers_per_mode or {},
     }
     if mode_default is not None:
         entry.data[CONF_MODE_DEFAULT] = mode_default
@@ -1278,6 +1281,133 @@ class TestThermostatModeKeyResolution:
         result = loop.run_until_complete(coordinator._async_update_data())
         assert "thermostat_mode_key" in result
         assert result["thermostat_mode_key"] in ("Off", "Heating", "Cooling", "Ventilation")
+
+
+
+class TestSchedulerRefresh:
+    """Verify async_refresh_schedulers turns on/off the right switches."""
+
+    def _hass(self):
+        """Return a MagicMock hass with an AsyncMock service call."""
+        hass = MagicMock()
+        hass.services.async_call = AsyncMock()
+        hass.states.get.return_value = _make_calendar_state(state="off")
+        return hass
+
+    def test_active_schedulers_turned_on_others_off(self):
+        """Switches for the active mode are turned ON; all others are turned OFF."""
+        import asyncio
+        schedulers = {
+            "Maison": ["switch.sched_maison"],
+            "Travail": ["switch.sched_travail_a", "switch.sched_travail_b"],
+            "Télétravail": ["switch.sched_teletravail"],
+        }
+        hass = self._hass()
+        coordinator = HomeShiftCoordinator(
+            hass, _make_mock_entry(schedulers_per_mode=schedulers)
+        )
+        coordinator._day_mode = "Travail"
+
+        asyncio.get_event_loop().run_until_complete(coordinator.async_refresh_schedulers())
+
+        calls = hass.services.async_call.call_args_list
+        on_calls  = [c for c in calls if c.args[1] == "turn_on"]
+        off_calls = [c for c in calls if c.args[1] == "turn_off"]
+
+        assert len(on_calls) == 1
+        assert set(on_calls[0].args[2]["entity_id"]) == {
+            "switch.sched_travail_a",
+            "switch.sched_travail_b",
+        }
+        assert len(off_calls) == 1
+        assert set(off_calls[0].args[2]["entity_id"]) == {
+            "switch.sched_maison",
+            "switch.sched_teletravail",
+        }
+
+    def test_no_schedulers_configured_does_nothing(self):
+        """With an empty schedulers map, no service calls are made."""
+        import asyncio
+        hass = self._hass()
+        coordinator = HomeShiftCoordinator(hass, _make_mock_entry(schedulers_per_mode={}))
+        asyncio.get_event_loop().run_until_complete(coordinator.async_refresh_schedulers())
+        hass.services.async_call.assert_not_called()
+
+    def test_active_mode_with_no_switches_only_turns_off_others(self):
+        """Active mode has no switches → only the other modes' switches are turned off."""
+        import asyncio
+        schedulers = {
+            "Maison": ["switch.sched_maison"],
+            "Travail": [],           # active mode — nothing to turn on
+            "Télétravail": ["switch.sched_teletravail"],
+        }
+        hass = self._hass()
+        coordinator = HomeShiftCoordinator(
+            hass, _make_mock_entry(schedulers_per_mode=schedulers)
+        )
+        coordinator._day_mode = "Travail"
+
+        asyncio.get_event_loop().run_until_complete(coordinator.async_refresh_schedulers())
+
+        calls = hass.services.async_call.call_args_list
+        on_calls  = [c for c in calls if c.args[1] == "turn_on"]
+        off_calls = [c for c in calls if c.args[1] == "turn_off"]
+
+        assert len(on_calls) == 0
+        assert len(off_calls) == 1
+        assert set(off_calls[0].args[2]["entity_id"]) == {
+            "switch.sched_maison",
+            "switch.sched_teletravail",
+        }
+
+    def test_shared_switch_not_turned_off(self):
+        """A switch also assigned to the active mode is never turned off."""
+        import asyncio
+        shared = "switch.shared"
+        schedulers = {
+            "Maison": [shared, "switch.maison_only"],
+            "Travail": [shared],
+        }
+        hass = self._hass()
+        coordinator = HomeShiftCoordinator(
+            hass, _make_mock_entry(schedulers_per_mode=schedulers)
+        )
+        coordinator._day_mode = "Travail"
+
+        asyncio.get_event_loop().run_until_complete(coordinator.async_refresh_schedulers())
+
+        calls = hass.services.async_call.call_args_list
+        off_calls = [c for c in calls if c.args[1] == "turn_off"]
+        turned_off = set(off_calls[0].args[2]["entity_id"]) if off_calls else set()
+        assert shared not in turned_off
+        assert "switch.maison_only" in turned_off
+
+    def test_mode_change_triggers_scheduler_refresh(self):
+        """async_set_day_mode triggers a scheduler refresh with the right switches."""
+        import asyncio
+        schedulers = {
+            "Maison": ["switch.sched_maison"],
+            "Télétravail": ["switch.sched_teletravail"],
+        }
+        hass = self._hass()
+        coordinator = HomeShiftCoordinator(
+            hass, _make_mock_entry(schedulers_per_mode=schedulers)
+        )
+
+        with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
+            mock_dt.now.return_value = datetime(2026, 3, 12, 9, 0, 0)
+            asyncio.get_event_loop().run_until_complete(
+                coordinator.async_set_day_mode("Télétravail")
+            )
+
+        on_calls = [
+            c for c in hass.services.async_call.call_args_list
+            if c.args[1] == "turn_on"
+        ]
+        assert any(
+            "switch.sched_teletravail" in c.args[2]["entity_id"]
+            for c in on_calls
+        )
 
 
 if __name__ == "__main__":

@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, Self
 
 import voluptuous as vol
 
@@ -177,9 +177,9 @@ def _parse_day_modes(data: dict[str, Any]) -> list[str]:
     return [m.strip() for m in raw.split(",") if m.strip()]
 
 
-def _get_scheduler_options(hass) -> list[dict[str, str]]:
+def _get_scheduler_options(hass) -> list[selector.SelectOptionDict]:
     """Return SelectSelector options for scheduler-like switch entities."""
-    options: list[dict[str, str]] = []
+    options: list[selector.SelectOptionDict] = []
     for state in hass.states.async_all("switch"):
         if "schedule" in state.entity_id.lower() or state.attributes.get("next_trigger") is not None:
             friendly = state.attributes.get("friendly_name", state.entity_id)
@@ -245,6 +245,10 @@ class HomeShiftConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Initialise the config flow."""
         self._data: dict[str, Any] = {}
 
+    def is_matching(self, other_flow: Self) -> bool:
+        """Return True if another in-progress flow matches this one (not used)."""
+        return False
+
     # -- helpers -----------------------------------------------------------
 
     def _is_config_complete(self) -> bool:
@@ -255,8 +259,8 @@ class HomeShiftConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_user(
         self,
-        user_input: dict[str, Any] | None = None,
-    ) -> config_entries.FlowResult:
+        _user_input: dict[str, Any] | None = None,
+    ) -> config_entries.ConfigFlowResult:
         """Entry point – redirect to the menu."""
         return await self.async_step_menu()
 
@@ -264,8 +268,8 @@ class HomeShiftConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_menu(
         self,
-        user_input: dict[str, Any] | None = None,
-    ) -> config_entries.FlowResult:
+        _user_input: dict[str, Any] | None = None,
+    ) -> config_entries.ConfigFlowResult:
         """Show the configuration menu."""
         menu_options = ["calendars", "mapping", "schedulers"]
         if self._is_config_complete():
@@ -277,7 +281,7 @@ class HomeShiftConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_calendars(
         self,
         user_input: dict[str, Any] | None = None,
-    ) -> config_entries.FlowResult:
+    ) -> config_entries.ConfigFlowResult:
         """Configure calendar entities and scan interval."""
         errors: dict[str, str] = {}
 
@@ -298,7 +302,7 @@ class HomeShiftConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_mapping(
         self,
         user_input: dict[str, Any] | None = None,
-    ) -> config_entries.FlowResult:
+    ) -> config_entries.ConfigFlowResult:
         """Configure day-mode & thermostat-mode mapping."""
         if user_input is not None:
             # Flatten section-nested input from the two sections
@@ -320,7 +324,7 @@ class HomeShiftConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_schedulers(
         self,
         user_input: dict[str, Any] | None = None,
-    ) -> config_entries.FlowResult:
+    ) -> config_entries.ConfigFlowResult:
         """Assign scheduler entities to each day mode."""
         if user_input is not None:
             self._data[CONF_SCHEDULERS_PER_MODE] = _extract_schedulers(user_input, self._data)
@@ -335,8 +339,8 @@ class HomeShiftConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_finalize(
         self,
-        user_input: dict[str, Any] | None = None,
-    ) -> config_entries.FlowResult:
+        _user_input: dict[str, Any] | None = None,
+    ) -> config_entries.ConfigFlowResult:
         """Create the config entry."""
         return self.async_create_entry(title="HomeShift", data=self._data)
 
@@ -373,8 +377,8 @@ class HomeShiftOptionsFlow(config_entries.OptionsFlow):
 
     async def async_step_init(
         self,
-        user_input: dict[str, Any] | None = None,
-    ) -> config_entries.FlowResult:
+        _user_input: dict[str, Any] | None = None,
+    ) -> config_entries.ConfigFlowResult:
         """Entry point – pre-populate from existing entry, then show menu."""
         self._data = dict(self.config_entry.data)
         return await self.async_step_menu()
@@ -383,8 +387,8 @@ class HomeShiftOptionsFlow(config_entries.OptionsFlow):
 
     async def async_step_menu(
         self,
-        user_input: dict[str, Any] | None = None,
-    ) -> config_entries.FlowResult:
+        _user_input: dict[str, Any] | None = None,
+    ) -> config_entries.ConfigFlowResult:
         """Show the options menu."""
         menu_options = ["calendars", "mapping", "schedulers"]
         if self._is_config_complete():
@@ -396,7 +400,7 @@ class HomeShiftOptionsFlow(config_entries.OptionsFlow):
     async def async_step_calendars(
         self,
         user_input: dict[str, Any] | None = None,
-    ) -> config_entries.FlowResult:
+    ) -> config_entries.ConfigFlowResult:
         """Configure calendar entities and scan interval."""
         errors: dict[str, str] = {}
 
@@ -417,7 +421,7 @@ class HomeShiftOptionsFlow(config_entries.OptionsFlow):
     async def async_step_mapping(
         self,
         user_input: dict[str, Any] | None = None,
-    ) -> config_entries.FlowResult:
+    ) -> config_entries.ConfigFlowResult:
         """Configure day-mode & thermostat-mode mapping."""
         if user_input is not None:
             # Flatten section-nested input from the two sections
@@ -439,7 +443,7 @@ class HomeShiftOptionsFlow(config_entries.OptionsFlow):
     async def async_step_schedulers(
         self,
         user_input: dict[str, Any] | None = None,
-    ) -> config_entries.FlowResult:
+    ) -> config_entries.ConfigFlowResult:
         """Assign scheduler entities to each day mode."""
         if user_input is not None:
             self._data[CONF_SCHEDULERS_PER_MODE] = _extract_schedulers(user_input, self._data)
@@ -454,7 +458,7 @@ class HomeShiftOptionsFlow(config_entries.OptionsFlow):
 
     async def async_step_finalize(
         self,
-        user_input: dict[str, Any] | None = None,
-    ) -> config_entries.FlowResult:
+        _user_input: dict[str, Any] | None = None,
+    ) -> config_entries.ConfigFlowResult:
         """Save options."""
         return self.async_create_entry(title="", data=self._data)

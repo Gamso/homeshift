@@ -72,6 +72,10 @@ class HomeShiftOverrideDurationNumber(NumberEntity, RestoreEntity):
         """Return the current override duration in minutes."""
         return float(self._coordinator.override_duration_minutes)
 
+    def set_native_value(self, value: float) -> None:
+        """Set the override duration (sync stub — async_set_native_value is used)."""
+        raise NotImplementedError
+
     async def async_set_native_value(self, value: float) -> None:
         """Update the override duration."""
         minutes = int(value)

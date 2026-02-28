@@ -26,7 +26,7 @@ async def async_setup_entry(
     async_add_entities([HomeShiftNextDayTypeSensor(coordinator, entry)])
 
 
-class HomeShiftNextDayTypeSensor(CoordinatorEntity, SensorEntity):
+class HomeShiftNextDayTypeSensor(CoordinatorEntity[HomeShiftCoordinator], SensorEntity):
     """Sensor for next day type detection."""
 
     _attr_has_entity_name = True

@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
 
 from homeassistant.components.select import SelectEntity
 from homeassistant.config_entries import ConfigEntry
@@ -32,7 +31,7 @@ async def async_setup_entry(
     )
 
 
-class HomeShiftSelect(CoordinatorEntity, SelectEntity):
+class HomeShiftSelect(CoordinatorEntity[HomeShiftCoordinator], SelectEntity):
     """Representation of Day Mode select entity."""
 
     _attr_has_entity_name = True
@@ -50,6 +49,10 @@ class HomeShiftSelect(CoordinatorEntity, SelectEntity):
         """Return the current selected option."""
         return self.coordinator.day_mode
 
+    def select_option(self, option: str) -> None:
+        """Change the selected option (sync stub — async_select_option is used)."""
+        raise NotImplementedError
+
     async def async_select_option(self, option: str) -> None:
         """Change the selected option."""
         await self.coordinator.async_set_day_mode(option)
@@ -65,7 +68,7 @@ class HomeShiftSelect(CoordinatorEntity, SelectEntity):
         }
 
 
-class HomeShiftThermostatSelect(CoordinatorEntity, SelectEntity):
+class HomeShiftThermostatSelect(CoordinatorEntity[HomeShiftCoordinator], SelectEntity):
     """Representation of Thermostat Mode select entity."""
 
     _attr_has_entity_name = True
@@ -82,6 +85,10 @@ class HomeShiftThermostatSelect(CoordinatorEntity, SelectEntity):
     def current_option(self) -> str | None:
         """Return the current selected option."""
         return self.coordinator.thermostat_mode
+
+    def select_option(self, option: str) -> None:
+        """Change the selected option (sync stub — async_select_option is used)."""
+        raise NotImplementedError
 
     async def async_select_option(self, option: str) -> None:
         """Change the selected option."""

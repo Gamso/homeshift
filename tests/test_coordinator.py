@@ -51,6 +51,7 @@ from custom_components.homeshift.const import (
 _FRAME_PATCH = patch(
     "homeassistant.helpers.frame.report_usage",
     new=lambda *a, **kw: None,
+    create=True,
 )
 _FRAME_PATCH.start()
 
@@ -1281,7 +1282,6 @@ class TestThermostatModeKeyResolution:
         result = loop.run_until_complete(coordinator._async_update_data())
         assert "thermostat_mode_key" in result
         assert result["thermostat_mode_key"] in ("Off", "Heating", "Cooling", "Ventilation")
-
 
 
 class TestSchedulerRefresh:

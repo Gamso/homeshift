@@ -38,6 +38,39 @@ _LOGGER = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
+# Localized defaults
+# ---------------------------------------------------------------------------
+
+_LOCALIZED_DEFAULTS: dict[str, dict] = {
+    "en": {
+        CONF_DAY_MODES: "Home, Work, Telework, Absence",
+        CONF_MODE_DEFAULT: "Work",
+        CONF_MODE_WEEKEND: "Home",
+        CONF_MODE_HOLIDAY: "Home",
+        CONF_MODE_ABSENCE: "Absence",
+        CONF_EVENT_MODE_MAP: "Vacation:Home, Telework:Telework",
+        CONF_THERMOSTAT_MODE_MAP: "Off:Off, Heating:Heating, Cooling:Cooling, Ventilation:Ventilation",
+    },
+    "fr": {
+        CONF_DAY_MODES: "Maison, Travail, Télétravail, Absence",
+        CONF_MODE_DEFAULT: "Travail",
+        CONF_MODE_WEEKEND: "Maison",
+        CONF_MODE_HOLIDAY: "Maison",
+        CONF_MODE_ABSENCE: "Absence",
+        CONF_EVENT_MODE_MAP: "Vacances:Maison, Télétravail:Télétravail",
+        CONF_THERMOSTAT_MODE_MAP: "Off:Eteint, Heating:Chauffage, Cooling:Climatisation, Ventilation:Ventilation",
+    },
+}
+
+
+def _get_localized_defaults(hass) -> dict:
+    """Return defaults localized to the HA instance language."""
+    lang = getattr(hass.config, "language", "en") or "en"
+    lang_code = lang.split("-")[0].lower()
+    return _LOCALIZED_DEFAULTS.get(lang_code, _LOCALIZED_DEFAULTS["en"])
+
+
+# ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
@@ -52,7 +85,7 @@ def _calendars_schema(data: dict[str, Any]) -> vol.Schema:
             ): selector.EntitySelector(
                 selector.EntitySelectorConfig(domain="calendar"),
             ),
-            vol.Optional(
+            vol.Required(
                 CONF_HOLIDAY_CALENDAR,
                 default=data.get(CONF_HOLIDAY_CALENDAR, ""),
             ): selector.EntitySelector(
@@ -251,6 +284,10 @@ class HomeShiftConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     # -- helpers -----------------------------------------------------------
 
+    def _effective_data(self) -> dict[str, Any]:
+        """Return _data merged over localized defaults (for schema builders)."""
+        return {**_get_localized_defaults(self.hass), **self._data}
+
     def _is_config_complete(self) -> bool:
         """Return True when the minimum required configuration is present."""
         return bool(self._data.get(CONF_CALENDAR_ENTITY))
@@ -293,7 +330,7 @@ class HomeShiftConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         return self.async_show_form(
             step_id="calendars",
-            data_schema=_calendars_schema(self._data),
+            data_schema=_calendars_schema(self._effective_data()),
             errors=errors,
         )
 
@@ -316,7 +353,7 @@ class HomeShiftConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         return self.async_show_form(
             step_id="mapping",
-            data_schema=_mapping_schema(self._data),
+            data_schema=_mapping_schema(self._effective_data()),
         )
 
     # -- schedulers --------------------------------------------------------
@@ -373,6 +410,10 @@ class HomeShiftOptionsFlow(config_entries.OptionsFlow):
         """Return True when the minimum required configuration is present."""
         return bool(self._data.get(CONF_CALENDAR_ENTITY))
 
+    def _effective_data(self) -> dict[str, Any]:
+        """Return _data merged over localized defaults (for schema builders)."""
+        return {**_get_localized_defaults(self.hass), **self._data}
+
     # -- entry point -------------------------------------------------------
 
     async def async_step_init(
@@ -412,7 +453,7 @@ class HomeShiftOptionsFlow(config_entries.OptionsFlow):
 
         return self.async_show_form(
             step_id="calendars",
-            data_schema=_calendars_schema(self._data),
+            data_schema=_calendars_schema(self._effective_data()),
             errors=errors,
         )
 
@@ -435,7 +476,7 @@ class HomeShiftOptionsFlow(config_entries.OptionsFlow):
 
         return self.async_show_form(
             step_id="mapping",
-            data_schema=_mapping_schema(self._data),
+            data_schema=_mapping_schema(self._effective_data()),
         )
 
     # -- schedulers --------------------------------------------------------

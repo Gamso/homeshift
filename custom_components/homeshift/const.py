@@ -18,18 +18,18 @@ CONF_MODE_HOLIDAY = "mode_holiday"  # Mode for holidays/vacances
 CONF_EVENT_MODE_MAP = "event_mode_map"  # Mapping: calendar event → day mode
 CONF_MODE_ABSENCE = "mode_absence"  # Mode that blocks automatic updates
 
-# Default values
-DEFAULT_DAY_MODES = ["Maison", "Travail", "Télétravail", "Absence"]
-DEFAULT_THERMOSTAT_MODE_MAP = "Off:Eteint, Heating:Chauffage, Cooling:Climatisation, Ventilation:Ventilation"
+# Default values (English baseline — localized defaults are provided by config_flow)
+DEFAULT_DAY_MODES = ["Home", "Work", "Telework", "Absence"]
+DEFAULT_THERMOSTAT_MODE_MAP = "Off:Off, Heating:Heating, Cooling:Cooling, Ventilation:Ventilation"
 # Internal key that means 'thermostat is off' — schedulers with any thermostat
 # tag are disabled when the thermostat mode matches this key.
 THERMOSTAT_OFF_KEY = "Off"
 DEFAULT_SCAN_INTERVAL = 60  # minutes
 DEFAULT_OVERRIDE_DURATION = 0  # 0 = disabled
-DEFAULT_MODE_DEFAULT = "Travail"
-DEFAULT_MODE_WEEKEND = "Maison"
-DEFAULT_MODE_HOLIDAY = "Maison"
-DEFAULT_EVENT_MODE_MAP = "Vacances:Maison, Télétravail:Télétravail"
+DEFAULT_MODE_DEFAULT = "Work"
+DEFAULT_MODE_WEEKEND = "Home"
+DEFAULT_MODE_HOLIDAY = "Home"
+DEFAULT_EVENT_MODE_MAP = "Vacation:Home, Telework:Telework"
 DEFAULT_MODE_ABSENCE = "Absence"
 
 # Entity IDs

@@ -30,15 +30,8 @@ from custom_components.homeshift.const import (
     CONF_MODE_HOLIDAY,
     CONF_EVENT_MODE_MAP,
     CONF_MODE_ABSENCE,
-    DEFAULT_DAY_MODES,
-    DEFAULT_THERMOSTAT_MODE_MAP,
     DEFAULT_SCAN_INTERVAL,
     DEFAULT_OVERRIDE_DURATION,
-    DEFAULT_MODE_DEFAULT,
-    DEFAULT_MODE_WEEKEND,
-    DEFAULT_MODE_HOLIDAY,
-    DEFAULT_EVENT_MODE_MAP,
-    DEFAULT_MODE_ABSENCE,
     EVENT_NONE,
     EVENT_VACATION,
     EVENT_TELEWORK,
@@ -46,6 +39,17 @@ from custom_components.homeshift.const import (
     EVENT_PERIOD_MORNING,
     EVENT_PERIOD_AFTERNOON,
 )
+from custom_components.homeshift.config_flow import _LOCALIZED_DEFAULTS
+
+# Use French locale defaults for all tests
+_FR = _LOCALIZED_DEFAULTS["fr"]
+DEFAULT_DAY_MODES: list[str] = [m.strip() for m in _FR[CONF_DAY_MODES].split(",")]
+DEFAULT_THERMOSTAT_MODE_MAP: str = _FR[CONF_THERMOSTAT_MODE_MAP]
+DEFAULT_MODE_DEFAULT: str = _FR[CONF_MODE_DEFAULT]
+DEFAULT_MODE_WEEKEND: str = _FR[CONF_MODE_WEEKEND]
+DEFAULT_MODE_HOLIDAY: str = _FR[CONF_MODE_HOLIDAY]
+DEFAULT_EVENT_MODE_MAP: str = _FR[CONF_EVENT_MODE_MAP]
+DEFAULT_MODE_ABSENCE: str = _FR[CONF_MODE_ABSENCE]
 
 # Patch frame.report_usage globally so DataUpdateCoordinator can be instantiated
 _FRAME_PATCH = patch(
@@ -262,17 +266,12 @@ def _make_mock_entry(
         CONF_SCAN_INTERVAL: scan_interval,
         CONF_OVERRIDE_DURATION: override_duration,
         CONF_SCHEDULERS_PER_MODE: schedulers_per_mode or {},
+        CONF_MODE_DEFAULT: mode_default if mode_default is not None else DEFAULT_MODE_DEFAULT,
+        CONF_MODE_WEEKEND: mode_weekend if mode_weekend is not None else DEFAULT_MODE_WEEKEND,
+        CONF_MODE_HOLIDAY: mode_holiday if mode_holiday is not None else DEFAULT_MODE_HOLIDAY,
+        CONF_EVENT_MODE_MAP: event_mode_map if event_mode_map is not None else DEFAULT_EVENT_MODE_MAP,
+        CONF_MODE_ABSENCE: mode_absence if mode_absence is not None else DEFAULT_MODE_ABSENCE,
     }
-    if mode_default is not None:
-        entry.data[CONF_MODE_DEFAULT] = mode_default
-    if mode_weekend is not None:
-        entry.data[CONF_MODE_WEEKEND] = mode_weekend
-    if mode_holiday is not None:
-        entry.data[CONF_MODE_HOLIDAY] = mode_holiday
-    if event_mode_map is not None:
-        entry.data[CONF_EVENT_MODE_MAP] = event_mode_map
-    if mode_absence is not None:
-        entry.data[CONF_MODE_ABSENCE] = mode_absence
     return entry
 
 

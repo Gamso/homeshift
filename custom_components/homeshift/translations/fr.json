@@ -138,11 +138,6 @@
         "name": "Mode Thermostat"
       }
     },
-    "sensor": {
-      "next_day_type": {
-        "name": "Type de jour suivant"
-      }
-    }
   },
   "services": {
     "refresh_schedulers": {

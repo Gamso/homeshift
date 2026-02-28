@@ -35,7 +35,6 @@ DEFAULT_MODE_ABSENCE = "Absence"
 # Entity IDs
 SELECT_DAY_MODE = "day_mode"
 SELECT_THERMOSTAT_MODE = "thermostat_mode"
-SENSOR_NEXT_DAY_TYPE = "next_day_type"
 NUMBER_OVERRIDE_DURATION = "override_duration"
 
 # Calendar events (English baseline — localized values are in LOCALIZED_DEFAULTS)

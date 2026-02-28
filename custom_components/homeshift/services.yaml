@@ -1,0 +1,9 @@
+refresh_schedulers:
+  name: Refresh Schedulers
+  description: Refresh scheduler states based on current day mode and thermostat mode
+  fields: {}
+
+check_next_day:
+  name: Check Next Day
+  description: Check and update the day mode for the next day
+  fields: {}

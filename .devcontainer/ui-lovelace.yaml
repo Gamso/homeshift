@@ -1,0 +1,15 @@
+title: HomeShift Dashboard
+resources:
+  - url: /local/scheduler-card/scheduler-card.js
+    type: module
+views:
+  - title: Home
+    path: home
+    icon: mdi:home
+
+  - title: Scheduler
+    path: scheduler
+    icon: mdi:calendar-clock
+    cards:
+      - type: custom:scheduler-card
+        title: Schedules

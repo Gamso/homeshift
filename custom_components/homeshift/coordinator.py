@@ -37,6 +37,7 @@ from .const import (
     EVENT_PERIOD_MORNING,
     EVENT_PERIOD_AFTERNOON,
     THERMOSTAT_OFF_KEY,
+    get_localized_defaults,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -53,6 +54,8 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
         # Merge config_entry.data with config_entry.options so that values saved
         # via the options flow (stored in entry.options) take precedence.
         _config = {**entry.data, **entry.options}
+        # Localized defaults — used as fallback when a key is absent from the entry
+        _loc = get_localized_defaults(hass)
 
         # Get configurable scan interval (in minutes)
         scan_interval = _config.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
@@ -70,7 +73,7 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
         self.entry = entry
 
         # Parse day mode map (InternalKey:DisplayValue, ...) — same pattern as thermostat
-        day_map_str = _config.get(CONF_DAY_MODE_MAP, DEFAULT_DAY_MODE_MAP)
+        day_map_str = _config.get(CONF_DAY_MODE_MAP, _loc.get(CONF_DAY_MODE_MAP, DEFAULT_DAY_MODE_MAP))
         self._day_mode_map: dict[str, str] = self.parse_day_mode_map(day_map_str)
         self._day_modes: list[str] = list(self._day_mode_map.values())
         self._day_mode: str = self._day_modes[0] if self._day_modes else "Home"
@@ -92,22 +95,22 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
         self._override_until: datetime | None = None
 
         # Parse thermostat mode map (InternalKey:DisplayValue, ...)
-        thermostat_map_str = _config.get(CONF_THERMOSTAT_MODE_MAP, DEFAULT_THERMOSTAT_MODE_MAP)
+        thermostat_map_str = _config.get(CONF_THERMOSTAT_MODE_MAP, _loc.get(CONF_THERMOSTAT_MODE_MAP, DEFAULT_THERMOSTAT_MODE_MAP))
         self._thermostat_mode_map = self.parse_thermostat_mode_map(thermostat_map_str)
         self._thermostat_modes = list(self._thermostat_mode_map.values())
         self._thermostat_mode: str = self._thermostat_modes[0] if self._thermostat_modes else "Off"
 
         # Mode mapping configuration — values are day mode keys, resolved to display names
-        _mode_default_key = _config.get(CONF_MODE_DEFAULT, DEFAULT_MODE_DEFAULT)
-        _mode_weekend_key = _config.get(CONF_MODE_WEEKEND, DEFAULT_MODE_WEEKEND)
-        _mode_holiday_key = _config.get(CONF_MODE_HOLIDAY, DEFAULT_MODE_HOLIDAY)
-        _mode_absence_key = _config.get(CONF_MODE_ABSENCE, DEFAULT_MODE_ABSENCE)
+        _mode_default_key = _config.get(CONF_MODE_DEFAULT, _loc.get(CONF_MODE_DEFAULT, DEFAULT_MODE_DEFAULT))
+        _mode_weekend_key = _config.get(CONF_MODE_WEEKEND, _loc.get(CONF_MODE_WEEKEND, DEFAULT_MODE_WEEKEND))
+        _mode_holiday_key = _config.get(CONF_MODE_HOLIDAY, _loc.get(CONF_MODE_HOLIDAY, DEFAULT_MODE_HOLIDAY))
+        _mode_absence_key = _config.get(CONF_MODE_ABSENCE, _loc.get(CONF_MODE_ABSENCE, DEFAULT_MODE_ABSENCE))
         self._mode_default = self._day_mode_map.get(_mode_default_key, _mode_default_key)
         self._mode_weekend = self._day_mode_map.get(_mode_weekend_key, _mode_weekend_key)
         self._mode_holiday = self._day_mode_map.get(_mode_holiday_key, _mode_holiday_key)
         self._mode_absence = self._day_mode_map.get(_mode_absence_key, _mode_absence_key)
         # event_mode_map: event keyword (lowercase) → day mode display name
-        raw_event_map = self.parse_event_mode_map(_config.get(CONF_EVENT_MODE_MAP, DEFAULT_EVENT_MODE_MAP))
+        raw_event_map = self.parse_event_mode_map(_config.get(CONF_EVENT_MODE_MAP, _loc.get(CONF_EVENT_MODE_MAP, DEFAULT_EVENT_MODE_MAP)))
         # Values in raw_event_map are keys (e.g. "home", "remote") — resolve to display
         self._event_mode_map: dict[str, str] = {kw: self._day_mode_map.get(mode_key, mode_key) for kw, mode_key in raw_event_map.items()}
 

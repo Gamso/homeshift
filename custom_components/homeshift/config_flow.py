@@ -367,8 +367,8 @@ class HomeShiftConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 **user_input.get("defaults_section", {}),
                 **user_input.get("thermostat_section", {}),
             }
-            flat[CONF_DAY_MODE_MAP] = _rebuild_day_mode_map(flat, self._data)
-            flat[CONF_THERMOSTAT_MODE_MAP] = _rebuild_thermostat_map(flat, self._data)
+            flat[CONF_DAY_MODE_MAP] = _rebuild_day_mode_map(flat, self._effective_data())
+            flat[CONF_THERMOSTAT_MODE_MAP] = _rebuild_thermostat_map(flat, self._effective_data())
             self._data.update(flat)
             return await self.async_step_menu()
 
@@ -492,8 +492,8 @@ class HomeShiftOptionsFlow(config_entries.OptionsFlow):
                 **user_input.get("defaults_section", {}),
                 **user_input.get("thermostat_section", {}),
             }
-            flat[CONF_DAY_MODE_MAP] = _rebuild_day_mode_map(flat, self._data)
-            flat[CONF_THERMOSTAT_MODE_MAP] = _rebuild_thermostat_map(flat, self._data)
+            flat[CONF_DAY_MODE_MAP] = _rebuild_day_mode_map(flat, self._effective_data())
+            flat[CONF_THERMOSTAT_MODE_MAP] = _rebuild_thermostat_map(flat, self._effective_data())
             self._data.update(flat)
             return await self.async_step_menu()
 

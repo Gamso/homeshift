@@ -51,8 +51,12 @@ class HomeShiftSelect(CoordinatorEntity[HomeShiftCoordinator], SelectEntity):
 
     @property
     def extra_state_attributes(self) -> dict:
-        """Expose the key→display map so custom cards can translate mode keys."""
-        return {"day_mode_map": self.coordinator.day_mode_map}
+        """Expose option map, keys list and current key for use in templates."""
+        return {
+            "option_map": self.coordinator.day_mode_map,
+            "option_keys": list(self.coordinator.day_mode_map.keys()),
+            "current_key": self.coordinator.day_mode_key,
+        }
 
     def select_option(self, option: str) -> None:
         """Change the selected option (sync stub — async_select_option is used)."""
@@ -90,6 +94,15 @@ class HomeShiftThermostatSelect(CoordinatorEntity[HomeShiftCoordinator], SelectE
     def current_option(self) -> str | None:
         """Return the current selected option."""
         return self.coordinator.thermostat_mode
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        """Expose option map, keys list and current key for use in templates."""
+        return {
+            "option_map": self.coordinator.thermostat_mode_map,
+            "option_keys": list(self.coordinator.thermostat_mode_map.keys()),
+            "current_key": self.coordinator.thermostat_mode_key,
+        }
 
     def select_option(self, option: str) -> None:
         """Change the selected option (sync stub — async_select_option is used)."""

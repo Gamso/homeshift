@@ -16,7 +16,7 @@
         "description": "Configure the calendar entities and scan interval.",
         "data": {
           "calendar_entity": "Work Calendar Entity",
-          "holiday_calendar": "Holiday Calendar Entity (Optional)",
+          "holiday_calendar": "Holiday Calendar Entity",
           "scan_interval": "Calendar Scan Interval (minutes)"
         }
       },
@@ -81,7 +81,7 @@
         "description": "Configure the calendar entities and scan interval.",
         "data": {
           "calendar_entity": "Work Calendar Entity",
-          "holiday_calendar": "Holiday Calendar Entity (Optional)",
+          "holiday_calendar": "Holiday Calendar Entity",
           "scan_interval": "Calendar Scan Interval (minutes)"
         }
       },
@@ -136,11 +136,6 @@
       },
       "thermostat_mode": {
         "name": "Thermostat Mode"
-      }
-    },
-    "sensor": {
-      "next_day_type": {
-        "name": "Next Day Type"
       }
     }
   },

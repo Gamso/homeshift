@@ -32,9 +32,15 @@ from .const import (
     DEFAULT_MODE_HOLIDAY,
     DEFAULT_MODE_ABSENCE,
     DEFAULT_EVENT_MODE_MAP,
+    LOCALIZED_DEFAULTS,
+    get_localized_defaults,
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+# Aliases for backwards compatibility
+_LOCALIZED_DEFAULTS = LOCALIZED_DEFAULTS
+_get_localized_defaults = get_localized_defaults
 
 
 # ---------------------------------------------------------------------------
@@ -52,7 +58,7 @@ def _calendars_schema(data: dict[str, Any]) -> vol.Schema:
             ): selector.EntitySelector(
                 selector.EntitySelectorConfig(domain="calendar"),
             ),
-            vol.Optional(
+            vol.Required(
                 CONF_HOLIDAY_CALENDAR,
                 default=data.get(CONF_HOLIDAY_CALENDAR, ""),
             ): selector.EntitySelector(
@@ -165,8 +171,8 @@ def _validate_calendars(hass, user_input: dict[str, Any]) -> dict[str, str]:
     cal = user_input.get(CONF_CALENDAR_ENTITY)
     if cal and not hass.states.get(cal):
         errors[CONF_CALENDAR_ENTITY] = "invalid_calendar"
-    hol = user_input.get(CONF_HOLIDAY_CALENDAR)
-    if hol and not hass.states.get(hol):
+    hol = user_input.get(CONF_HOLIDAY_CALENDAR, "")
+    if not hass.states.get(hol):
         errors[CONF_HOLIDAY_CALENDAR] = "invalid_calendar"
     return errors
 
@@ -251,6 +257,10 @@ class HomeShiftConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     # -- helpers -----------------------------------------------------------
 
+    def _effective_data(self) -> dict[str, Any]:
+        """Return _data merged over localized defaults (for schema builders)."""
+        return {**_get_localized_defaults(self.hass), **self._data}
+
     def _is_config_complete(self) -> bool:
         """Return True when the minimum required configuration is present."""
         return bool(self._data.get(CONF_CALENDAR_ENTITY))
@@ -293,7 +303,7 @@ class HomeShiftConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         return self.async_show_form(
             step_id="calendars",
-            data_schema=_calendars_schema(self._data),
+            data_schema=_calendars_schema(self._effective_data()),
             errors=errors,
         )
 
@@ -316,7 +326,7 @@ class HomeShiftConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         return self.async_show_form(
             step_id="mapping",
-            data_schema=_mapping_schema(self._data),
+            data_schema=_mapping_schema(self._effective_data()),
         )
 
     # -- schedulers --------------------------------------------------------
@@ -373,6 +383,10 @@ class HomeShiftOptionsFlow(config_entries.OptionsFlow):
         """Return True when the minimum required configuration is present."""
         return bool(self._data.get(CONF_CALENDAR_ENTITY))
 
+    def _effective_data(self) -> dict[str, Any]:
+        """Return _data merged over localized defaults (for schema builders)."""
+        return {**_get_localized_defaults(self.hass), **self._data}
+
     # -- entry point -------------------------------------------------------
 
     async def async_step_init(
@@ -412,7 +426,7 @@ class HomeShiftOptionsFlow(config_entries.OptionsFlow):
 
         return self.async_show_form(
             step_id="calendars",
-            data_schema=_calendars_schema(self._data),
+            data_schema=_calendars_schema(self._effective_data()),
             errors=errors,
         )
 
@@ -435,7 +449,7 @@ class HomeShiftOptionsFlow(config_entries.OptionsFlow):
 
         return self.async_show_form(
             step_id="mapping",
-            data_schema=_mapping_schema(self._data),
+            data_schema=_mapping_schema(self._effective_data()),
         )
 
     # -- schedulers --------------------------------------------------------

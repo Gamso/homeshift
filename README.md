@@ -1,187 +1,189 @@
-# HomeShift - Home Assistant Custom Component
+# HomeShift — Home Assistant Custom Integration
 
-Un composant personnalisé pour Home Assistant qui gère automatiquement les modes de jour et les modes de thermostat en fonction d'un calendrier.
+[![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/hacs/integration)
 
-## Description
+Automatic day-mode and thermostat-mode management for Home Assistant, driven by your calendar.
 
-Ce composant permet de :
-1. Récupérer les événements d'un agenda pour connaître le type de jour du lendemain : Maison, Travail, Télétravail, Absence
-2. Piloter les schedulers (activer/désactiver) en fonction du type de jour et du mode thermostat
+---
 
-## Fonctionnalités
+## Table of Contents
 
-- **Détection automatique du type de jour** : Basé sur les événements du calendrier, les week-ends et les jours fériés
-- **Modes de jour configurables** : Maison, Travail, Télétravail, Absence (personnalisables)
-- **Modes thermostat configurables** : Eteint, Chauffage, Climatisation, Ventilation (personnalisables)
-- **Vérification quotidienne automatique** : Vérifie et met à jour le mode du lendemain à 00:10
-- **Services Home Assistant** : Contrôle manuel via des services
+- [HomeShift — Home Assistant Custom Integration](#homeshift--home-assistant-custom-integration)
+  - [Table of Contents](#table-of-contents)
+  - [Installation](#installation)
+    - [HACS (Recommended)](#hacs-recommended)
+  - [✨ Overview](#-overview)
+    - [How It Works](#how-it-works)
+  - [✅ Requirements](#-requirements)
+  - [⚙️ Quick Setup](#️-quick-setup)
+  - [📊 Entities](#-entities)
+    - [`select.day_mode`](#selectday_mode)
+    - [`select.thermostat_mode`](#selectthermostat_mode)
+    - [`sensor.next_day_type`](#sensornext_day_type)
+    - [`number.override_duration`](#numberoverride_duration)
+  - [🛠️ Services](#️-services)
+    - [`homeshift.refresh_schedulers`](#homeshiftrefresh_schedulers)
+    - [`homeshift.check_next_day`](#homeshiftcheck_next_day)
+  - [⚙️ Configuration Parameters](#️-configuration-parameters)
+  - [🧠 Detection Logic](#-detection-logic)
+    - [Half-Day Events](#half-day-events)
+  - [🗓️ Scheduler Integration](#️-scheduler-integration)
+  - [📄 License](#-license)
+
+---
 
 ## Installation
 
-### HACS (Recommandé)
+### HACS (Recommended)
 
-1. Ouvrez HACS dans Home Assistant
-2. Allez dans "Integrations"
-3. Cliquez sur le menu trois points en haut à droite
-4. Sélectionnez "Custom repositories"
-5. Ajoutez `https://github.com/Gamso/homeshift` comme repository
-6. Sélectionnez "Integration" comme catégorie
-7. Cliquez sur "Add"
-8. Recherchez "HomeShift" et installez-le
-9. Redémarrez Home Assistant
+1. Open HACS in Home Assistant
+2. Go to **Integrations**
+3. Click the three-dot menu → **Custom repositories**
+4. Add `https://github.com/Gamso/homeshift` with category **Integration**
+5. Search for **HomeShift** and install it
+6. Restart Home Assistant
 
-### Installation Manuelle
+---
 
-1. Téléchargez le dossier `custom_components/homeshift`
-2. Copiez-le dans le dossier `custom_components` de votre configuration Home Assistant
-3. Redémarrez Home Assistant
+## ✨ Overview
 
-## Configuration
+HomeShift is a custom Home Assistant integration that automatically manages **day modes** (Home, Work, Telework, Absence…) and **thermostat modes** (Heating, Cooling, Off…) based on your calendar events, weekends, and public holidays.
 
-### Via l'interface utilisateur
+Periodically (every 60 minutes by default), it reads today's and tomorrow's calendar, determines the appropriate day mode, and activates the matching scheduler switches — so your home is always in the right mode at the right time.
 
-1. Allez dans Configuration → Intégrations
-2. Cliquez sur "+ Ajouter une intégration"
-3. Recherchez "HomeShift"
-4. Suivez les étapes de configuration :
-   - **Calendrier Travail** : Sélectionnez l'entité calendrier contenant vos événements de travail
-   - **Calendrier Jours Fériés** (Optionnel) : Sélectionnez l'entité calendrier des jours fériés
-   - **Modes de Jour** : Liste des modes séparés par des virgules (par défaut: Maison, Travail, Télétravail, Absence)
-   - **Modes Thermostat** : Liste des modes séparés par des virgules (par défaut: Eteint, Chauffage, Climatisation, Ventilation)
-   - **Heure de Vérification** : Heure de la vérification quotidienne (par défaut: 00:10:00)
+### How It Works
 
-## Utilisation
+1. Reads events from a work/schedule calendar for the next day
+2. Checks for public holidays via an optional holiday calendar
+3. Determines the day mode (configurable mapping: event → mode)
+4. Activates / deactivates scheduler switches tagged with the current day mode and thermostat mode
 
-### Entités créées
+---
 
-L'intégration crée les entités suivantes :
+## ✅ Requirements
 
-1. **select.mode_jour** : Sélecteur du mode de jour actuel
-2. **select.mode_thermostat** : Sélecteur du mode thermostat actuel
-3. **sensor.next_day_type** : Capteur indiquant le type du lendemain (Vacances, Télétravail, ou Aucun)
+- Home Assistant 2023.1 or later
+- A **calendar** entity for work/schedule events
+- A **calendar** entity for public holidays
+- [Scheduler integration](https://github.com/nielsfaber/scheduler-component) for scheduler management
 
-### Services
+---
 
-- **homeshift.refresh_schedulers** : Rafraîchit manuellement l'état des schedulers
-- **homeshift.check_next_day** : Vérifie et met à jour manuellement le mode du lendemain
+## ⚙️ Quick Setup
 
-### Événements du calendrier
+1. Add the integration: **Settings → Devices & Services → Add Integration → HomeShift**
+2. Select your work calendar entity
+3. Optionally select a holiday calendar
+4. Configure day modes and thermostat modes (or keep defaults)
+5. Save — it starts working immediately
 
-Le composant reconnaît les événements suivants dans le calendrier :
-- **"Vacances"** : Force le mode "Maison"
-- **"Télétravail"** : Force le mode "Télétravail"
+The integration will:
+- Check the calendar periodically (every 60 minutes by default, configurable)
+- Update `select.day_mode` automatically
+- Activate / deactivate the matching scheduler switches
 
-### Logique de détection du lendemain
+---
 
-La priorité de détection est la suivante :
-1. Vacances (événement calendrier)
-2. Week-end (samedi ou dimanche)
-3. Télétravail (événement calendrier)
-4. Jour férié (calendrier des jours fériés)
-5. Travail (par défaut)
+## 📊 Entities
 
-Le mode n'est pas modifié automatiquement si le mode actuel est "Absence".
+### `select.day_mode`
+Current day mode selector.
 
-## Exemple d'automatisation
+- **Type:** Select
+- **Default options:** `Home`, `Work`, `Telework`, `Absence`
+- **Writable:** Yes (manual override supported)
 
-Pour utiliser le composant avec vos schedulers existants :
+### `select.thermostat_mode`
+Current thermostat mode selector.
 
-```yaml
-automation:
-  - alias: "Rafraîchir schedulers au changement de mode"
-    trigger:
-      - platform: state
-        entity_id: select.mode_thermostat
-      - platform: state
-        entity_id: select.mode_jour
-    action:
-      - service: homeshift.refresh_schedulers
+- **Type:** Select
+- **Default options:** `Off`, `Heating`, `Cooling`, `Ventilation`
+- **Writable:** Yes
+
+### `sensor.next_day_type`
+Event type detected from the active calendar event today (persisted for the full day until midnight).
+
+- **Type:** Sensor
+- **Values:** `Vacation`, `Telework`, `None`
+
+### `number.override_duration`
+Duration (in minutes) during which automatic updates are blocked after a manual mode change.
+
+- **Type:** Number
+- **Default:** `0` (disabled)
+
+---
+
+## 🛠️ Services
+
+### `homeshift.refresh_schedulers`
+Manually trigger a refresh of scheduler switches based on the current day mode and thermostat mode.
+
+### `homeshift.check_next_day`
+Manually trigger the next-day detection and update `select.day_mode` accordingly.
+
+---
+
+## ⚙️ Configuration Parameters
+
+All parameters are configurable via the Home Assistant UI (Integration Options).
+
+| Parameter               | Default                                 | Description                                       |
+| ----------------------- | --------------------------------------- | ------------------------------------------------- |
+| **Work Calendar**       | —                                       | Calendar entity with work/schedule events         |
+| **Holiday Calendar**    | —                                       | Calendar entity for public holidays               |
+| **Day Modes**           | `Home, Work, Telework, Absence` (en)    | Comma-separated list of available day modes       |
+| **Thermostat Mode Map** | `Off:Off, Heating:Heating, ...` (en) /  | Internal key → display label mapping              |
+| **Scan Interval**       | `60 min`                                | How often the coordinator refreshes               |
+| **Override Duration**   | `0` (disabled)                          | Minutes to block auto-updates after manual change |
+| **Default Mode**        | `Work` / `Work`                         | Mode for regular work days                        |
+| **Weekend Mode**        | `Home` / `Home`                         | Mode for Saturdays and Sundays                    |
+| **Holiday Mode**        | `Home` / `Home`                         | Mode for public holidays                          |
+| **Event Mode Map**      | `Vacation:Home, Telework:Telework` (en) | Calendar event → day mode mapping                 |
+| **Absence Mode**        | `Absence`                               | Mode that blocks automatic updates                |
+
+---
+
+## 🧠 Detection Logic
+
+On every refresh cycle, the integration evaluates tomorrow using this priority order:
+
+| Priority | Condition                                                 | Resulting mode                |
+| -------- | --------------------------------------------------------- | ----------------------------- |
+| 1        | Calendar event matches `event_mode_map` (e.g. "Vacation") | Mapped mode (e.g. `Home`)     |
+| 2        | Tomorrow is Saturday or Sunday                            | `mode_weekend`                |
+| 3        | Calendar event matches `event_mode_map` (e.g. "Telework") | Mapped mode (e.g. `Telework`) |
+| 4        | Tomorrow is a public holiday (holiday calendar)           | `mode_holiday`                |
+| 5        | Default                                                   | `mode_default` (e.g. `Work`)  |
+
+> **Note:** If the current day mode is set to the **Absence mode**, automatic updates are blocked.
+
+### Half-Day Events
+
+Events that cover only the morning or afternoon are detected and the mode is applied only to the relevant half of the day.
+
+---
+
+## 🗓️ Scheduler Integration
+
+HomeShift activates and deactivates scheduler switches based on the combination of **day mode** and **thermostat mode**.
+
+Organize your scheduler switches with tags or names following this convention:
+
+```
+switch.schedulers_<thermostat_mode>_<day_mode>
 ```
 
-## Organisation des schedulers
+Examples:
+- `switch.schedulers_heating_home`
+- `switch.schedulers_heating_work`
+- `switch.schedulers_heating_telework`
+- `switch.schedulers_heating_absence`
 
-Pour que le composant puisse gérer vos schedulers, organisez-les selon la convention de nommage :
-- `switch.schedulers_chauffage_maison`
-- `switch.schedulers_chauffage_travail`
-- `switch.schedulers_chauffage_teletravail`
-- `switch.schedulers_chauffage_absence`
-- etc.
+When the thermostat mode is `Off` (the internal `THERMOSTAT_OFF_KEY`), any scheduler switch that carries a **thermostat-mode tag** (e.g. `Heating`, `Cooling`) is force-disabled. Schedulers without a thermostat tag are left untouched.
 
-Vous pouvez également utiliser des tags sur vos schedulers correspondant aux modes de jour et de thermostat.
+---
 
-## Développement
+## 📄 License
 
-### Prérequis
-
-- Python 3.11+
-- Home Assistant Core (version récente)
-
-### Configuration du développement
-
-#### Option 1: Dev Container (Recommandé)
-
-Le projet inclut une configuration Dev Container pour Visual Studio Code :
-
-```bash
-# Cloner le repository
-git clone https://github.com/Gamso/homeshift.git
-cd homeshift
-
-# Ouvrir dans VS Code
-code .
-
-# Appuyer sur F1 et sélectionner "Dev Containers: Reopen in Container"
-```
-
-La configuration Dev Container inclut :
-- Home Assistant complet pour les tests
-- Extensions VS Code pré-configurées
-- Environnement Python configuré
-- Accès à Home Assistant sur http://localhost:8123
-
-Voir [.devcontainer/README.md](.devcontainer/README.md) pour plus de détails.
-
-#### Option 2: Docker Compose
-
-```bash
-# Lancer avec Docker Compose depuis le dossier container
-cd container
-docker-compose up -d
-```
-
-### Structure du projet
-
-```
-custom_components/homeshift/
-├── __init__.py           # Point d'entrée de l'intégration
-├── config_flow.py        # Configuration via l'interface utilisateur
-├── const.py              # Constantes
-├── coordinator.py        # Coordinateur de données
-├── manifest.json         # Métadonnées de l'intégration
-├── select.py             # Entités select
-├── sensor.py             # Entités sensor
-├── services.yaml         # Définition des services
-├── strings.json          # Chaînes de traduction
-└── translations/
-    ├── en.json          # Traductions anglaises
-    └── fr.json          # Traductions françaises
-```
-
-## Contribution
-
-Les contributions sont les bienvenues ! N'hésitez pas à :
-- Signaler des bugs
-- Proposer de nouvelles fonctionnalités
-- Soumettre des pull requests
-
-## Licence
-
-Ce projet est sous licence MIT.
-
-## Auteur
-
-Gamso - [@Gamso](https://github.com/Gamso)
-
-## Inspiration
-
-Ce projet s'inspire de [smart_fan_controller](https://github.com/Gamso/smart_fan_controller) pour l'environnement Docker et la structure du projet.
+This project is licensed under the MIT License.

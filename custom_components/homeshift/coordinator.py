@@ -32,9 +32,10 @@ from .const import (
     DEFAULT_MODE_HOLIDAY,
     DEFAULT_EVENT_MODE_MAP,
     DEFAULT_MODE_ABSENCE,
-    EVENT_NONE,
-    EVENT_VACATION,
-    EVENT_TELEWORK,
+    KEY_EVENT_NONE,
+    KEY_EVENT_VACATION,
+    KEY_EVENT_TELEWORK,
+    get_localized_defaults,
     EVENT_PERIOD_ALL_DAY,
     EVENT_PERIOD_MORNING,
     EVENT_PERIOD_AFTERNOON,
@@ -66,12 +67,19 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
             update_interval=timedelta(minutes=scan_interval),
         )
         self.entry = entry
+
+        # Localized event type strings (e.g. "None"/"Aucun", "Vacation"/"Vacances", ...)
+        _loc = get_localized_defaults(hass)
+        self._event_none: str = _loc[KEY_EVENT_NONE]
+        self._event_vacation: str = _loc[KEY_EVENT_VACATION]
+        self._event_telework: str = _loc[KEY_EVENT_TELEWORK]
+
         self._day_mode: str = DEFAULT_DAY_MODES[0]
         self._current_event: str | None = None
         self._event_period: str | None = None  # all_day, morning, afternoon
         # Day-level event type: persists until midnight so the sensor doesn't
-        # flicker back to 'Aucun' between half-day events
-        self._today_type: str = EVENT_NONE
+        # flicker back to EVENT_NONE between half-day events
+        self._today_type: str = self._event_none
         self._today_date: date | None = None
         # Manual override duration (minutes) — mutable at runtime via number entity
         override_raw = entry.data.get(CONF_OVERRIDE_DURATION, DEFAULT_OVERRIDE_DURATION)
@@ -88,7 +96,7 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
 
         # Parse thermostat mode map (InternalKey:DisplayValue, ...)
         thermostat_map_str = entry.data.get(CONF_THERMOSTAT_MODE_MAP, DEFAULT_THERMOSTAT_MODE_MAP)
-        self._thermostat_mode_map = self._parse_thermostat_mode_map(thermostat_map_str)
+        self._thermostat_mode_map = self.parse_thermostat_mode_map(thermostat_map_str)
         self._thermostat_modes = list(self._thermostat_mode_map.values())
         self._thermostat_mode: str = self._thermostat_modes[0] if self._thermostat_modes else "Off"
 
@@ -96,7 +104,7 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
         self._mode_default = entry.data.get(CONF_MODE_DEFAULT, DEFAULT_MODE_DEFAULT)
         self._mode_weekend = entry.data.get(CONF_MODE_WEEKEND, DEFAULT_MODE_WEEKEND)
         self._mode_holiday = entry.data.get(CONF_MODE_HOLIDAY, DEFAULT_MODE_HOLIDAY)
-        self._event_mode_map = self._parse_event_mode_map(entry.data.get(CONF_EVENT_MODE_MAP, DEFAULT_EVENT_MODE_MAP))
+        self._event_mode_map = self.parse_event_mode_map(entry.data.get(CONF_EVENT_MODE_MAP, DEFAULT_EVENT_MODE_MAP))
         self._mode_absence = entry.data.get(CONF_MODE_ABSENCE, DEFAULT_MODE_ABSENCE)
 
         _LOGGER.info(
@@ -106,7 +114,7 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
             "mode_default=%s, mode_weekend=%s, mode_holiday=%s, mode_absence=%s | "
             "thermostat_modes=%s | event_mode_map=%s",
             entry.data.get(CONF_CALENDAR_ENTITY),
-            entry.data.get(CONF_HOLIDAY_CALENDAR) or "(none)",
+            entry.data.get(CONF_HOLIDAY_CALENDAR, "(missing)"),
             scan_interval,
             self._day_modes,
             self._mode_default,
@@ -118,7 +126,7 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
         )
 
     @staticmethod
-    def _parse_event_mode_map(raw: str) -> dict[str, str]:
+    def parse_event_mode_map(raw: str) -> dict[str, str]:
         """Parse 'Event1:Mode1, Event2:Mode2' into a dict.
 
         Returns a case-insensitive-lookup dict (keys are lowered).
@@ -138,7 +146,7 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
         return mapping
 
     @staticmethod
-    def _parse_thermostat_mode_map(raw: str) -> dict[str, str]:
+    def parse_thermostat_mode_map(raw: str) -> dict[str, str]:
         """Parse 'Key1:Display1, Key2:Display2' into an ordered dict.
 
         Keys are internal English identifiers (case preserved).
@@ -177,6 +185,14 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
     def day_mode(self) -> str:
         """Return current day mode."""
         return self._day_mode
+
+    @day_mode.setter
+    def day_mode(self, value: str) -> None:
+        """Set day mode directly (no override logic or scheduler refresh).
+
+        Intended for test setup only. Use async_set_day_mode() at runtime.
+        """
+        self._day_mode = value
 
     @property
     def thermostat_mode(self) -> str:
@@ -297,7 +313,7 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
         self.async_set_updated_data(self._build_result())
 
     @staticmethod
-    def _detect_event_period(start_time_str: str, end_time_str: str) -> str:
+    def detect_event_period(start_time_str: str, end_time_str: str) -> str:
         """Detect whether the event is all-day, morning, or afternoon.
 
         All-day events have times at midnight boundaries (00:00:00).
@@ -324,6 +340,13 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
 
         # Spans entire day or both halves
         return EVENT_PERIOD_ALL_DAY
+
+    async def async_update_data(self) -> dict:
+        """Public entry point for fetching data (delegates to _async_update_data).
+
+        Exposed so that tests can call this without accessing a protected member.
+        """
+        return await self._async_update_data()
 
     async def _async_update_data(self) -> dict:
         """Fetch data from calendar and determine current mode.
@@ -364,13 +387,13 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
         # Determine current event from calendar
         self._current_event = None
         self._event_period = None
-        next_day_type = EVENT_NONE
+        today_type = self._event_none
 
         # Reset day-level event type at midnight (new calendar day)
         today = now.date()
         if today != self._today_date:
             _LOGGER.debug("New calendar day (%s), resetting today_type", today)
-            self._today_type = EVENT_NONE
+            self._today_type = self._event_none
             self._today_date = today
 
         if calendar_state.state == "on":
@@ -380,18 +403,18 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
 
             if event_message:
                 self._current_event = event_message
-                self._event_period = self._detect_event_period(event_start, event_end)
+                self._event_period = self.detect_event_period(event_start, event_end)
 
-                if EVENT_VACATION.lower() in event_message.lower():
-                    next_day_type = EVENT_VACATION
-                elif EVENT_TELEWORK.lower() in event_message.lower():
-                    next_day_type = EVENT_TELEWORK
+                if self._event_vacation.lower() in event_message.lower():
+                    today_type = self._event_vacation
+                elif self._event_telework.lower() in event_message.lower():
+                    today_type = self._event_telework
                 else:
-                    next_day_type = event_message
+                    today_type = event_message
                 # Persist the day-level type: once a known event is seen
                 # for today it stays visible until midnight
-                if next_day_type != EVENT_NONE:
-                    self._today_type = next_day_type
+                if today_type != self._event_none:
+                    self._today_type = today_type
 
         # Auto-update mode (skip if absence mode or manual override is active)
         if self._day_mode == self._mode_absence:
@@ -412,7 +435,7 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
                     self._override_until.strftime("%H:%M:%S"),
                 )
                 self._override_until = None
-            new_mode = await self._determine_mode(next_day_type)
+            new_mode = await self._determine_mode(today_type)
             if new_mode and new_mode != self._day_mode and new_mode in self._day_modes:
                 _LOGGER.info(
                     "Auto mode change: day_mode '%s' -> '%s' (event=%s, period=%s)",
@@ -436,7 +459,7 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
     def _build_result(self) -> dict:
         """Build the data dict returned by the coordinator."""
         return {
-            "next_day_type": self._today_type,
+            "today_type": self._today_type,
             "current_event": self._current_event,
             "event_period": self._event_period,
             "day_mode": self._day_mode,
@@ -445,7 +468,7 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
             "override_until": self._override_until.isoformat() if self._override_until else None,
         }
 
-    async def _determine_mode(self, next_day_type: str) -> str | None:
+    async def _determine_mode(self, today_type: str) -> str | None:
         """Determine the appropriate mode based on current state.
 
         Uses configurable mappings instead of hardcoded values.
@@ -459,16 +482,15 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
         is_weekend = now.weekday() in [5, 6]
 
         # Check holiday calendar
-        holiday_calendar = self.entry.data.get(CONF_HOLIDAY_CALENDAR)
+        holiday_calendar = self.entry.data.get(CONF_HOLIDAY_CALENDAR, "")
         is_holiday = False
-        if holiday_calendar:
-            holiday_state = self.hass.states.get(holiday_calendar)
-            if holiday_state and holiday_state.state == "on":
-                is_holiday = True
+        holiday_state = self.hass.states.get(holiday_calendar)
+        if holiday_state and holiday_state.state == "on":
+            is_holiday = True
 
         # 1. Check event_mode_map for the current event type
-        if next_day_type and next_day_type != EVENT_NONE:
-            mapped_mode = self._event_mode_map.get(next_day_type.lower())
+        if today_type and today_type != self._event_none:
+            mapped_mode = self._event_mode_map.get(today_type.lower())
             if mapped_mode:
                 return mapped_mode
 

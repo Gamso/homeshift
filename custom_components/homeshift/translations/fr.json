@@ -16,7 +16,7 @@
         "description": "Configurez les entités calendrier et l'intervalle de vérification.",
         "data": {
           "calendar_entity": "Entité Calendrier Travail",
-          "holiday_calendar": "Entité Calendrier Jours Fériés (Optionnel)",
+          "holiday_calendar": "Entité Calendrier Jours Fériés",
           "scan_interval": "Intervalle de vérification du calendrier (minutes)"
         }
       },
@@ -81,7 +81,7 @@
         "description": "Configurez les entités calendrier et l'intervalle de vérification.",
         "data": {
           "calendar_entity": "Entité Calendrier Travail",
-          "holiday_calendar": "Entité Calendrier Jours Fériés (Optionnel)",
+          "holiday_calendar": "Entité Calendrier Jours Fériés",
           "scan_interval": "Intervalle de vérification du calendrier (minutes)"
         }
       },
@@ -136,11 +136,6 @@
       },
       "thermostat_mode": {
         "name": "Mode Thermostat"
-      }
-    },
-    "sensor": {
-      "next_day_type": {
-        "name": "Type de jour suivant"
       }
     }
   },

@@ -19,7 +19,6 @@ Automatic day-mode and thermostat-mode management for Home Assistant, driven by 
   - [📊 Entities](#-entities)
     - [`select.day_mode`](#selectday_mode)
     - [`select.thermostat_mode`](#selectthermostat_mode)
-    - [`sensor.next_day_type`](#sensornext_day_type)
     - [`number.override_duration`](#numberoverride_duration)
   - [🛠️ Services](#️-services)
     - [`homeshift.refresh_schedulers`](#homeshiftrefresh_schedulers)
@@ -100,12 +99,6 @@ Current thermostat mode selector.
 - **Default options:** `Off`, `Heating`, `Cooling`, `Ventilation`
 - **Writable:** Yes
 
-### `sensor.next_day_type`
-Event type detected from the active calendar event today (persisted for the full day until midnight).
-
-- **Type:** Sensor
-- **Values:** `Vacation`, `Telework`, `None`
-
 ### `number.override_duration`
 Duration (in minutes) during which automatic updates are blocked after a manual mode change.
 
@@ -128,19 +121,19 @@ Manually trigger the next-day detection and update `select.day_mode` accordingly
 
 All parameters are configurable via the Home Assistant UI (Integration Options).
 
-| Parameter               | Default                                 | Description                                       |
-| ----------------------- | --------------------------------------- | ------------------------------------------------- |
-| **Work Calendar**       | —                                       | Calendar entity with work/schedule events         |
-| **Holiday Calendar**    | —                                       | Calendar entity for public holidays               |
-| **Day Modes**           | `Home, Work, Telework, Absence` (en)    | Comma-separated list of available day modes       |
-| **Thermostat Mode Map** | `Off:Off, Heating:Heating, ...` (en) /  | Internal key → display label mapping              |
-| **Scan Interval**       | `60 min`                                | How often the coordinator refreshes               |
-| **Override Duration**   | `0` (disabled)                          | Minutes to block auto-updates after manual change |
-| **Default Mode**        | `Work` / `Work`                         | Mode for regular work days                        |
-| **Weekend Mode**        | `Home` / `Home`                         | Mode for Saturdays and Sundays                    |
-| **Holiday Mode**        | `Home` / `Home`                         | Mode for public holidays                          |
-| **Event Mode Map**      | `Vacation:Home, Telework:Telework` (en) | Calendar event → day mode mapping                 |
-| **Absence Mode**        | `Absence`                               | Mode that blocks automatic updates                |
+| Parameter               | Default                            | Description                                       |
+| ----------------------- | ---------------------------------- | ------------------------------------------------- |
+| **Work Calendar**       | —                                  | Calendar entity with work/schedule events         |
+| **Holiday Calendar**    | —                                  | Calendar entity for public holidays               |
+| **Day Modes**           | `Home, Work, Telework, Absence`    | Comma-separated list of available day modes       |
+| **Thermostat Mode Map** | `Off:Off, Heating:Heating, ...`    | Internal key → display label mapping              |
+| **Scan Interval**       | `60 min`                           | How often the coordinator refreshes               |
+| **Override Duration**   | `0` (disabled)                     | Minutes to block auto-updates after manual change |
+| **Default Mode**        | `Work` / `Work`                    | Mode for regular work days                        |
+| **Weekend Mode**        | `Home` / `Home`                    | Mode for Saturdays and Sundays                    |
+| **Holiday Mode**        | `Home` / `Home`                    | Mode for public holidays                          |
+| **Event Mode Map**      | `Vacation:Home, Telework:Telework` | Calendar event → day mode mapping                 |
+| **Absence Mode**        | `Absence`                          | Mode that blocks automatic updates                |
 
 ---
 

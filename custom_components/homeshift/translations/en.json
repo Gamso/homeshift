@@ -137,7 +137,7 @@
       "thermostat_mode": {
         "name": "Thermostat Mode"
       }
-    },
+    }
   },
   "services": {
     "refresh_schedulers": {

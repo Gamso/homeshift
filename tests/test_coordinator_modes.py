@@ -15,7 +15,7 @@ from custom_components.homeshift.const import (
 )
 from .conftest import (
     EVENT_NONE,
-    EVENT_TELEWORK,
+    EVENT_REMOTE,
     EVENT_VACATION,
     DEFAULT_MODE_DEFAULT,
     DEFAULT_MODE_WEEKEND,
@@ -48,8 +48,8 @@ class TestDefaultModeMapping:
 
         assert coordinator.day_mode == DEFAULT_MODE_DEFAULT
 
-    def test_full_day_telework_sets_telework_mode(self):
-        """Full day telework sets telework mode."""
+    def test_full_day_remote_sets_remote_mode(self):
+        """Full day remote sets remote mode."""
         hass = make_mock_hass()
         entry = make_mock_entry()
         hass.states.get.return_value = make_calendar_state(
@@ -64,11 +64,11 @@ class TestDefaultModeMapping:
             result = asyncio.get_event_loop().run_until_complete(coordinator.async_update_data())
 
         assert coordinator.day_mode == "Télétravail"
-        assert result["today_type"] == EVENT_TELEWORK
+        assert result["today_type"] == EVENT_REMOTE
         assert result["event_period"] == EVENT_PERIOD_ALL_DAY
 
-    def test_afternoon_telework_active(self):
-        """Afternoon telework active."""
+    def test_afternoon_remote_active(self):
+        """Afternoon remote active."""
         hass = make_mock_hass()
         entry = make_mock_entry()
         hass.states.get.return_value = make_calendar_state(
@@ -85,8 +85,8 @@ class TestDefaultModeMapping:
         assert coordinator.day_mode == "Télétravail"
         assert result["event_period"] == EVENT_PERIOD_AFTERNOON
 
-    def test_afternoon_telework_morning_no_event(self):
-        """Afternoon telework morning no event."""
+    def test_afternoon_remote_morning_no_event(self):
+        """Afternoon remote morning no event."""
         hass = make_mock_hass()
         entry = make_mock_entry()
         hass.states.get.return_value = make_calendar_state(state="off")
@@ -100,8 +100,8 @@ class TestDefaultModeMapping:
         assert coordinator.day_mode == DEFAULT_MODE_DEFAULT
         assert result["today_type"] == EVENT_NONE
 
-    def test_morning_telework_active(self):
-        """Morning telework active."""
+    def test_morning_remote_active(self):
+        """Morning remote active."""
         hass = make_mock_hass()
         entry = make_mock_entry()
         hass.states.get.return_value = make_calendar_state(
@@ -118,8 +118,8 @@ class TestDefaultModeMapping:
         assert coordinator.day_mode == "Télétravail"
         assert result["event_period"] == EVENT_PERIOD_MORNING
 
-    def test_morning_telework_afternoon_reverts(self):
-        """Morning telework afternoon reverts."""
+    def test_morning_remote_afternoon_reverts(self):
+        """Morning remote afternoon reverts."""
         hass = make_mock_hass()
         entry = make_mock_entry()
         hass.states.get.return_value = make_calendar_state(state="off")
@@ -468,8 +468,8 @@ class TestConfigurableAbsenceMode:
 class TestHalfDayTransitionSequence:
     """Verify mode transitions across a full day with morning or afternoon half-day events."""
 
-    def test_full_day_sequence_afternoon_telework(self):
-        """Full day sequence afternoon telework."""
+    def test_full_day_sequence_afternoon_remote(self):
+        """Full day sequence afternoon remote."""
         hass = make_mock_hass()
         entry = make_mock_entry(scan_interval=60)
         coordinator = HomeShiftCoordinator(hass, entry)
@@ -507,8 +507,8 @@ class TestHalfDayTransitionSequence:
             loop.run_until_complete(coordinator.async_update_data())
         assert coordinator.day_mode == DEFAULT_MODE_DEFAULT
 
-    def test_full_day_sequence_morning_telework(self):
-        """Full day sequence morning telework."""
+    def test_full_day_sequence_morning_remote(self):
+        """Full day sequence morning remote."""
         hass = make_mock_hass()
         entry = make_mock_entry(scan_interval=60)
         coordinator = HomeShiftCoordinator(hass, entry)
@@ -562,13 +562,13 @@ class TestTodayTypePersistence:
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
             mock_dt.now.return_value = datetime(2026, 3, 12, 8, 0, 0)
             result = loop.run_until_complete(coordinator.async_update_data())
-        assert result["today_type"] == EVENT_TELEWORK
+        assert result["today_type"] == EVENT_REMOTE
 
         hass.states.get.return_value = make_calendar_state(state="off")
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
             mock_dt.now.return_value = datetime(2026, 3, 12, 14, 0, 0)
             result = loop.run_until_complete(coordinator.async_update_data())
-        assert result["today_type"] == EVENT_TELEWORK
+        assert result["today_type"] == EVENT_REMOTE
 
     def test_today_type_persists_after_afternoon_event_ends(self):
         """Today type persists after afternoon event ends."""
@@ -584,13 +584,13 @@ class TestTodayTypePersistence:
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
             mock_dt.now.return_value = datetime(2026, 3, 4, 13, 0, 0)
             result = loop.run_until_complete(coordinator.async_update_data())
-        assert result["today_type"] == EVENT_TELEWORK
+        assert result["today_type"] == EVENT_REMOTE
 
         hass.states.get.return_value = make_calendar_state(state="off")
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
             mock_dt.now.return_value = datetime(2026, 3, 4, 20, 0, 0)
             result = loop.run_until_complete(coordinator.async_update_data())
-        assert result["today_type"] == EVENT_TELEWORK
+        assert result["today_type"] == EVENT_REMOTE
 
     def test_today_type_resets_at_midnight(self):
         """Today type resets at midnight."""
@@ -606,7 +606,7 @@ class TestTodayTypePersistence:
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
             mock_dt.now.return_value = datetime(2026, 3, 12, 9, 0, 0)
             result = loop.run_until_complete(coordinator.async_update_data())
-        assert result["today_type"] == EVENT_TELEWORK
+        assert result["today_type"] == EVENT_REMOTE
 
         hass.states.get.return_value = make_calendar_state(state="off")
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:

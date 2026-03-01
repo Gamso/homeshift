@@ -34,7 +34,7 @@ from .const import (
     DEFAULT_MODE_ABSENCE,
     KEY_EVENT_NONE,
     KEY_EVENT_VACATION,
-    KEY_EVENT_TELEWORK,
+    KEY_EVENT_REMOTE,
     get_localized_defaults,
     EVENT_PERIOD_ALL_DAY,
     EVENT_PERIOD_MORNING,
@@ -72,7 +72,7 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
         _loc = get_localized_defaults(hass)
         self._event_none: str = _loc[KEY_EVENT_NONE]
         self._event_vacation: str = _loc[KEY_EVENT_VACATION]
-        self._event_telework: str = _loc[KEY_EVENT_TELEWORK]
+        self._event_remote: str = _loc[KEY_EVENT_REMOTE]
 
         self._day_mode: str = DEFAULT_DAY_MODES[0]
         self._current_event: str | None = None
@@ -407,8 +407,8 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
 
                 if self._event_vacation.lower() in event_message.lower():
                     today_type = self._event_vacation
-                elif self._event_telework.lower() in event_message.lower():
-                    today_type = self._event_telework
+                elif self._event_remote.lower() in event_message.lower():
+                    today_type = self._event_remote
                 else:
                     today_type = event_message
                 # Persist the day-level type: once a known event is seen

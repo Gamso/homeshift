@@ -34,8 +34,8 @@ TELETRAVAIL_ICS = Path(__file__).parent.parent / "calendars" / "teletravail.ics"
 class TestIcsHalfDayEvents:
     """Verify the teletravail ICS calendar contains the expected timed half-day events."""
 
-    def test_has_timed_telework_events(self):
-        """Has timed telework events."""
+    def test_has_timed_remote_events(self):
+        """Has timed remote events."""
         with open(TELETRAVAIL_ICS, "rb") as f:
             cal = Calendar.from_ical(f.read())
             events = [c for c in cal.walk() if c.name == "VEVENT"]

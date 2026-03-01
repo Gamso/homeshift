@@ -46,7 +46,7 @@ Automatic day-mode and thermostat-mode management for Home Assistant, driven by 
 
 ## ✨ Overview
 
-HomeShift is a custom Home Assistant integration that automatically manages **day modes** (e.g. Home, Work, Telework, Absence) and **thermostat modes** (e.g. Heating, Cooling, Off) based on your calendar events, weekends, and public holidays.
+HomeShift is a custom Home Assistant integration that automatically manages **day modes** (e.g. Home, Work, Remote, Absence) and **thermostat modes** (e.g. Heating, Cooling, Off) based on your calendar events, weekends, and public holidays.
 
 At regular intervals (every 60 minutes by default), it reads your calendar, picks the right day mode, and turns the matching scheduler switches on or off — so your home adapts automatically without any manual intervention.
 
@@ -89,7 +89,7 @@ Once set up, HomeShift will:
 Shows and controls the current day mode. HomeShift updates it automatically based on your calendar, but you can also change it manually at any time.
 
 - **Type:** Select
-- **Default options:** `Home`, `Work`, `Telework`, `Absence`
+- **Default options:** `Home`, `Work`, `Remote`, `Absence`
 - **Writable:** Yes — a manual change can be protected from auto-updates using the override duration
 
 ### `select.thermostat_mode`
@@ -125,14 +125,14 @@ All parameters can be changed at any time via **Settings → Devices & Services 
 | ----------------------- | ---------------------------------- | ------------------------------------------------------------- |
 | **Work Calendar**       | —                                  | Calendar entity containing your work/schedule events          |
 | **Holiday Calendar**    | —                                  | Calendar entity for public holidays (optional)                |
-| **Day Modes**           | `Home, Work, Telework, Absence`    | Comma-separated list of available day modes                   |
+| **Day Modes**           | `Home, Work, Remote, Absence`    | Comma-separated list of available day modes                   |
 | **Thermostat Mode Map** | `Off:Off, Heating:Heating, ...`    | Maps internal thermostat keys to the display names you prefer |
 | **Scan Interval**       | `60 min`                           | How often HomeShift checks the calendar (in minutes)          |
 | **Override Duration**   | `0` (disabled)                     | Minutes to block automatic updates after a manual mode change |
 | **Default Mode**        | `Work`                             | Mode used on regular weekdays with no calendar event          |
 | **Weekend Mode**        | `Home`                             | Mode used on Saturdays and Sundays                            |
 | **Holiday Mode**        | `Home`                             | Mode used on public holidays                                  |
-| **Event Mode Map**      | `Vacation:Home, Telework:Telework` | Maps calendar event names to day modes                        |
+| **Event Mode Map**      | `Vacation:Home, Remote:Remote` | Maps calendar event names to day modes                        |
 | **Absence Mode**        | `Absence`                          | When this mode is active, automatic updates are paused        |
 
 ---
@@ -143,7 +143,7 @@ Each time HomeShift refreshes, it looks at today's active calendar event and det
 
 | Priority | Condition                                        | Resulting mode                 |
 | -------- | ------------------------------------------------ | ------------------------------ |
-| 1        | Active calendar event matches the event mode map | Mapped mode (e.g. `Telework`)  |
+| 1        | Active calendar event matches the event mode map | Mapped mode (e.g. `Remote`)  |
 | 2        | Today is Saturday or Sunday                      | **Weekend mode**               |
 | 3        | Today is a public holiday                        | **Holiday mode**               |
 | 4        | No special condition                             | **Default mode** (e.g. `Work`) |

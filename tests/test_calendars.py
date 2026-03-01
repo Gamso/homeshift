@@ -2,7 +2,7 @@
 
 These tests verify:
 - Validity of the ICS files
-- Recurring events (telework)
+- Recurring events (remote)
 - Vacation periods
 - French public holidays
 """
@@ -28,7 +28,7 @@ class TestCalendarsWithIcalendar:
     """Tests using the icalendar library."""
 
     def test_teletravail_file_exists(self):
-        """Verify that the telework calendar file exists."""
+        """Verify that the remote calendar file exists."""
         assert TELETRAVAIL_ICS.exists(), f"File {TELETRAVAIL_ICS} not found"
 
     def test_jours_feries_file_exists(self):
@@ -36,7 +36,7 @@ class TestCalendarsWithIcalendar:
         assert JOURS_FERIES_ICS.exists(), f"File {JOURS_FERIES_ICS} not found"
 
     def test_teletravail_ics_valid(self):
-        """Verify that the telework file is a valid ICS calendar."""
+        """Verify that the remote file is a valid ICS calendar."""
         with open(TELETRAVAIL_ICS, "rb") as f:
             cal = Calendar.from_ical(f.read())
             assert cal is not None
@@ -99,7 +99,7 @@ class TestCalendarsBasic:
     """Basic ICS structure tests with no external dependencies."""
 
     def test_teletravail_file_exists(self):
-        """Verify that the telework calendar file exists."""
+        """Verify that the remote calendar file exists."""
         assert TELETRAVAIL_ICS.exists(), f"File {TELETRAVAIL_ICS} not found"
 
     def test_jours_feries_file_exists(self):
@@ -107,7 +107,7 @@ class TestCalendarsBasic:
         assert JOURS_FERIES_ICS.exists(), f"File {JOURS_FERIES_ICS} not found"
 
     def test_teletravail_ics_structure(self):
-        """Verify the basic structure of the telework ICS file."""
+        """Verify the basic structure of the remote ICS file."""
         content = TELETRAVAIL_ICS.read_text()
         assert "BEGIN:VCALENDAR" in content
         assert "END:VCALENDAR" in content

@@ -1,7 +1,7 @@
 {
   "domain": "homeshift",
   "name": "HomeShift",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "documentation": "https://github.com/Gamso/day_mode",
   "requirements": [],
   "dependencies": [],

@@ -16,11 +16,11 @@ from __future__ import annotations
 from datetime import timedelta
 from unittest.mock import MagicMock, patch
 
-from custom_components.homeshift.coordinator import HomeShiftCoordinator, MIDDAY_HOUR
+from custom_components.homeshift.coordinator import HomeShiftCoordinator
 from custom_components.homeshift.const import (
     CONF_CALENDAR_ENTITY,
     CONF_HOLIDAY_CALENDAR,
-    CONF_DAY_MODES,
+    CONF_DAY_MODE_MAP,
     CONF_THERMOSTAT_MODE_MAP,
     CONF_SCAN_INTERVAL,
     CONF_OVERRIDE_DURATION,
@@ -32,9 +32,6 @@ from custom_components.homeshift.const import (
     CONF_MODE_ABSENCE,
     DEFAULT_SCAN_INTERVAL,
     DEFAULT_OVERRIDE_DURATION,
-    KEY_EVENT_NONE,
-    KEY_EVENT_VACATION,
-    KEY_EVENT_REMOTE,
     EVENT_PERIOD_ALL_DAY,
     EVENT_PERIOD_MORNING,
     EVENT_PERIOD_AFTERNOON,
@@ -43,16 +40,17 @@ from custom_components.homeshift.const import (
 
 # Use French locale defaults for all tests
 _FR = LOCALIZED_DEFAULTS["fr"]
-EVENT_NONE: str = _FR[KEY_EVENT_NONE]
-EVENT_VACATION: str = _FR[KEY_EVENT_VACATION]
-EVENT_REMOTE: str = _FR[KEY_EVENT_REMOTE]
-DEFAULT_DAY_MODES: list[str] = [m.strip() for m in _FR[CONF_DAY_MODES].split(",")]
+_fr_day_map: dict[str, str] = {k.strip(): v.strip() for k, _, v in (p.partition(":") for p in _FR[CONF_DAY_MODE_MAP].split(","))}
+_fr_event_map_raw: dict[str, str] = {k.strip().lower(): v.strip() for k, _, v in (p.partition(":") for p in _FR[CONF_EVENT_MODE_MAP].split(","))}
+EVENT_REMOTE: str = next(k for k, v in _fr_event_map_raw.items() if v == "Remote")
+EVENT_VACATION: str = next(k for k, v in _fr_event_map_raw.items() if v == "Home")
+DEFAULT_DAY_MODES: list[str] = list(_fr_day_map.values())
 DEFAULT_THERMOSTAT_MODE_MAP: str = _FR[CONF_THERMOSTAT_MODE_MAP]
-DEFAULT_MODE_DEFAULT: str = _FR[CONF_MODE_DEFAULT]
-DEFAULT_MODE_WEEKEND: str = _FR[CONF_MODE_WEEKEND]
-DEFAULT_MODE_HOLIDAY: str = _FR[CONF_MODE_HOLIDAY]
+DEFAULT_MODE_DEFAULT: str = _fr_day_map[_FR[CONF_MODE_DEFAULT]]
+DEFAULT_MODE_WEEKEND: str = _fr_day_map[_FR[CONF_MODE_WEEKEND]]
+DEFAULT_MODE_HOLIDAY: str = _fr_day_map[_FR[CONF_MODE_HOLIDAY]]
 DEFAULT_EVENT_MODE_MAP: str = _FR[CONF_EVENT_MODE_MAP]
-DEFAULT_MODE_ABSENCE: str = _FR[CONF_MODE_ABSENCE]
+DEFAULT_MODE_ABSENCE: str = _fr_day_map[_FR[CONF_MODE_ABSENCE]]
 
 # Patch frame.report_usage globally so DataUpdateCoordinator can be instantiated
 _FRAME_PATCH = patch(
@@ -280,16 +278,16 @@ def _make_mock_entry(
     entry.data = {
         CONF_CALENDAR_ENTITY: calendar_entity,
         CONF_HOLIDAY_CALENDAR: holiday_calendar,
-        CONF_DAY_MODES: ", ".join(DEFAULT_DAY_MODES),
+        CONF_DAY_MODE_MAP: _FR[CONF_DAY_MODE_MAP],
         CONF_THERMOSTAT_MODE_MAP: thermostat_mode_map or DEFAULT_THERMOSTAT_MODE_MAP,
         CONF_SCAN_INTERVAL: scan_interval,
         CONF_OVERRIDE_DURATION: override_duration,
         CONF_SCHEDULERS_PER_MODE: schedulers_per_mode or {},
-        CONF_MODE_DEFAULT: mode_default if mode_default is not None else DEFAULT_MODE_DEFAULT,
-        CONF_MODE_WEEKEND: mode_weekend if mode_weekend is not None else DEFAULT_MODE_WEEKEND,
-        CONF_MODE_HOLIDAY: mode_holiday if mode_holiday is not None else DEFAULT_MODE_HOLIDAY,
+        CONF_MODE_DEFAULT: mode_default if mode_default is not None else _FR[CONF_MODE_DEFAULT],
+        CONF_MODE_WEEKEND: mode_weekend if mode_weekend is not None else _FR[CONF_MODE_WEEKEND],
+        CONF_MODE_HOLIDAY: mode_holiday if mode_holiday is not None else _FR[CONF_MODE_HOLIDAY],
         CONF_EVENT_MODE_MAP: event_mode_map if event_mode_map is not None else DEFAULT_EVENT_MODE_MAP,
-        CONF_MODE_ABSENCE: mode_absence if mode_absence is not None else DEFAULT_MODE_ABSENCE,
+        CONF_MODE_ABSENCE: mode_absence if mode_absence is not None else _FR[CONF_MODE_ABSENCE],
     }
     return entry
 
@@ -316,6 +314,7 @@ def _make_calendar_state(
 # ---------------------------------------------------------------------------
 
 class TestScanIntervalConfig:
+    """Tests for scan interval configuration on HomeShiftCoordinator."""
 
     def test_default_scan_interval(self):
         """Default scan interval."""

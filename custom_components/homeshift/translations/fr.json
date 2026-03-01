@@ -22,22 +22,36 @@
       },
       "mapping": {
         "title": "Mapping des modes",
-        "description": "Configurez les modes de jour et le mapping événement vers mode.",
+        "description": "Configurez les noms d'affichage des modes, les assignations par défaut et le mapping événement.",
         "sections": {
           "day_modes_section": {
-            "name": "Modes de jour",
+            "name": "Noms d'affichage des modes jour",
             "data": {
-              "day_modes": "Modes de Jour (séparés par des virgules)",
+              "day_display_home": "Home",
+              "day_display_work": "Work",
+              "day_display_remote": "Remote",
+              "day_display_absence": "Absence"
+            },
+            "data_description": {
+              "day_display_home": "Nom affiché pour la clé Home",
+              "day_display_work": "Nom affiché pour la clé Work",
+              "day_display_remote": "Nom affiché pour la clé Remote",
+              "day_display_absence": "Nom affiché pour la clé Absence"
+            }
+          },
+          "defaults_section": {
+            "name": "Assignations de modes par défaut",
+            "data": {
               "mode_default": "Mode par défaut (jour ouvré)",
               "mode_absence": "Mode absence (bloque la mise à jour auto)",
               "mode_weekend": "Mode week-end",
-              "mode_holiday": "Mode jour férié"
+              "mode_holiday": "Mode jour férié",
+              "event_mode_map": "Mapping événement vers mode (MotClé:CléMode, ...)"
             }
           },
           "thermostat_section": {
-            "name": "Mapping thermostat et événements",
+            "name": "Noms d'affichage thermostat",
             "data": {
-              "event_mode_map": "Mapping événement vers mode (Événement:Mode, ...)",
               "thermostat_display_off": "Off",
               "thermostat_display_heating": "Heating",
               "thermostat_display_cooling": "Cooling",
@@ -87,22 +101,36 @@
       },
       "mapping": {
         "title": "Mapping des modes",
-        "description": "Configurez les modes de jour et le mapping événement vers mode.",
+        "description": "Configurez les noms d'affichage des modes, les assignations par défaut et le mapping événement.",
         "sections": {
           "day_modes_section": {
-            "name": "Modes de jour",
+            "name": "Noms d'affichage des modes jour",
             "data": {
-              "day_modes": "Modes de Jour (séparés par des virgules)",
+              "day_display_home": "Home",
+              "day_display_work": "Work",
+              "day_display_remote": "Remote",
+              "day_display_absence": "Absence"
+            },
+            "data_description": {
+              "day_display_home": "Nom affiché pour la clé Home",
+              "day_display_work": "Nom affiché pour la clé Work",
+              "day_display_remote": "Nom affiché pour la clé Remote",
+              "day_display_absence": "Nom affiché pour la clé Absence"
+            }
+          },
+          "defaults_section": {
+            "name": "Assignations de modes par défaut",
+            "data": {
               "mode_default": "Mode par défaut (jour ouvré)",
               "mode_absence": "Mode absence (bloque la mise à jour auto)",
               "mode_weekend": "Mode week-end",
-              "mode_holiday": "Mode jour férié"
+              "mode_holiday": "Mode jour férié",
+              "event_mode_map": "Mapping événement vers mode (MotClé:CléMode, ...)"
             }
           },
           "thermostat_section": {
-            "name": "Mapping thermostat et événements",
+            "name": "Noms d'affichage thermostat",
             "data": {
-              "event_mode_map": "Mapping événement vers mode (Événement:Mode, ...)",
               "thermostat_display_off": "Off",
               "thermostat_display_heating": "Heating",
               "thermostat_display_cooling": "Cooling",

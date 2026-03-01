@@ -15,7 +15,7 @@ from .const import (
     DOMAIN,
     CONF_CALENDAR_ENTITY,
     CONF_HOLIDAY_CALENDAR,
-    CONF_DAY_MODES,
+    CONF_DAY_MODE_MAP,
     CONF_THERMOSTAT_MODE_MAP,
     CONF_SCHEDULERS_PER_MODE,
     CONF_SCAN_INTERVAL,
@@ -24,7 +24,7 @@ from .const import (
     CONF_MODE_HOLIDAY,
     CONF_EVENT_MODE_MAP,
     CONF_MODE_ABSENCE,
-    DEFAULT_DAY_MODES,
+    DEFAULT_DAY_MODE_MAP,
     DEFAULT_THERMOSTAT_MODE_MAP,
     DEFAULT_SCAN_INTERVAL,
     DEFAULT_MODE_DEFAULT,
@@ -80,6 +80,43 @@ def _calendars_schema(data: dict[str, Any]) -> vol.Schema:
     )
 
 
+def _parse_day_mode_map(map_str: str) -> dict[str, str]:
+    """Parse 'Key:Display, ...' string into an ordered dict."""
+    result: dict[str, str] = {}
+    for pair in map_str.split(","):
+        pair = pair.strip()
+        if ":" in pair:
+            key, _, display = pair.partition(":")
+            result[key.strip()] = display.strip()
+    return result
+
+
+def _day_mode_display_fields(data: dict[str, Any]) -> dict:
+    """Return one TextSelector field per day mode key (key = label)."""
+    current_map = _parse_day_mode_map(data.get(CONF_DAY_MODE_MAP, DEFAULT_DAY_MODE_MAP))
+    fields: dict = {}
+    for key, display in current_map.items():
+        field_name = f"day_display_{key.lower()}"
+        fields[
+            vol.Optional(
+                field_name,
+                default=display,
+            )
+        ] = selector.TextSelector(selector.TextSelectorConfig(type=selector.TextSelectorType.TEXT))
+    return fields
+
+
+def _rebuild_day_mode_map(user_input: dict[str, Any], data: dict[str, Any]) -> str:
+    """Reconstruct CONF_DAY_MODE_MAP from individual display fields."""
+    current_map = _parse_day_mode_map(data.get(CONF_DAY_MODE_MAP, DEFAULT_DAY_MODE_MAP))
+    pairs: list[str] = []
+    for key, default_display in current_map.items():
+        field_name = f"day_display_{key.lower()}"
+        display = user_input.pop(field_name, default_display)
+        pairs.append(f"{key}:{display}")
+    return ", ".join(pairs)
+
+
 def _parse_thermostat_map(map_str: str) -> dict[str, str]:
     """Parse 'Key:Display, ...' string into an ordered dict."""
     result: dict[str, str] = {}
@@ -121,45 +158,54 @@ def _mapping_schema(data: dict[str, Any]) -> vol.Schema:
     """Build the mode-mapping form schema with collapsible sections."""
     text = selector.TextSelector(selector.TextSelectorConfig(type=selector.TextSelectorType.TEXT))
 
-    # Section 1: day modes + default modes
-    day_modes_schema = vol.Schema(
+    # Section 1: day mode display names (one field per key, like thermostat)
+    day_fields_dict: dict = {}
+    day_fields_dict.update(_day_mode_display_fields(data))
+    day_modes_schema = vol.Schema(day_fields_dict)
+
+    # Section 2: default mode assignments
+    day_mode_map = _parse_day_mode_map(data.get(CONF_DAY_MODE_MAP, DEFAULT_DAY_MODE_MAP))
+    mode_keys = list(day_mode_map.keys())
+    mode_selector = selector.SelectSelector(
+        selector.SelectSelectorConfig(
+            options=mode_keys,
+            mode=selector.SelectSelectorMode.DROPDOWN,
+        )
+    )
+    defaults_schema = vol.Schema(
         {
-            vol.Optional(
-                CONF_DAY_MODES,
-                default=data.get(CONF_DAY_MODES, ", ".join(DEFAULT_DAY_MODES)),
-            ): str,
             vol.Optional(
                 CONF_MODE_DEFAULT,
                 default=data.get(CONF_MODE_DEFAULT, DEFAULT_MODE_DEFAULT),
-            ): text,
+            ): mode_selector,
             vol.Optional(
                 CONF_MODE_ABSENCE,
                 default=data.get(CONF_MODE_ABSENCE, DEFAULT_MODE_ABSENCE),
-            ): text,
+            ): mode_selector,
             vol.Optional(
                 CONF_MODE_WEEKEND,
                 default=data.get(CONF_MODE_WEEKEND, DEFAULT_MODE_WEEKEND),
-            ): text,
+            ): mode_selector,
             vol.Optional(
                 CONF_MODE_HOLIDAY,
                 default=data.get(CONF_MODE_HOLIDAY, DEFAULT_MODE_HOLIDAY),
+            ): mode_selector,
+            vol.Optional(
+                CONF_EVENT_MODE_MAP,
+                default=data.get(CONF_EVENT_MODE_MAP, DEFAULT_EVENT_MODE_MAP),
             ): text,
         }
     )
 
-    # Section 2: event map + thermostat display names
-    thermostat_fields_dict: dict = {
-        vol.Optional(
-            CONF_EVENT_MODE_MAP,
-            default=data.get(CONF_EVENT_MODE_MAP, DEFAULT_EVENT_MODE_MAP),
-        ): str,
-    }
+    # Section 3: thermostat display names
+    thermostat_fields_dict: dict = {}
     thermostat_fields_dict.update(_thermostat_display_fields(data))
     thermostat_schema = vol.Schema(thermostat_fields_dict)
 
     return vol.Schema(
         {
             vol.Required("day_modes_section"): section(day_modes_schema, {"collapsed": False}),
+            vol.Required("defaults_section"): section(defaults_schema, {"collapsed": False}),
             vol.Required("thermostat_section"): section(thermostat_schema, {"collapsed": False}),
         }
     )
@@ -178,9 +224,9 @@ def _validate_calendars(hass, user_input: dict[str, Any]) -> dict[str, str]:
 
 
 def _parse_day_modes(data: dict[str, Any]) -> list[str]:
-    """Return the list of configured day modes."""
-    raw = data.get(CONF_DAY_MODES, ", ".join(DEFAULT_DAY_MODES))
-    return [m.strip() for m in raw.split(",") if m.strip()]
+    """Return the list of configured day mode display values."""
+    raw = data.get(CONF_DAY_MODE_MAP, DEFAULT_DAY_MODE_MAP)
+    return [v.strip() for v in _parse_day_mode_map(raw).values()]
 
 
 def _get_scheduler_options(hass) -> list[selector.SelectOptionDict]:
@@ -251,7 +297,7 @@ class HomeShiftConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Initialise the config flow."""
         self._data: dict[str, Any] = {}
 
-    def is_matching(self, other_flow: Self) -> bool:
+    def is_matching(self, _other_flow: Self) -> bool:
         """Return True if another in-progress flow matches this one (not used)."""
         return False
 
@@ -315,11 +361,13 @@ class HomeShiftConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     ) -> config_entries.ConfigFlowResult:
         """Configure day-mode & thermostat-mode mapping."""
         if user_input is not None:
-            # Flatten section-nested input from the two sections
+            # Flatten section-nested input from the three sections
             flat: dict[str, Any] = {
                 **user_input.get("day_modes_section", {}),
+                **user_input.get("defaults_section", {}),
                 **user_input.get("thermostat_section", {}),
             }
+            flat[CONF_DAY_MODE_MAP] = _rebuild_day_mode_map(flat, self._data)
             flat[CONF_THERMOSTAT_MODE_MAP] = _rebuild_thermostat_map(flat, self._data)
             self._data.update(flat)
             return await self.async_step_menu()
@@ -359,7 +407,7 @@ class HomeShiftConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     @staticmethod
     @callback
     def async_get_options_flow(
-        config_entry: config_entries.ConfigEntry,
+        _config_entry: config_entries.ConfigEntry,
     ) -> HomeShiftOptionsFlow:
         """Get the options flow for this handler."""
         return HomeShiftOptionsFlow()
@@ -438,11 +486,13 @@ class HomeShiftOptionsFlow(config_entries.OptionsFlow):
     ) -> config_entries.ConfigFlowResult:
         """Configure day-mode & thermostat-mode mapping."""
         if user_input is not None:
-            # Flatten section-nested input from the two sections
+            # Flatten section-nested input from the three sections
             flat: dict[str, Any] = {
                 **user_input.get("day_modes_section", {}),
+                **user_input.get("defaults_section", {}),
                 **user_input.get("thermostat_section", {}),
             }
+            flat[CONF_DAY_MODE_MAP] = _rebuild_day_mode_map(flat, self._data)
             flat[CONF_THERMOSTAT_MODE_MAP] = _rebuild_thermostat_map(flat, self._data)
             self._data.update(flat)
             return await self.async_step_menu()

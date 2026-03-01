@@ -5,21 +5,21 @@ DOMAIN = "homeshift"
 # Configuration keys
 CONF_CALENDAR_ENTITY = "calendar_entity"
 CONF_HOLIDAY_CALENDAR = "holiday_calendar"
-CONF_DAY_MODES = "day_modes"
+CONF_DAY_MODE_MAP = "day_mode_map"  # Mapping: internal key → display name (like thermostat)
 CONF_THERMOSTAT_MODE_MAP = "thermostat_mode_map"  # Mapping: internal key → display/scheduler tag
 CONF_SCHEDULERS_PER_MODE = "schedulers_per_mode"  # Scheduler entities per day mode
 CONF_SCAN_INTERVAL = "scan_interval"
 CONF_OVERRIDE_DURATION = "override_duration"  # minutes to lock auto-update after manual change
 
 # Mode mapping configuration
-CONF_MODE_DEFAULT = "mode_default"  # Mode for regular work days
-CONF_MODE_WEEKEND = "mode_weekend"  # Mode for weekends
-CONF_MODE_HOLIDAY = "mode_holiday"  # Mode for holidays/vacances
-CONF_EVENT_MODE_MAP = "event_mode_map"  # Mapping: calendar event → day mode
-CONF_MODE_ABSENCE = "mode_absence"  # Mode that blocks automatic updates
+CONF_MODE_DEFAULT = "mode_default"  # Day mode key for regular work days
+CONF_MODE_WEEKEND = "mode_weekend"  # Day mode key for weekends
+CONF_MODE_HOLIDAY = "mode_holiday"  # Day mode key for holidays
+CONF_EVENT_MODE_MAP = "event_mode_map"  # Mapping: calendar event keyword → day mode key
+CONF_MODE_ABSENCE = "mode_absence"  # Day mode key that blocks automatic updates
 
-# Default values (English baseline — localized defaults are provided by config_flow)
-DEFAULT_DAY_MODES = ["Home", "Work", "Remote", "Absence"]
+# Default values (keys are stable English identifiers)
+DEFAULT_DAY_MODE_MAP = "Home:Home, Work:Work, Remote:Remote, Absence:Absence"
 DEFAULT_THERMOSTAT_MODE_MAP = "Off:Off, Heating:Heating, Cooling:Cooling, Ventilation:Ventilation"
 # Internal key that means 'thermostat is off' — schedulers with any thermostat
 # tag are disabled when the thermostat mode matches this key.
@@ -37,15 +37,8 @@ SELECT_DAY_MODE = "day_mode"
 SELECT_THERMOSTAT_MODE = "thermostat_mode"
 NUMBER_OVERRIDE_DURATION = "override_duration"
 
-# Calendar events (English baseline — localized values are in LOCALIZED_DEFAULTS)
+# Sentinel value used as today_type when no calendar event is active
 EVENT_NONE = "None"
-EVENT_VACATION = "Vacation"
-EVENT_REMOTE = "Remote"
-
-# Keys for localized event strings inside LOCALIZED_DEFAULTS
-KEY_EVENT_NONE = "event_none"
-KEY_EVENT_VACATION = "event_vacation"
-KEY_EVENT_REMOTE = "event_remote"
 
 # Event period types
 EVENT_PERIOD_ALL_DAY = "all_day"
@@ -64,31 +57,30 @@ ATTR_THERMOSTAT_MODE = "thermostat_mode"
 # ---------------------------------------------------------------------------
 # Localized defaults (keyed by ISO 639-1 language code)
 # ---------------------------------------------------------------------------
+# CONF_DAY_MODE_MAP format: "Key:Display, ..."  — keys are stable English ids,
+# display names are the locale-specific labels shown in the UI / select entity.
+# CONF_MODE_DEFAULT / WEEKEND / HOLIDAY / ABSENCE reference the **keys** above.
+# CONF_EVENT_MODE_MAP format: "EventKeyword:DayModeKey, ..." — both sides use
+# the keywords / keys defined above (locale-independent).
 
 LOCALIZED_DEFAULTS: dict[str, dict] = {
     "en": {
-        CONF_DAY_MODES: "Home, Work, Remote, Absence",
+        CONF_DAY_MODE_MAP: "Home:Home, Work:Work, Remote:Remote, Absence:Absence",
         CONF_MODE_DEFAULT: "Work",
         CONF_MODE_WEEKEND: "Home",
         CONF_MODE_HOLIDAY: "Home",
         CONF_MODE_ABSENCE: "Absence",
         CONF_EVENT_MODE_MAP: "Vacation:Home, Remote:Remote",
         CONF_THERMOSTAT_MODE_MAP: "Off:Off, Heating:Heating, Cooling:Cooling, Ventilation:Ventilation",
-        KEY_EVENT_NONE: "None",
-        KEY_EVENT_VACATION: "Vacation",
-        KEY_EVENT_REMOTE: "Remote",
     },
     "fr": {
-        CONF_DAY_MODES: "Maison, Travail, T\u00e9l\u00e9travail, Absence",
-        CONF_MODE_DEFAULT: "Travail",
-        CONF_MODE_WEEKEND: "Maison",
-        CONF_MODE_HOLIDAY: "Maison",
+        CONF_DAY_MODE_MAP: "Home:Maison, Work:Travail, Remote:T\u00e9l\u00e9travail, Absence:Absence",
+        CONF_MODE_DEFAULT: "Work",
+        CONF_MODE_WEEKEND: "Home",
+        CONF_MODE_HOLIDAY: "Home",
         CONF_MODE_ABSENCE: "Absence",
-        CONF_EVENT_MODE_MAP: "Vacances:Maison, T\u00e9l\u00e9travail:T\u00e9l\u00e9travail",
+        CONF_EVENT_MODE_MAP: "Vacances:Home, T\u00e9l\u00e9travail:Remote",
         CONF_THERMOSTAT_MODE_MAP: "Off:Eteint, Heating:Chauffage, Cooling:Climatisation, Ventilation:Ventilation",
-        KEY_EVENT_NONE: "Aucun",
-        KEY_EVENT_VACATION: "Vacances",
-        KEY_EVENT_REMOTE: "T\u00e9l\u00e9travail",
     },
 }
 

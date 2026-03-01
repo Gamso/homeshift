@@ -22,22 +22,36 @@
       },
       "mapping": {
         "title": "Mode Mapping",
-        "description": "Configure day modes and event-to-mode mapping.",
+        "description": "Configure day mode display names, default assignments, and event mapping.",
         "sections": {
           "day_modes_section": {
-            "name": "Day Modes",
+            "name": "Day Mode Display Names",
             "data": {
-              "day_modes": "Day Modes (comma-separated)",
+              "day_display_home": "Home",
+              "day_display_work": "Work",
+              "day_display_remote": "Remote",
+              "day_display_absence": "Absence"
+            },
+            "data_description": {
+              "day_display_home": "Display name for key Home",
+              "day_display_work": "Display name for key Work",
+              "day_display_remote": "Display name for key Remote",
+              "day_display_absence": "Display name for key Absence"
+            }
+          },
+          "defaults_section": {
+            "name": "Default Mode Assignments",
+            "data": {
               "mode_default": "Default Mode (work day)",
               "mode_absence": "Absence Mode (blocks auto-update)",
               "mode_weekend": "Weekend Mode",
-              "mode_holiday": "Holiday Mode"
+              "mode_holiday": "Holiday Mode",
+              "event_mode_map": "Event-to-Mode Mapping (EventKeyword:ModeKey, ...)"
             }
           },
           "thermostat_section": {
-            "name": "Thermostat & Event Mapping",
+            "name": "Thermostat Display Names",
             "data": {
-              "event_mode_map": "Event-to-Mode Mapping (Event:Mode, ...)",
               "thermostat_display_off": "Off",
               "thermostat_display_heating": "Heating",
               "thermostat_display_cooling": "Cooling",
@@ -87,22 +101,36 @@
       },
       "mapping": {
         "title": "Mode Mapping",
-        "description": "Configure day modes and event-to-mode mapping.",
+        "description": "Configure day mode display names, default assignments, and event mapping.",
         "sections": {
           "day_modes_section": {
-            "name": "Day Modes",
+            "name": "Day Mode Display Names",
             "data": {
-              "day_modes": "Day Modes (comma-separated)",
+              "day_display_home": "Home",
+              "day_display_work": "Work",
+              "day_display_remote": "Remote",
+              "day_display_absence": "Absence"
+            },
+            "data_description": {
+              "day_display_home": "Display name for key Home",
+              "day_display_work": "Display name for key Work",
+              "day_display_remote": "Display name for key Remote",
+              "day_display_absence": "Display name for key Absence"
+            }
+          },
+          "defaults_section": {
+            "name": "Default Mode Assignments",
+            "data": {
               "mode_default": "Default Mode (work day)",
               "mode_absence": "Absence Mode (blocks auto-update)",
               "mode_weekend": "Weekend Mode",
-              "mode_holiday": "Holiday Mode"
+              "mode_holiday": "Holiday Mode",
+              "event_mode_map": "Event-to-Mode Mapping (EventKeyword:ModeKey, ...)"
             }
           },
           "thermostat_section": {
-            "name": "Thermostat & Event Mapping",
+            "name": "Thermostat Display Names",
             "data": {
-              "event_mode_map": "Event-to-Mode Mapping (Event:Mode, ...)",
               "thermostat_display_off": "Off",
               "thermostat_display_heating": "Heating",
               "thermostat_display_cooling": "Cooling",

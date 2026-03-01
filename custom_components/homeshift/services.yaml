@@ -1,0 +1,9 @@
+refresh_schedulers:
+  name: Refresh Schedulers
+  description: Refresh scheduler states based on current day mode and thermostat mode
+  fields: {}
+
+sync_calendar:
+  name: Sync Calendar
+  description: Re-sync the calendar and update the current day mode
+  fields: {}

@@ -1,0 +1,36 @@
+homeassistant:
+  name: HomeShift DevContainer
+  latitude: 48.8566
+  longitude: 2.3522
+  elevation: 0
+  unit_system: metric
+  country: FR
+  time_zone: Europe/Paris
+
+# Charger la config par défaut SAUF conversation
+default_config:
+
+# Désactiver explicitement conversation
+conversation: null
+
+# Enable development mode
+logger:
+  default: info
+  logs:
+    homeassistant.components.lovelace: debug
+    custom_components.homeshift: debug
+
+# User interface - use YAML mode to load ui-lovelace.yaml
+lovelace:
+  resource_mode: yaml
+  dashboards:
+    lovelace:
+      mode: yaml
+      filename: ui-lovelace.yaml
+      title: Overview
+      icon: mdi:view-dashboard
+      show_in_sidebar: true
+
+# Scheduler integration
+scheduler:
+  # No specific config needed, component will auto-configure

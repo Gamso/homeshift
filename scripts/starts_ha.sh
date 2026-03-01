@@ -1,0 +1,270 @@
+#!/bin/bash
+set -e
+set -x
+
+cd "$(dirname "$0")/.."
+pwd
+
+# Create config dir if not present
+if [[ ! -d "${PWD}/config" ]]; then
+    mkdir -p "${PWD}/config"
+    # Add defaults configuration
+    hass --config "${PWD}/config" --script ensure_config
+fi
+
+echo ""
+echo "🔗 Setting up configuration files..."
+
+# Overwrite configuration.yaml if provided
+if [ -f ${PWD}/.devcontainer/configuration.yaml ]; then
+    rm -f ${PWD}/config/configuration.yaml
+    ln -s ${PWD}/.devcontainer/configuration.yaml ${PWD}/config/configuration.yaml
+	echo "   ✅ Configuration linked"
+fi
+
+# Link ui-lovelace.yaml for dashboard
+if [ -f ${PWD}/.devcontainer/ui-lovelace.yaml ]; then
+    rm -f ${PWD}/config/ui-lovelace.yaml
+    ln -s ${PWD}/.devcontainer/ui-lovelace.yaml ${PWD}/config/ui-lovelace.yaml
+	echo "   ✅ Lovelace dashboard linked"
+fi
+
+# Copy scheduler.storage if it exists
+if [ -f ${PWD}/.devcontainer/scheduler.storage ]; then
+	# Only create .storage directory if it doesn't exist
+	mkdir -p "${PWD}/config/.storage"
+	# Remove old scheduler.storage symlink/file if it exists
+	rm -f ${PWD}/config/.storage/scheduler.storage
+	# Create new symlink
+    ln -s ${PWD}/.devcontainer/scheduler.storage ${PWD}/config/.storage/scheduler.storage
+	echo "   ✅ Scheduler storage linked"
+fi
+
+# Merge calendars configuration if present
+if [ -f ${PWD}/.devcontainer/calendars.yaml ]; then
+	python3 << PYTHON_SCRIPT
+import json
+import yaml
+from datetime import datetime, timezone
+import os
+import secrets
+
+devcontainer_path = "${PWD}/.devcontainer/calendars.yaml"
+config_entries_path = "${PWD}/config/.storage/core.config_entries"
+
+def generate_entry_id():
+    """Generate a unique entry_id similar to Home Assistant format"""
+    return secrets.token_urlsafe(20).upper().replace('-', '').replace('_', '')[:26]
+
+# Load calendar configuration from .devcontainer
+with open(devcontainer_path, 'r') as f:
+    calendars_config = yaml.safe_load(f)
+
+if calendars_config:
+    # Load or create core.config_entries
+    if os.path.exists(config_entries_path):
+        with open(config_entries_path, 'r') as f:
+            config_entries = json.load(f)
+    else:
+        config_entries = {
+            "version": 1,
+            "minor_version": 5,
+            "key": "core.config_entries",
+            "data": {"entries": []}
+        }
+
+    now = datetime.now(timezone.utc).isoformat()
+    added_count = 0
+
+    # Add calendar entries
+    if 'calendars' in calendars_config:
+        # Check existing calendars by storage_key
+        existing_storage_keys = {e['data'].get('storage_key') for e in config_entries['data']['entries']
+                                if e.get('domain') == 'local_calendar' and 'storage_key' in e.get('data', {})}
+
+        for cal in calendars_config['calendars']:
+            if cal.get('storage_key') not in existing_storage_keys:
+                entry = {
+                    "created_at": now,
+                    "data": {
+                        "calendar_name": cal['calendar_name'],
+                        "import": cal.get('import', 'import_ics_file'),
+                        "storage_key": cal['storage_key']
+                    },
+                    "disabled_by": None,
+                    "discovery_keys": {},
+                    "domain": "local_calendar",
+                    "entry_id": generate_entry_id(),
+                    "minor_version": 1,
+                    "modified_at": now,
+                    "options": {},
+                    "pref_disable_new_entities": False,
+                    "pref_disable_polling": False,
+                    "source": "user",
+                    "subentries": [],
+                    "title": cal['title'],
+                    "unique_id": None,
+                    "version": 1
+                }
+                config_entries['data']['entries'].append(entry)
+                added_count += 1
+                print(f"   ✓ {cal['title']} calendar added")
+
+    # Add other integrations (like scheduler)
+    if 'integrations' in calendars_config:
+        existing_domains = {(e.get('domain'), e.get('unique_id')) for e in config_entries['data']['entries']}
+
+        for integration in calendars_config['integrations']:
+            domain = integration.get('domain')
+            unique_id = integration.get('unique_id')
+
+            if (domain, unique_id) not in existing_domains:
+                entry = {
+                    "created_at": now,
+                    "data": integration.get('data', {}),
+                    "disabled_by": None,
+                    "discovery_keys": {},
+                    "domain": domain,
+                    "entry_id": generate_entry_id(),
+                    "minor_version": 1,
+                    "modified_at": now,
+                    "options": {},
+                    "pref_disable_new_entities": False,
+                    "pref_disable_polling": False,
+                    "source": "user",
+                    "subentries": [],
+                    "title": integration['title'],
+                    "unique_id": unique_id,
+                    "version": integration.get('version', 1)
+                }
+                config_entries['data']['entries'].append(entry)
+                added_count += 1
+                print(f"   ✓ {integration['title']} integration added")
+
+    if added_count > 0:
+        # Save updated config
+        with open(config_entries_path, 'w') as f:
+            json.dump(config_entries, f, indent=2)
+        print(f"   ✅ {added_count} integration(s) configured")
+    else:
+        print("   ℹ️  All integrations already exist")
+PYTHON_SCRIPT
+	echo "   ✅ Integrations merged"
+fi
+
+# Link automations from .devcontainer
+if [ -d ${PWD}/.devcontainer/automations ]; then
+	# Create automations directory if it doesn't exist
+	mkdir -p ${PWD}/config/automations
+
+	# Link each automation file
+	for automation_file in ${PWD}/.devcontainer/automations/*.yaml; do
+		if [ -f "$automation_file" ]; then
+			filename=$(basename "$automation_file")
+			rm -f ${PWD}/config/automations/"$filename"
+			ln -s "$automation_file" ${PWD}/config/automations/"$filename"
+		fi
+	done
+	echo "   ✅ Automations linked"
+fi
+
+# Dev-only custom_components
+if [ ! -d ${PWD}/config/custom_components ]; then
+    mkdir -p ${PWD}/config/custom_components
+fi
+
+
+echo ""
+echo "📦 Installing scheduler-component..."
+SCHEDULER_COMPONENT_VERSION="v3.3.8"
+SCHEDULER_COMPONENT_URL="https://github.com/nielsfaber/scheduler-component/releases/download/${SCHEDULER_COMPONENT_VERSION}/scheduler.zip"
+
+if [ ! -d ${PWD}/config/custom_components/scheduler ]; then
+    # Install wget and unzip if not available
+    if ! command -v wget &> /dev/null || ! command -v unzip &> /dev/null; then
+        echo "   Installing wget and unzip..."
+        apk add --no-cache wget unzip > /dev/null 2>&1
+    fi
+
+    echo "   Downloading scheduler-component ${SCHEDULER_COMPONENT_VERSION}..."
+    if wget -q ${SCHEDULER_COMPONENT_URL} -O /tmp/scheduler.zip; then
+        echo "   Extracting scheduler component..."
+        # Extract to temporary location to handle different ZIP structures
+        SCHEDULER_TEMP="/tmp/scheduler_temp_$$"
+        mkdir -p ${SCHEDULER_TEMP}
+        unzip -q /tmp/scheduler.zip -d ${SCHEDULER_TEMP}
+        rm /tmp/scheduler.zip
+
+        # Check if scheduler folder already exists in extracted files
+        if [ -d ${SCHEDULER_TEMP}/scheduler ]; then
+            # ZIP already contained scheduler directory
+            mv ${SCHEDULER_TEMP}/scheduler ${PWD}/config/custom_components/
+        else
+            # ZIP had files at root level, create scheduler folder and move files
+            mkdir -p ${PWD}/config/custom_components/scheduler
+            mv ${SCHEDULER_TEMP}/* ${PWD}/config/custom_components/scheduler/ 2>/dev/null || true
+        fi
+        rm -rf ${SCHEDULER_TEMP}
+
+        # Verify installation
+        if [ -f ${PWD}/config/custom_components/scheduler/manifest.json ]; then
+            echo "   ✅ Scheduler component installed successfully!"
+            echo "   📁 Location: ${PWD}/config/custom_components/scheduler/"
+        else
+            echo "   ⚠️  Warning: scheduler component extracted but manifest.json not found"
+            echo "   Checking what was extracted..."
+            ls -la ${PWD}/config/custom_components/ || true
+        fi
+    else
+        echo "   ⚠️  Failed to download scheduler component"
+    fi
+else
+    echo "   ✅ Scheduler component already installed"
+    echo "   📁 Location: ${PWD}/config/custom_components/scheduler/"
+    # Verify it's properly installed
+    if [ -f ${PWD}/config/custom_components/scheduler/manifest.json ]; then
+        echo "   ✓ manifest.json found"
+    else
+        echo "   ⚠️  Warning: manifest.json not found in scheduler directory"
+    fi
+fi
+
+echo ""
+echo "📦 Installing scheduler-card..."
+SCHEDULER_CARD_VERSION="v4.0.11"
+SCHEDULER_CARD_URL="https://github.com/nielsfaber/scheduler-card/releases/download/${SCHEDULER_CARD_VERSION}/scheduler-card.js"
+
+# Create scheduler-card directory
+mkdir -p ${PWD}/config/www/scheduler-card
+
+if [ ! -f ${PWD}/config/www/scheduler-card/scheduler-card.js ]; then
+    # Install wget if not available
+    if ! command -v wget &> /dev/null; then
+        echo "   Installing wget..."
+        apk add --no-cache wget > /dev/null 2>&1
+    fi
+
+    echo "   Downloading scheduler-card ${SCHEDULER_CARD_VERSION}..."
+    if wget -q ${SCHEDULER_CARD_URL} -O ${PWD}/config/www/scheduler-card/scheduler-card.js; then
+        echo "   ✅ Scheduler card installed!"
+    else
+        echo "   ⚠️  Failed to download scheduler card"
+    fi
+else
+    echo "   ✅ Scheduler card already installed"
+fi
+
+echo ""
+echo "🚀 Starting Home Assistant in the background..."
+
+
+
+
+# Set the path to custom_components
+## This let's us have the structure we want <root>/custom_components/integration_blueprint
+## while at the same time have Home Assistant configuration inside <root>/config
+## without resulting to symlinks.
+export PYTHONPATH="${PWD}:${PWD}/config:${PYTHONPATH}"
+
+# Start Home Assistant
+hass --config "${PWD}/config" --debug

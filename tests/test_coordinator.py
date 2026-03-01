@@ -42,8 +42,8 @@ from custom_components.homeshift.const import (
 _FR = LOCALIZED_DEFAULTS["fr"]
 _fr_day_map: dict[str, str] = {k.strip(): v.strip() for k, _, v in (p.partition(":") for p in _FR[CONF_DAY_MODE_MAP].split(","))}
 _fr_event_map_raw: dict[str, str] = {k.strip().lower(): v.strip() for k, _, v in (p.partition(":") for p in _FR[CONF_EVENT_MODE_MAP].split(","))}
-EVENT_REMOTE: str = next(k for k, v in _fr_event_map_raw.items() if v == "Remote")
-EVENT_VACATION: str = next(k for k, v in _fr_event_map_raw.items() if v == "Home")
+EVENT_REMOTE: str = next(k for k, v in _fr_event_map_raw.items() if v == "remote")
+EVENT_VACATION: str = next(k for k, v in _fr_event_map_raw.items() if v == "home")
 DEFAULT_DAY_MODES: list[str] = list(_fr_day_map.values())
 DEFAULT_THERMOSTAT_MODE_MAP: str = _FR[CONF_THERMOSTAT_MODE_MAP]
 DEFAULT_MODE_DEFAULT: str = _fr_day_map[_FR[CONF_MODE_DEFAULT]]
@@ -181,13 +181,13 @@ class TestParseThermostatModeMap:
     """Tests for parse_thermostat_mode_map static method."""
 
     def test_default_map(self):
-        """Default map parses correctly with preserved key case."""
+        """Default map parses correctly with lowercase keys."""
         mapping = HomeShiftCoordinator.parse_thermostat_mode_map(DEFAULT_THERMOSTAT_MODE_MAP)
         assert mapping == {
-            "Off": "Eteint",
-            "Heating": "Chauffage",
-            "Cooling": "Climatisation",
-            "Ventilation": "Ventilation",
+            "off": "Eteint",
+            "heating": "Chauffage",
+            "cooling": "Climatisation",
+            "ventilation": "Ventilation",
         }
 
     def test_empty_string(self):
@@ -247,10 +247,10 @@ class TestParseThermostatModeMap:
         entry = _make_mock_entry()
         coordinator = HomeShiftCoordinator(hass, entry)
         assert coordinator.thermostat_mode_map == {
-            "Off": "Eteint",
-            "Heating": "Chauffage",
-            "Cooling": "Climatisation",
-            "Ventilation": "Ventilation",
+            "off": "Eteint",
+            "heating": "Chauffage",
+            "cooling": "Climatisation",
+            "ventilation": "Ventilation",
         }
 
 

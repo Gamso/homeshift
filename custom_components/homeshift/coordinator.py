@@ -108,7 +108,7 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
         self._mode_absence = self._day_mode_map.get(_mode_absence_key, _mode_absence_key)
         # event_mode_map: event keyword (lowercase) → day mode display name
         raw_event_map = self.parse_event_mode_map(_config.get(CONF_EVENT_MODE_MAP, DEFAULT_EVENT_MODE_MAP))
-        # Values in raw_event_map are keys (e.g. "Home", "Remote") — resolve to display
+        # Values in raw_event_map are keys (e.g. "home", "remote") — resolve to display
         self._event_mode_map: dict[str, str] = {kw: self._day_mode_map.get(mode_key, mode_key) for kw, mode_key in raw_event_map.items()}
 
         _LOGGER.info(

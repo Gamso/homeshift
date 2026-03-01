@@ -231,8 +231,8 @@ class TestCustomModeMapping:
     def test_custom_default_mode(self):
         """Custom default mode."""
         hass = make_mock_hass()
-        entry = make_mock_entry(mode_default="Bureau")
-        entry.data[CONF_DAY_MODE_MAP] = "Bureau:Bureau, Maison:Maison, Télétravail:Télétravail, Absence:Absence"
+        entry = make_mock_entry(mode_default="work")
+        entry.data[CONF_DAY_MODE_MAP] = "work:Bureau, home:Maison, remote:Télétravail, away:Absence"
         hass.states.get.return_value = make_calendar_state(state="off")
         coordinator = HomeShiftCoordinator(hass, entry)
         coordinator.day_mode = "Maison"
@@ -245,8 +245,8 @@ class TestCustomModeMapping:
     def test_custom_weekend_mode(self):
         """Custom weekend mode."""
         hass = make_mock_hass()
-        entry = make_mock_entry(mode_weekend="Repos")
-        entry.data[CONF_DAY_MODE_MAP] = "Travail:Travail, Repos:Repos, Maison:Maison, Télétravail:Télétravail, Absence:Absence"
+        entry = make_mock_entry(mode_weekend="home")
+        entry.data[CONF_DAY_MODE_MAP] = "work:Travail, home:Repos, remote:Télétravail, away:Absence"
         hass.states.get.return_value = make_calendar_state(state="off")
         coordinator = HomeShiftCoordinator(hass, entry)
         coordinator.day_mode = "Travail"
@@ -259,8 +259,8 @@ class TestCustomModeMapping:
     def test_custom_holiday_mode(self):
         """Custom holiday mode."""
         hass = make_mock_hass()
-        entry = make_mock_entry(holiday_calendar="calendar.jours_feries", mode_holiday="Ferie")
-        entry.data[CONF_DAY_MODE_MAP] = "Travail:Travail, Maison:Maison, Ferie:Ferie, Télétravail:Télétravail, Absence:Absence"
+        entry = make_mock_entry(holiday_calendar="calendar.jours_feries", mode_holiday="home")
+        entry.data[CONF_DAY_MODE_MAP] = "work:Travail, home:Ferie, remote:Télétravail, away:Absence"
 
         def get_state(entity_id):
             if entity_id == "calendar.teletravail":
@@ -280,8 +280,8 @@ class TestCustomModeMapping:
     def test_custom_event_mode_map(self):
         """Custom event mode map."""
         hass = make_mock_hass()
-        entry = make_mock_entry(event_mode_map="Formation:Bureau, Conférence:Bureau")
-        entry.data[CONF_DAY_MODE_MAP] = "Travail:Travail, Bureau:Bureau, Maison:Maison, Télétravail:Télétravail, Absence:Absence"
+        entry = make_mock_entry(event_mode_map="Formation:work, Conférence:work")
+        entry.data[CONF_DAY_MODE_MAP] = "work:Bureau, home:Maison, remote:Télétravail, away:Absence"
         hass.states.get.return_value = make_calendar_state(
             state="on", message="Formation",
             start_time="2026-03-04 09:00:00", end_time="2026-03-04 17:00:00",
@@ -297,8 +297,8 @@ class TestCustomModeMapping:
     def test_event_mode_map_case_insensitive(self):
         """Event mode map case insensitive."""
         hass = make_mock_hass()
-        entry = make_mock_entry(event_mode_map="télétravail:Remote")
-        entry.data[CONF_DAY_MODE_MAP] = "Travail:Travail, Remote:Remote, Maison:Maison, Absence:Absence"
+        entry = make_mock_entry(event_mode_map="télétravail:remote")
+        entry.data[CONF_DAY_MODE_MAP] = "work:Travail, remote:Remote, home:Maison, away:Absence"
         hass.states.get.return_value = make_calendar_state(
             state="on", message="Télétravail",
             start_time="2026-03-03 00:00:00", end_time="2026-03-04 00:00:00",
@@ -346,8 +346,8 @@ class TestCustomModeMapping:
     def test_event_priority_over_weekend(self):
         """Event priority over weekend."""
         hass = make_mock_hass()
-        entry = make_mock_entry(event_mode_map="Astreinte:Astreinte")
-        entry.data[CONF_DAY_MODE_MAP] = "Travail:Travail, Maison:Maison, Astreinte:Astreinte, Télétravail:Télétravail, Absence:Absence"
+        entry = make_mock_entry(event_mode_map="Astreinte:work")
+        entry.data[CONF_DAY_MODE_MAP] = "work:Astreinte, home:Maison, remote:Télétravail, away:Absence"
         hass.states.get.return_value = make_calendar_state(
             state="on", message="Astreinte",
             start_time="2026-03-07 00:00:00", end_time="2026-03-08 00:00:00",
@@ -365,9 +365,9 @@ class TestCustomModeMapping:
         hass = make_mock_hass()
         entry = make_mock_entry(
             holiday_calendar="calendar.jours_feries",
-            event_mode_map="Astreinte:Astreinte",
+            event_mode_map="Astreinte:work",
         )
-        entry.data[CONF_DAY_MODE_MAP] = "Travail:Travail, Maison:Maison, Astreinte:Astreinte, Télétravail:Télétravail, Absence:Absence"
+        entry.data[CONF_DAY_MODE_MAP] = "work:Astreinte, home:Maison, remote:Télétravail, away:Absence"
 
         def get_state(entity_id):
             if entity_id == "calendar.teletravail":
@@ -411,8 +411,8 @@ class TestConfigurableAbsenceMode:
     def test_custom_absence_blocks_update(self):
         """Custom absence blocks update."""
         hass = make_mock_hass()
-        entry = make_mock_entry(mode_absence="Vacances Longues")
-        entry.data[CONF_DAY_MODE_MAP] = "Travail:Travail, Maison:Maison, Vacances Longues:Vacances Longues, Télétravail:Télétravail"
+        entry = make_mock_entry(mode_absence="away")
+        entry.data[CONF_DAY_MODE_MAP] = "work:Travail, home:Maison, away:Vacances Longues, remote:Télétravail"
         hass.states.get.return_value = make_calendar_state(state="off")
         coordinator = HomeShiftCoordinator(hass, entry)
         coordinator.day_mode = "Vacances Longues"
@@ -425,8 +425,8 @@ class TestConfigurableAbsenceMode:
     def test_non_absence_allows_update(self):
         """Non absence allows update."""
         hass = make_mock_hass()
-        entry = make_mock_entry(mode_absence="Away", mode_default="Travail")
-        entry.data[CONF_DAY_MODE_MAP] = "Travail:Travail, Maison:Maison, Away:Away, Télétravail:Télétravail, Absence:Absence"
+        entry = make_mock_entry(mode_absence="away", mode_default="work")
+        entry.data[CONF_DAY_MODE_MAP] = "work:Travail, home:Maison, away:Away, remote:Télétravail"
         hass.states.get.return_value = make_calendar_state(state="off")
         coordinator = HomeShiftCoordinator(hass, entry)
         coordinator.day_mode = "Maison"

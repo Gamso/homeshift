@@ -286,16 +286,16 @@ class TestThermostatModeKeyResolution:
         loop = asyncio.get_event_loop()
         loop.run_until_complete(coordinator.async_set_thermostat_mode("Chauffage"))
         assert coordinator.thermostat_mode == "Chauffage"
-        assert coordinator.thermostat_mode_key == "Heating"
+        assert coordinator.thermostat_mode_key == "heating"
 
     def test_set_thermostat_mode_by_internal_key_exact_case(self):
         """Set thermostat mode by internal key exact case."""
         hass = make_mock_hass()
         coordinator = HomeShiftCoordinator(hass, make_mock_entry())
         loop = asyncio.get_event_loop()
-        loop.run_until_complete(coordinator.async_set_thermostat_mode("Heating"))
+        loop.run_until_complete(coordinator.async_set_thermostat_mode("heating"))
         assert coordinator.thermostat_mode == "Chauffage"
-        assert coordinator.thermostat_mode_key == "Heating"
+        assert coordinator.thermostat_mode_key == "heating"
 
     def test_set_thermostat_mode_by_internal_key_lowercase(self):
         """Set thermostat mode by internal key lowercase."""
@@ -312,7 +312,7 @@ class TestThermostatModeKeyResolution:
         loop = asyncio.get_event_loop()
         loop.run_until_complete(coordinator.async_set_thermostat_mode("off"))
         assert coordinator.thermostat_mode == "Eteint"
-        assert coordinator.thermostat_mode_key == "Off"
+        assert coordinator.thermostat_mode_key == "off"
 
     def test_set_thermostat_mode_unknown_rejected(self):
         """Set thermostat mode unknown rejected."""
@@ -331,7 +331,7 @@ class TestThermostatModeKeyResolution:
         loop = asyncio.get_event_loop()
         result = loop.run_until_complete(coordinator.async_update_data())
         assert "thermostat_mode_key" in result
-        assert result["thermostat_mode_key"] in ("Off", "Heating", "Cooling", "Ventilation")
+        assert result["thermostat_mode_key"] in ("off", "heating", "cooling", "ventilation")
 
 
 # ---------------------------------------------------------------------------

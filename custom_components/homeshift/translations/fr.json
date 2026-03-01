@@ -33,10 +33,10 @@
               "day_display_absence": "Absence"
             },
             "data_description": {
-              "day_display_home": "Nom affiché pour la clé Home",
-              "day_display_work": "Nom affiché pour la clé Work",
-              "day_display_remote": "Nom affiché pour la clé Remote",
-              "day_display_absence": "Nom affiché pour la clé Absence"
+              "day_display_home": "Nom affiché pour la clé home",
+              "day_display_work": "Nom affiché pour la clé work",
+              "day_display_remote": "Nom affiché pour la clé remote",
+              "day_display_absence": "Nom affiché pour la clé away"
             }
           },
           "defaults_section": {
@@ -58,10 +58,10 @@
               "thermostat_display_ventilation": "Ventilation"
             },
             "data_description": {
-              "thermostat_display_off": "Nom affiché pour la clé Off",
-              "thermostat_display_heating": "Nom affiché pour la clé Heating",
-              "thermostat_display_cooling": "Nom affiché pour la clé Cooling",
-              "thermostat_display_ventilation": "Nom affiché pour la clé Ventilation"
+              "thermostat_display_off": "Nom affiché pour la clé off",
+              "thermostat_display_heating": "Nom affiché pour la clé heating",
+              "thermostat_display_cooling": "Nom affiché pour la clé cooling",
+              "thermostat_display_ventilation": "Nom affiché pour la clé ventilation"
             }
           }
         }
@@ -112,10 +112,10 @@
               "day_display_absence": "Absence"
             },
             "data_description": {
-              "day_display_home": "Nom affiché pour la clé Home",
-              "day_display_work": "Nom affiché pour la clé Work",
-              "day_display_remote": "Nom affiché pour la clé Remote",
-              "day_display_absence": "Nom affiché pour la clé Absence"
+              "day_display_home": "Nom affiché pour la clé home",
+              "day_display_work": "Nom affiché pour la clé work",
+              "day_display_remote": "Nom affiché pour la clé remote",
+              "day_display_absence": "Nom affiché pour la clé away"
             }
           },
           "defaults_section": {
@@ -137,10 +137,10 @@
               "thermostat_display_ventilation": "Ventilation"
             },
             "data_description": {
-              "thermostat_display_off": "Nom affiché pour la clé Off",
-              "thermostat_display_heating": "Nom affiché pour la clé Heating",
-              "thermostat_display_cooling": "Nom affiché pour la clé Cooling",
-              "thermostat_display_ventilation": "Nom affiché pour la clé Ventilation"
+              "thermostat_display_off": "Nom affiché pour la clé off",
+              "thermostat_display_heating": "Nom affiché pour la clé heating",
+              "thermostat_display_cooling": "Nom affiché pour la clé cooling",
+              "thermostat_display_ventilation": "Nom affiché pour la clé ventilation"
             }
           }
         }

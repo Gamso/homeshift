@@ -19,18 +19,18 @@ CONF_EVENT_MODE_MAP = "event_mode_map"  # Mapping: calendar event keyword → da
 CONF_MODE_ABSENCE = "mode_absence"  # Day mode key that blocks automatic updates
 
 # Default values (keys are stable English identifiers)
-DEFAULT_DAY_MODE_MAP = "Home:Home, Work:Work, Remote:Remote, Absence:Absence"
-DEFAULT_THERMOSTAT_MODE_MAP = "Off:Off, Heating:Heating, Cooling:Cooling, Ventilation:Ventilation"
+DEFAULT_DAY_MODE_MAP = "home:Home, work:Work, remote:Remote, away:Away"
+DEFAULT_THERMOSTAT_MODE_MAP = "off:Off, heating:Heating, cooling:Cooling, ventilation:Ventilation"
 # Internal key that means 'thermostat is off' — schedulers with any thermostat
 # tag are disabled when the thermostat mode matches this key.
-THERMOSTAT_OFF_KEY = "Off"
+THERMOSTAT_OFF_KEY = "off"
 DEFAULT_SCAN_INTERVAL = 60  # minutes
 DEFAULT_OVERRIDE_DURATION = 0  # 0 = disabled
-DEFAULT_MODE_DEFAULT = "Work"
-DEFAULT_MODE_WEEKEND = "Home"
-DEFAULT_MODE_HOLIDAY = "Home"
-DEFAULT_EVENT_MODE_MAP = "Vacation:Home, Remote:Remote"
-DEFAULT_MODE_ABSENCE = "Absence"
+DEFAULT_MODE_DEFAULT = "work"
+DEFAULT_MODE_WEEKEND = "home"
+DEFAULT_MODE_HOLIDAY = "home"
+DEFAULT_EVENT_MODE_MAP = "Vacation:home, Remote:remote"
+DEFAULT_MODE_ABSENCE = "away"
 
 # Entity IDs
 SELECT_DAY_MODE = "day_mode"
@@ -65,22 +65,22 @@ ATTR_THERMOSTAT_MODE = "thermostat_mode"
 
 LOCALIZED_DEFAULTS: dict[str, dict] = {
     "en": {
-        CONF_DAY_MODE_MAP: "Home:Home, Work:Work, Remote:Remote, Absence:Absence",
-        CONF_MODE_DEFAULT: "Work",
-        CONF_MODE_WEEKEND: "Home",
-        CONF_MODE_HOLIDAY: "Home",
-        CONF_MODE_ABSENCE: "Absence",
-        CONF_EVENT_MODE_MAP: "Vacation:Home, Remote:Remote",
-        CONF_THERMOSTAT_MODE_MAP: "Off:Off, Heating:Heating, Cooling:Cooling, Ventilation:Ventilation",
+        CONF_DAY_MODE_MAP: "home:Home, work:Work, remote:Remote, away:Away",
+        CONF_MODE_DEFAULT: "work",
+        CONF_MODE_WEEKEND: "home",
+        CONF_MODE_HOLIDAY: "home",
+        CONF_MODE_ABSENCE: "away",
+        CONF_EVENT_MODE_MAP: "Vacation:home, Remote:remote",
+        CONF_THERMOSTAT_MODE_MAP: "off:Off, heating:Heating, cooling:Cooling, ventilation:Ventilation",
     },
     "fr": {
-        CONF_DAY_MODE_MAP: "Home:Maison, Work:Travail, Remote:T\u00e9l\u00e9travail, Absence:Absence",
-        CONF_MODE_DEFAULT: "Work",
-        CONF_MODE_WEEKEND: "Home",
-        CONF_MODE_HOLIDAY: "Home",
-        CONF_MODE_ABSENCE: "Absence",
-        CONF_EVENT_MODE_MAP: "Vacances:Home, T\u00e9l\u00e9travail:Remote",
-        CONF_THERMOSTAT_MODE_MAP: "Off:Eteint, Heating:Chauffage, Cooling:Climatisation, Ventilation:Ventilation",
+        CONF_DAY_MODE_MAP: "home:Maison, work:Travail, remote:Télétravail, away:Absence",
+        CONF_MODE_DEFAULT: "work",
+        CONF_MODE_WEEKEND: "home",
+        CONF_MODE_HOLIDAY: "home",
+        CONF_MODE_ABSENCE: "away",
+        CONF_EVENT_MODE_MAP: "Vacances:home, Télétravail:remote",
+        CONF_THERMOSTAT_MODE_MAP: "off:Eteint, heating:Chauffage, cooling:Climatisation, ventilation:Ventilation",
     },
 }
 

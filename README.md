@@ -22,7 +22,7 @@ Automatic day-mode and thermostat-mode management for Home Assistant, driven by 
     - [`number.override_duration`](#numberoverride_duration)
   - [🛠️ Services](#️-services)
     - [`homeshift.refresh_schedulers`](#homeshiftrefresh_schedulers)
-    - [`homeshift.check_next_day`](#homeshiftcheck_next_day)
+    - [`homeshift.sync_calendar`](#homeshiftsync_calendar)
   - [⚙️ Configuration Parameters](#️-configuration-parameters)
   - [🧠 Detection Logic](#-detection-logic)
     - [Half-Day Events](#half-day-events)
@@ -112,7 +112,7 @@ When you manually change the day mode, this setting defines how long (in minutes
 ### `homeshift.refresh_schedulers`
 Immediately refreshes the scheduler switches based on the current day mode and thermostat mode. Useful after manually changing a mode.
 
-### `homeshift.check_next_day`
+### `homeshift.sync_calendar`
 Manually triggers a calendar check and updates `select.day_mode` if needed. This is also called automatically at regular intervals.
 
 ---

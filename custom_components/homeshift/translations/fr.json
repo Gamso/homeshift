@@ -172,9 +172,9 @@
       "name": "Rafraîchir les Schedulers",
       "description": "Rafraîchir l'état des schedulers selon le mode jour et le mode thermostat courants"
     },
-    "check_next_day": {
-      "name": "Vérifier le Jour Suivant",
-      "description": "Vérifier et mettre à jour le mode jour pour le jour suivant"
+    "sync_calendar": {
+      "name": "Synchroniser le Calendrier",
+      "description": "Re-synchronise le calendrier et met à jour le mode jour courant"
     }
   }
 }

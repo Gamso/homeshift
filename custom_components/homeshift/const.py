@@ -47,7 +47,7 @@ EVENT_PERIOD_AFTERNOON = "afternoon"
 
 # Service names
 SERVICE_REFRESH_SCHEDULERS = "refresh_schedulers"
-SERVICE_CHECK_NEXT_DAY = "check_next_day"
+SERVICE_SYNC_CALENDAR = "sync_calendar"
 
 # Attributes
 ATTR_DAY_MODE = "day_mode"

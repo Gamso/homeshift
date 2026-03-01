@@ -49,6 +49,11 @@ class HomeShiftSelect(CoordinatorEntity[HomeShiftCoordinator], SelectEntity):
         """Return the current selected option."""
         return self.coordinator.day_mode
 
+    @property
+    def extra_state_attributes(self) -> dict:
+        """Expose the key→display map so custom cards can translate mode keys."""
+        return {"day_mode_map": self.coordinator.day_mode_map}
+
     def select_option(self, option: str) -> None:
         """Change the selected option (sync stub — async_select_option is used)."""
         raise NotImplementedError

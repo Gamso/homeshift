@@ -564,7 +564,7 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
         # 4. Default (regular work day)
         return self._mode_default
 
-    async def async_check_next_day(self) -> None:
+    async def async_sync_calendar(self) -> None:
         """Check and set day type (called at daily check time and periodically).
 
         This is the daily check entry point. It triggers a full refresh which

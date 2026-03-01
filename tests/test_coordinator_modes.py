@@ -436,7 +436,7 @@ class TestConfigurableAbsenceMode:
             asyncio.get_event_loop().run_until_complete(coordinator.async_update_data())
         assert coordinator.day_mode == DEFAULT_MODE_DEFAULT
 
-    def test_absence_skips_check_next_day(self):
+    def test_absence_skips_sync_calendar(self):
         """Absence skips check next day."""
         from unittest.mock import AsyncMock
         hass = make_mock_hass()
@@ -445,10 +445,10 @@ class TestConfigurableAbsenceMode:
         coordinator.day_mode = DEFAULT_MODE_ABSENCE
         coordinator.async_refresh = AsyncMock()
 
-        asyncio.get_event_loop().run_until_complete(coordinator.async_check_next_day())
+        asyncio.get_event_loop().run_until_complete(coordinator.async_sync_calendar())
         coordinator.async_refresh.assert_not_called()
 
-    def test_non_absence_runs_check_next_day(self):
+    def test_non_absence_runs_sync_calendar(self):
         """Non absence runs check next day."""
         from unittest.mock import AsyncMock
         hass = make_mock_hass()
@@ -457,7 +457,7 @@ class TestConfigurableAbsenceMode:
         coordinator.day_mode = DEFAULT_MODE_DEFAULT
         coordinator.async_refresh = AsyncMock()
 
-        asyncio.get_event_loop().run_until_complete(coordinator.async_check_next_day())
+        asyncio.get_event_loop().run_until_complete(coordinator.async_sync_calendar())
         coordinator.async_refresh.assert_called_once()
 
 

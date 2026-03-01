@@ -7,7 +7,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 
-from .const import DOMAIN, SERVICE_REFRESH_SCHEDULERS, SERVICE_CHECK_NEXT_DAY
+from .const import DOMAIN, SERVICE_REFRESH_SCHEDULERS, SERVICE_SYNC_CALENDAR
 from .coordinator import HomeShiftCoordinator
 
 _LOGGER = logging.getLogger(__name__)
@@ -52,14 +52,14 @@ async def async_setup_services(hass: HomeAssistant, coordinator: HomeShiftCoordi
         _LOGGER.info("Service call: refresh_schedulers")
         await coordinator.async_refresh_schedulers()
 
-    async def handle_check_next_day(_call) -> None:
-        """Handle the check_next_day service call."""
-        _LOGGER.info("Service call: check_next_day")
-        await coordinator.async_check_next_day()
+    async def handle_sync_calendar(_call) -> None:
+        """Handle the sync_calendar service call."""
+        _LOGGER.info("Service call: sync_calendar")
+        await coordinator.async_sync_calendar()
 
     hass.services.async_register(
         DOMAIN, SERVICE_REFRESH_SCHEDULERS, handle_refresh_schedulers
     )
     hass.services.async_register(
-        DOMAIN, SERVICE_CHECK_NEXT_DAY, handle_check_next_day
+        DOMAIN, SERVICE_SYNC_CALENDAR, handle_sync_calendar
     )

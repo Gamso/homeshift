@@ -73,7 +73,7 @@ class HomeShiftSelect(CoordinatorEntity[HomeShiftCoordinator], SelectEntity):
             "identifiers": {(DOMAIN, self._entry.entry_id)},
             "name": "HomeShift",
             "manufacturer": "Gamso",
-            "model": "HomeShift Controller",
+            "model": "HomeShift",
         }
 
 
@@ -119,5 +119,5 @@ class HomeShiftThermostatSelect(CoordinatorEntity[HomeShiftCoordinator], SelectE
             "identifiers": {(DOMAIN, self._entry.entry_id)},
             "name": "HomeShift",
             "manufacturer": "Gamso",
-            "model": "HomeShift Controller",
+            "model": "HomeShift",
         }

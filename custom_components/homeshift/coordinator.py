@@ -6,6 +6,7 @@ from datetime import datetime, date, timedelta
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.util import dt as dt_util
 
@@ -44,6 +45,10 @@ _LOGGER = logging.getLogger(__name__)
 
 # Midday threshold for determining morning vs afternoon half-days
 MIDDAY_HOUR = 13
+
+# Persistent storage
+STORAGE_VERSION = 1
+STORAGE_KEY = f"{__name__}.state"
 
 
 class HomeShiftCoordinator(DataUpdateCoordinator):
@@ -132,10 +137,59 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
             self._event_mode_map,
         )
 
+        # Persistent storage — used to restore modes after HA restart
+        self._store: Store = Store(hass, STORAGE_VERSION, f"{STORAGE_KEY}.{entry.entry_id}")
+
     @property
     def _config(self) -> dict:
         """Return merged config: entry.data overridden by entry.options."""
         return {**self.entry.data, **self.entry.options}
+
+    async def async_restore_state(self) -> None:
+        """Restore persisted day_mode and thermostat_mode from storage.
+
+        Called once during setup, before the first coordinator refresh, so that
+        the coordinator starts with the last-known modes instead of the defaults.
+        """
+        try:
+            stored = await self._store.async_load()
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.debug("Could not load persisted state: %s", err)
+            return
+
+        if not stored:
+            _LOGGER.debug("No persisted state found, using configured defaults")
+            return
+
+        day_mode_key = stored.get("day_mode_key")
+        if day_mode_key and day_mode_key in self._day_mode_map:
+            resolved = self._day_mode_map[day_mode_key]
+            _LOGGER.info(
+                "Restoring persisted day_mode: key=%s -> '%s'", day_mode_key, resolved
+            )
+            self._day_mode = resolved
+
+        thermostat_mode_key = stored.get("thermostat_mode_key")
+        if thermostat_mode_key and thermostat_mode_key in self._thermostat_mode_map:
+            resolved = self._thermostat_mode_map[thermostat_mode_key]
+            _LOGGER.info(
+                "Restoring persisted thermostat_mode: key=%s -> '%s'",
+                thermostat_mode_key,
+                resolved,
+            )
+            self._thermostat_mode = resolved
+
+    async def _async_save_state(self) -> None:
+        """Persist current day_mode_key and thermostat_mode_key to storage."""
+        try:
+            await self._store.async_save(
+                {
+                    "day_mode_key": self.day_mode_key,
+                    "thermostat_mode_key": self.thermostat_mode_key,
+                }
+            )
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.debug("Could not persist coordinator state: %s", err)
 
     @staticmethod
     def parse_day_mode_map(raw: str) -> dict[str, str]:
@@ -326,6 +380,7 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
         # Rebuild and broadcast the full data dict so downstream sensors pick up
         # the new day_mode and override_until immediately (rather than stale data).
         self.async_set_updated_data(self._build_result())
+        await self._async_save_state()
 
     @property
     def thermostat_mode_key(self) -> str | None:
@@ -381,6 +436,7 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
         )
         await self.async_refresh_schedulers()
         self.async_set_updated_data(self._build_result())
+        await self._async_save_state()
 
     @staticmethod
     def detect_event_period(start_time_str: str, end_time_str: str) -> str:
@@ -516,6 +572,7 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
                 )
                 self._day_mode = new_mode
                 await self.async_refresh_schedulers()
+                await self._async_save_state()
             else:
                 _LOGGER.debug(
                     "Periodic check: day_mode unchanged ('%s') | event=%s, period=%s",

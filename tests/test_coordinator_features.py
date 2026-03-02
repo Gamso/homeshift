@@ -4,7 +4,7 @@ from __future__ import annotations
 import asyncio
 from datetime import datetime
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -456,3 +456,135 @@ class TestSchedulerRefresh:
             "switch.sched_teletravail" in c.args[2]["entity_id"]
             for c in on_calls
         )
+
+
+# ---------------------------------------------------------------------------
+# State persistence (async_restore_state / _async_save_state)
+# ---------------------------------------------------------------------------
+
+class TestStatePersistence:
+    """Verify coordinator persists and restores day_mode and thermostat_mode."""
+
+    def _make_store(self, stored_data: dict | None) -> MagicMock:
+        """Return a mock Store that returns stored_data on async_load."""
+        store = MagicMock()
+        store.async_load = AsyncMock(return_value=stored_data)
+        store.async_save = AsyncMock()
+        return store
+
+    def test_restore_state_sets_day_mode_from_stored_key(self):
+        """async_restore_state() maps stored day_mode_key to the correct display value."""
+        hass = make_mock_hass()
+        coordinator = HomeShiftCoordinator(hass, make_mock_entry())
+        mock_store = self._make_store({"day_mode_key": "remote", "thermostat_mode_key": "off"})
+        coordinator._store = mock_store
+
+        asyncio.get_event_loop().run_until_complete(coordinator.async_restore_state())
+
+        assert coordinator.day_mode == "Télétravail"
+
+    def test_restore_state_sets_thermostat_mode_from_stored_key(self):
+        """async_restore_state() maps stored thermostat_mode_key to the correct display value."""
+        hass = make_mock_hass()
+        coordinator = HomeShiftCoordinator(hass, make_mock_entry())
+        mock_store = self._make_store({"day_mode_key": "work", "thermostat_mode_key": "heating"})
+        coordinator._store = mock_store
+
+        asyncio.get_event_loop().run_until_complete(coordinator.async_restore_state())
+
+        assert coordinator.thermostat_mode == "Chauffage"
+        assert coordinator.thermostat_mode_key == "heating"
+
+    def test_restore_state_no_stored_data_uses_defaults(self):
+        """async_restore_state() leaves defaults untouched when storage is empty."""
+        hass = make_mock_hass()
+        coordinator = HomeShiftCoordinator(hass, make_mock_entry())
+        initial_day = coordinator.day_mode
+        initial_thermo = coordinator.thermostat_mode
+        mock_store = self._make_store(None)
+        coordinator._store = mock_store
+
+        asyncio.get_event_loop().run_until_complete(coordinator.async_restore_state())
+
+        assert coordinator.day_mode == initial_day
+        assert coordinator.thermostat_mode == initial_thermo
+
+    def test_restore_state_unknown_key_ignored(self):
+        """async_restore_state() ignores keys not present in the current mode map."""
+        hass = make_mock_hass()
+        coordinator = HomeShiftCoordinator(hass, make_mock_entry())
+        initial_day = coordinator.day_mode
+        mock_store = self._make_store({"day_mode_key": "unknown_key", "thermostat_mode_key": "off"})
+        coordinator._store = mock_store
+
+        asyncio.get_event_loop().run_until_complete(coordinator.async_restore_state())
+
+        # Unknown day_mode_key is ignored; thermostat_mode key is still restored
+        assert coordinator.day_mode == initial_day
+        assert coordinator.thermostat_mode == "Eteint"
+
+    def test_restore_state_handles_load_error_gracefully(self):
+        """async_restore_state() does not raise when storage load fails."""
+        hass = make_mock_hass()
+        coordinator = HomeShiftCoordinator(hass, make_mock_entry())
+        initial_day = coordinator.day_mode
+        mock_store = MagicMock()
+        mock_store.async_load = AsyncMock(side_effect=OSError("disk error"))
+        coordinator._store = mock_store
+
+        # Should not raise
+        asyncio.get_event_loop().run_until_complete(coordinator.async_restore_state())
+        assert coordinator.day_mode == initial_day
+
+    def test_save_state_called_on_manual_day_mode_change(self):
+        """_async_save_state() is awaited after async_set_day_mode()."""
+        hass = make_mock_hass()
+        coordinator = HomeShiftCoordinator(hass, make_mock_entry())
+        mock_store = MagicMock()
+        mock_store.async_save = AsyncMock()
+        coordinator._store = mock_store
+
+        asyncio.get_event_loop().run_until_complete(coordinator.async_set_day_mode("Télétravail"))
+
+        mock_store.async_save.assert_called_once()
+        saved = mock_store.async_save.call_args[0][0]
+        assert saved["day_mode_key"] == "remote"
+
+    def test_save_state_called_on_manual_thermostat_mode_change(self):
+        """_async_save_state() is awaited after async_set_thermostat_mode()."""
+        hass = make_mock_hass()
+        coordinator = HomeShiftCoordinator(hass, make_mock_entry())
+        mock_store = MagicMock()
+        mock_store.async_save = AsyncMock()
+        coordinator._store = mock_store
+
+        asyncio.get_event_loop().run_until_complete(
+            coordinator.async_set_thermostat_mode("Chauffage")
+        )
+
+        mock_store.async_save.assert_called_once()
+        saved = mock_store.async_save.call_args[0][0]
+        assert saved["thermostat_mode_key"] == "heating"
+
+    def test_save_state_called_on_auto_mode_change(self):
+        """_async_save_state() is awaited when auto-update changes day_mode."""
+        hass = make_mock_hass()
+        hass.states.get.return_value = make_calendar_state(
+            state="on",
+            message="Télétravail",
+            start_time="2026-03-04 00:00:00",
+            end_time="2026-03-05 00:00:00",
+        )
+        coordinator = HomeShiftCoordinator(hass, make_mock_entry())
+        coordinator.day_mode = "Maison"  # Start with a different mode
+        mock_store = MagicMock()
+        mock_store.async_save = AsyncMock()
+        coordinator._store = mock_store
+
+        with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
+            mock_dt.now.return_value = datetime(2026, 3, 4, 10, 0, 0)  # Wednesday
+            asyncio.get_event_loop().run_until_complete(coordinator.async_update_data())
+
+        # Day mode should have changed (auto-update), triggering a save
+        assert coordinator.day_mode == "Télétravail"
+        mock_store.async_save.assert_called_once()

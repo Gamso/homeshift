@@ -90,5 +90,5 @@ class HomeShiftOverrideDurationNumber(NumberEntity, RestoreEntity):
             "identifiers": {(DOMAIN, self._entry.entry_id)},
             "name": "HomeShift",
             "manufacturer": "Gamso",
-            "model": "HomeShift Controller",
+            "model": "HomeShift",
         }

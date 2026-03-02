@@ -4,8 +4,8 @@ from __future__ import annotations
 import logging
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import Platform
-from homeassistant.core import HomeAssistant
+from homeassistant.const import EVENT_HOMEASSISTANT_STARTED, Platform
+from homeassistant.core import CoreState, Event, HomeAssistant
 
 from .const import DOMAIN, SERVICE_REFRESH_SCHEDULERS, SERVICE_SYNC_CALENDAR
 from .coordinator import HomeShiftCoordinator
@@ -34,6 +34,20 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     # Reload the integration when options are saved so the coordinator picks up changes
     entry.async_on_unload(entry.add_update_listener(_async_reload_on_options_update))
+
+    # Once HA is fully started (all entities available), run a calendar sync so that
+    # day_mode reflects the current calendar state rather than just the restored value.
+    if hass.state == CoreState.running:
+        # Integration was loaded/reloaded while HA was already running; sync now.
+        hass.async_create_task(coordinator.async_sync_calendar())
+    else:
+        # HA is still starting — schedule the sync for when all entities are ready.
+        async def _async_ha_started(_event: Event) -> None:
+            await coordinator.async_sync_calendar()
+
+        entry.async_on_unload(
+            hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STARTED, _async_ha_started)
+        )
 
     _LOGGER.info("HomeShift integration loaded successfully (entry_id=%s)", entry.entry_id)
 

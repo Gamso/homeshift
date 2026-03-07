@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, date, timedelta
+from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -19,6 +20,7 @@ from .const import (
     CONF_SCHEDULERS_PER_MODE,
     CONF_SCAN_INTERVAL,
     CONF_OVERRIDE_DURATION,
+    CONF_EARLY_SWITCH_MINUTES,
     CONF_MODE_DEFAULT,
     CONF_MODE_WEEKEND,
     CONF_MODE_HOLIDAY,
@@ -28,15 +30,13 @@ from .const import (
     DEFAULT_THERMOSTAT_MODE_MAP,
     DEFAULT_SCAN_INTERVAL,
     DEFAULT_OVERRIDE_DURATION,
+    DEFAULT_EARLY_SWITCH_MINUTES,
     DEFAULT_MODE_DEFAULT,
     DEFAULT_MODE_WEEKEND,
     DEFAULT_MODE_HOLIDAY,
     DEFAULT_EVENT_MODE_MAP,
     DEFAULT_MODE_ABSENCE,
     EVENT_NONE,
-    EVENT_PERIOD_ALL_DAY,
-    EVENT_PERIOD_MORNING,
-    EVENT_PERIOD_AFTERNOON,
     THERMOSTAT_OFF_KEY,
     get_localized_defaults,
 )
@@ -49,6 +49,25 @@ MIDDAY_HOUR = 13
 # Persistent storage
 STORAGE_VERSION = 1
 STORAGE_KEY = f"{__name__}.state"
+
+
+def _parse_event_dt(start_str: str, fallback_tzinfo: Any) -> datetime | None:
+    """Parse an ISO datetime string (from calendar.get_events) into a datetime.
+
+    Handles timezone-aware strings like '2026-03-07T14:00:00+01:00',
+    naive strings like '2026-03-07T14:00:00', and date-only '2026-03-07'.
+    When the parsed value is naive and fallback_tzinfo is provided, it is applied.
+    Returns None for unparseable values.
+    """
+    if not start_str:
+        return None
+    try:
+        dt = datetime.fromisoformat(str(start_str))
+        if dt.tzinfo is None and fallback_tzinfo is not None:
+            dt = dt.replace(tzinfo=fallback_tzinfo)
+        return dt
+    except (ValueError, TypeError):
+        return None
 
 
 class HomeShiftCoordinator(DataUpdateCoordinator):
@@ -84,7 +103,6 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
         self._day_mode: str = self._day_modes[0] if self._day_modes else "Home"
 
         self._current_event: str | None = None
-        self._event_period: str | None = None  # all_day, morning, afternoon
         # Day-level event type: persists until midnight so the sensor doesn't
         # flicker back to EVENT_NONE between half-day events.
         # Stored as the matched event keyword (locale-independent) or EVENT_NONE.
@@ -96,8 +114,19 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
             self._override_duration_minutes: int = int(override_raw or 0)
         except (ValueError, TypeError):
             self._override_duration_minutes = DEFAULT_OVERRIDE_DURATION
+        # Early switch: number of minutes to pre-activate a timed event before its start
+        early_raw = _config.get(CONF_EARLY_SWITCH_MINUTES, DEFAULT_EARLY_SWITCH_MINUTES)
+        try:
+            self._early_switch_minutes: int = int(early_raw or 0)
+        except (ValueError, TypeError):
+            self._early_switch_minutes = DEFAULT_EARLY_SWITCH_MINUTES
         # Manual override: blocks auto-update until this datetime
         self._override_until: datetime | None = None
+        # Timestamp of the last successful data fetch (used to compute next_scan_at)
+        self._last_update_time: datetime | None = None
+        # Predicted next automatic mode change
+        self._next_mode: str | None = None
+        self._next_mode_at: datetime | None = None
 
         # Parse thermostat mode map (InternalKey:DisplayValue, ...)
         thermostat_map_str = _config.get(CONF_THERMOSTAT_MODE_MAP, _loc.get(CONF_THERMOSTAT_MODE_MAP, DEFAULT_THERMOSTAT_MODE_MAP))
@@ -305,11 +334,6 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
         return self._current_event
 
     @property
-    def event_period(self) -> str | None:
-        """Return current event period (all_day, morning, afternoon)."""
-        return self._event_period
-
-    @property
     def override_duration_minutes(self) -> int:
         """Return the current override duration in minutes (0 = disabled)."""
         return self._override_duration_minutes
@@ -319,12 +343,42 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
         """Return the datetime when the manual override expires, or None."""
         return self._override_until
 
+    @property
+    def next_scan_at(self) -> datetime | None:
+        """Timestamp of the next scheduled calendar scan, or None before first scan."""
+        if self._last_update_time is not None and self.update_interval is not None:
+            return self._last_update_time + self.update_interval
+        return None
+
+    @property
+    def next_mode_predicted(self) -> str | None:
+        """Predicted day mode at the next automatic change."""
+        return self._next_mode
+
+    @property
+    def next_mode_at(self) -> datetime | None:
+        """Timestamp when the next automatic day mode change is expected."""
+        return self._next_mode_at
+
     def set_override_duration_minutes(self, minutes: int) -> None:
         """Update the override duration (called by the number entity)."""
         self._override_duration_minutes = max(0, int(minutes))
         _LOGGER.info(
             "Override duration updated: %d min",
             self._override_duration_minutes,
+        )
+
+    @property
+    def early_switch_minutes(self) -> int:
+        """Return the early switch advance time in minutes (0 = disabled)."""
+        return self._early_switch_minutes
+
+    def set_early_switch_minutes(self, minutes: int) -> None:
+        """Update the early switch duration (called by the number entity)."""
+        self._early_switch_minutes = max(0, int(minutes))
+        _LOGGER.info(
+            "Early switch duration updated: %d min",
+            self._early_switch_minutes,
         )
 
     def _resolve_day_mode_display(self, mode: str) -> str | None:
@@ -353,7 +407,7 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
         resolved = self._resolve_day_mode_display(mode)
         if resolved is None:
             _LOGGER.warning(
-                "Manual change ignored: day_mode '%s' does not match any " "configured display value or internal key. " "Configured modes: %s | keys: %s",
+                "Manual change ignored: day_mode '%s' does not match any" " configured display value or internal key." " Configured modes: %s | keys: %s",
                 mode,
                 self._day_modes,
                 list(self._day_mode_map.keys()),
@@ -420,7 +474,7 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
         resolved = self._resolve_thermostat_display(mode)
         if resolved is None:
             _LOGGER.warning(
-                "Manual change ignored: thermostat_mode '%s' does not match any " "configured display value or internal key. " "Configured modes: %s | keys: %s",
+                "Manual change ignored: thermostat_mode '%s' does not match any" " configured display value or internal key." " Configured modes: %s | keys: %s",
                 mode,
                 self._thermostat_modes,
                 list(self._thermostat_mode_map.keys()),
@@ -438,35 +492,6 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
         self.async_set_updated_data(self._build_result())
         await self._async_save_state()
 
-    @staticmethod
-    def detect_event_period(start_time_str: str, end_time_str: str) -> str:
-        """Detect whether the event is all-day, morning, or afternoon.
-
-        All-day events have times at midnight boundaries (00:00:00).
-        Timed events are classified as:
-          - morning: ends at or before MIDDAY_HOUR (13:00)
-          - afternoon: starts at or after MIDDAY_HOUR (13:00)
-          - all_day: spans both morning and afternoon
-        """
-        try:
-            start_dt = datetime.strptime(start_time_str, "%Y-%m-%d %H:%M:%S")
-            end_dt = datetime.strptime(end_time_str, "%Y-%m-%d %H:%M:%S")
-        except (ValueError, TypeError):
-            return EVENT_PERIOD_ALL_DAY
-
-        # All-day events: both start and end at midnight
-        if start_dt.hour == 0 and start_dt.minute == 0 and end_dt.hour == 0 and end_dt.minute == 0:
-            return EVENT_PERIOD_ALL_DAY
-
-        # Timed events: classify by time range
-        if end_dt.hour <= MIDDAY_HOUR and end_dt.minute == 0:
-            return EVENT_PERIOD_MORNING
-        if start_dt.hour >= MIDDAY_HOUR:
-            return EVENT_PERIOD_AFTERNOON
-
-        # Spans entire day or both halves
-        return EVENT_PERIOD_ALL_DAY
-
     async def async_update_data(self) -> dict:
         """Public entry point for fetching data (delegates to _async_update_data).
 
@@ -483,6 +508,7 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
         active during its time window.
         """
         now = dt_util.now()
+        self._last_update_time = now
         calendar_entity = self._config.get(CONF_CALENDAR_ENTITY)
         _LOGGER.debug(
             "Calendar sync started at %s (entity=%s, current mode=%s)",
@@ -493,12 +519,14 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
 
         if not calendar_entity:
             _LOGGER.warning("No calendar entity configured, skipping sync")
+            self._next_mode, self._next_mode_at = None, None
             return self._build_result()
 
         # Get calendar state
         calendar_state = self.hass.states.get(calendar_entity)
         if not calendar_state:
             _LOGGER.warning("Calendar entity '%s' not found in Home Assistant states", calendar_entity)
+            self._next_mode, self._next_mode_at = None, None
             return self._build_result()
 
         _LOGGER.debug(
@@ -512,7 +540,6 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
 
         # Determine current event from calendar
         self._current_event = None
-        self._event_period = None
         today_type = EVENT_NONE
 
         # Reset day-level event type at midnight (new calendar day)
@@ -529,7 +556,6 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
 
             if event_message:
                 self._current_event = event_message
-                self._event_period = self.detect_event_period(event_start, event_end)
 
                 # Match event message against configured event keywords (case-insensitive)
                 matched_keyword: str | None = None
@@ -541,6 +567,36 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
                 # Persist the day-level type once a known event is seen for today
                 if today_type != EVENT_NONE:
                     self._today_type = today_type
+
+        # Early switch: if calendar is currently off and early_switch_minutes > 0, check
+        # if a timed (non-all-day) event starts within the early window.
+        if calendar_state.state != "on" and self._early_switch_minutes > 0:
+            early_end = now + timedelta(minutes=self._early_switch_minutes)
+            early_events = await self._async_get_upcoming_events(calendar_entity, now, early_end)
+            now_naive = self._to_naive(now)
+            early_end_naive = self._to_naive(early_end)
+            for event in early_events:
+                if self._is_all_day_event(event):
+                    continue
+                start_dt = _parse_event_dt(event.get("start", ""), now.tzinfo)
+                if start_dt is None:
+                    continue
+                start_naive = self._to_naive(start_dt)
+                # Only pre-activate events that actually start within (now, early_end]
+                if not now_naive < start_naive <= early_end_naive:
+                    continue
+                summary = event.get("summary", "")
+                for kw in self._event_mode_map:
+                    if kw in summary.lower():
+                        today_type = kw
+                        break
+                if today_type != EVENT_NONE:
+                    _LOGGER.debug(
+                        "Early switch: pre-activating event '%s' (starts within %d min)",
+                        summary,
+                        self._early_switch_minutes,
+                    )
+                    break
 
         # Auto-update mode (skip if absence mode or manual override is active)
         if self._day_mode == self._mode_absence:
@@ -564,22 +620,23 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
             new_mode = await self._determine_mode(today_type)
             if new_mode and new_mode != self._day_mode and new_mode in self._day_modes:
                 _LOGGER.info(
-                    "Auto mode change: day_mode '%s' -> '%s' (event=%s, period=%s)",
+                    "Auto mode change: day_mode '%s' -> '%s' (event=%s)",
                     self._day_mode,
                     new_mode,
                     self._current_event,
-                    self._event_period,
                 )
                 self._day_mode = new_mode
                 await self.async_refresh_schedulers()
                 await self._async_save_state()
             else:
                 _LOGGER.debug(
-                    "Periodic check: day_mode unchanged ('%s') | event=%s, period=%s",
+                    "Periodic check: day_mode unchanged ('%s') | event=%s",
                     self._day_mode,
                     self._current_event,
-                    self._event_period,
                 )
+
+        # Compute when and to what mode the next automatic change is expected
+        self._next_mode, self._next_mode_at = await self._compute_next_mode_change(calendar_state, now)
 
         return self._build_result()
 
@@ -588,15 +645,185 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
         return {
             "today_type": self._today_type,
             "current_event": self._current_event,
-            "event_period": self._event_period,
             "day_mode": self._day_mode,
             "day_mode_key": self.day_mode_key,
             "thermostat_mode": self._thermostat_mode,
             "thermostat_mode_key": self.thermostat_mode_key,
             "override_until": self._override_until.isoformat() if self._override_until else None,
+            "next_scan_at": self.next_scan_at.isoformat() if self.next_scan_at else None,
+            "next_mode_predicted": self._next_mode,
+            "next_mode_at": self._next_mode_at.isoformat() if self._next_mode_at else None,
         }
 
-    async def _determine_mode(self, today_type: str) -> str | None:
+    async def _async_get_upcoming_events(self, calendar_entity: str, start: datetime, end: datetime) -> list[dict]:
+        """Fetch calendar events in [start, end] via the calendar.get_events service.
+
+        Returns a list of event dicts (keys include 'start', 'end', 'summary').
+        Returns an empty list if the service is unavailable or the call fails.
+        """
+        try:
+            result = await self.hass.services.async_call(
+                "calendar",
+                "get_events",
+                {
+                    "entity_id": calendar_entity,
+                    "start_date_time": start.isoformat(),
+                    "end_date_time": end.isoformat(),
+                },
+                blocking=True,
+                return_response=True,
+            )
+            entity_data = result.get(calendar_entity) if isinstance(result, dict) else None
+            if isinstance(entity_data, dict):
+                events = entity_data.get("events", [])
+                if isinstance(events, list):
+                    return [e for e in events if isinstance(e, dict)]
+        except Exception:  # noqa: BLE001
+            pass
+        return []
+
+    @staticmethod
+    def _is_all_day_event(event: dict) -> bool:
+        """Return True if the event from calendar.get_events is an all-day event.
+
+        All-day events have a date-only 'start' value (no 'T' time separator).
+        """
+        return "T" not in str(event.get("start", ""))
+
+    @staticmethod
+    def _to_naive(dt: datetime) -> datetime:
+        """Strip tzinfo for mixed-timezone-safe comparisons."""
+        return dt.replace(tzinfo=None) if dt.tzinfo is not None else dt
+
+    async def _mode_at_time(
+        self,
+        at: datetime,
+        upcoming_events: list[dict],
+        active_calendar_state,
+        ref_tzinfo,
+    ) -> str | None:
+        """Determine what day mode would be active at `at`.
+
+        Checks (in priority order):
+        1. Upcoming events (from get_events) that are active at `at`
+        2. Currently active calendar event (from calendar_state) if it still covers `at`
+        3. Weekend / holiday / default fallback
+        """
+        at_naive = self._to_naive(at)
+
+        # 1. Scan events returned by get_events
+        for event in upcoming_events:
+            start_dt = _parse_event_dt(event.get("start", ""), ref_tzinfo)
+            end_dt = _parse_event_dt(event.get("end", ""), ref_tzinfo)
+            if start_dt is None or end_dt is None:
+                continue
+            if self._to_naive(start_dt) <= at_naive < self._to_naive(end_dt):
+                summary = event.get("summary", "")
+                for kw, mode in self._event_mode_map.items():
+                    if kw in summary.lower():
+                        return mode
+
+        # 2. Currently active event (may not appear in upcoming_events when
+        #    get_events returns only future starts)
+        if active_calendar_state is not None and active_calendar_state.state == "on":
+            start_str = active_calendar_state.attributes.get("start_time", "")
+            end_str = active_calendar_state.attributes.get("end_time", "")
+            try:
+                s = datetime.strptime(start_str, "%Y-%m-%d %H:%M:%S")
+                e = datetime.strptime(end_str, "%Y-%m-%d %H:%M:%S")
+                if s <= at_naive < e:
+                    message = active_calendar_state.attributes.get("message", "")
+                    for kw, mode in self._event_mode_map.items():
+                        if kw in message.lower():
+                            return mode
+            except (ValueError, TypeError):
+                pass
+
+        # 3. Early switch — timed event starts within early_switch_minutes after `at`
+        if self._early_switch_minutes > 0:
+            early_delta = timedelta(minutes=self._early_switch_minutes)
+            for event in upcoming_events:
+                if self._is_all_day_event(event):
+                    continue
+                start_dt = _parse_event_dt(event.get("start", ""), ref_tzinfo)
+                if start_dt is None:
+                    continue
+                start_naive = self._to_naive(start_dt)
+                if start_naive - early_delta <= at_naive < start_naive:
+                    summary = event.get("summary", "")
+                    for kw, mode in self._event_mode_map.items():
+                        if kw in summary.lower():
+                            return mode
+
+        # 4. No active mapped event → weekend / holiday / default
+        return await self._determine_mode(EVENT_NONE, at_time=at)
+
+    async def _compute_next_mode_change(self, calendar_state, now: datetime) -> tuple[str | None, datetime | None]:
+        """Estimate the next automatic day-mode change: (predicted_mode, when).
+
+        General algorithm — handles any number of events per day:
+        1. Fetch all events over the next 2 days via calendar.get_events.
+        2. Build inflection points: every event start/end + midnight boundaries.
+        3. For each inflection point (chronological), compute the active mode.
+        4. Return the first point where the mode differs from the current mode.
+        """
+        calendar_entity = self._config.get(CONF_CALENDAR_ENTITY, "")
+        now_naive = self._to_naive(now)
+
+        # Fetch events for today + tomorrow (2-day window)
+        end_window = (now + timedelta(days=2)).replace(hour=0, minute=0, second=0, microsecond=0)
+        upcoming = await self._async_get_upcoming_events(calendar_entity, now, end_window)
+
+        # Collect candidate inflection points (all strictly after now)
+        candidates: set[datetime] = set()
+
+        # Midnight boundaries: tonight and tomorrow night
+        for d in range(1, 3):
+            midnight = (now + timedelta(days=d)).replace(hour=0, minute=0, second=0, microsecond=0)
+            candidates.add(midnight)
+
+        # End of the currently active event (calendar_state uses "YYYY-MM-DD HH:MM:SS" format)
+        if calendar_state is not None and calendar_state.state == "on":
+            end_str = calendar_state.attributes.get("end_time", "")
+            try:
+                end_naive = datetime.strptime(end_str, "%Y-%m-%d %H:%M:%S")
+                if end_naive > now_naive:
+                    candidates.add(end_naive.replace(tzinfo=now.tzinfo))
+            except (ValueError, TypeError):
+                pass
+
+        # Start and end of every upcoming event from get_events (ISO format)
+        for event in upcoming:
+            for time_key in ("start", "end"):
+                dt = _parse_event_dt(event.get(time_key, ""), now.tzinfo)
+                if dt is not None and self._to_naive(dt) > now_naive:
+                    candidates.add(dt)
+
+        # Early switch: for timed events add event_start - early_switch_minutes as candidate
+        if self._early_switch_minutes > 0:
+            early_delta = timedelta(minutes=self._early_switch_minutes)
+            for event in upcoming:
+                if self._is_all_day_event(event):
+                    continue
+                start_dt = _parse_event_dt(event.get("start", ""), now.tzinfo)
+                if start_dt is not None:
+                    early_dt = start_dt - early_delta
+                    if self._to_naive(early_dt) > now_naive:
+                        candidates.add(early_dt)
+
+        # Sort chronologically using naive times to avoid tz comparison errors
+        sorted_candidates = sorted(candidates, key=self._to_naive)
+
+        # Walk candidates and return the first that produces a different mode
+        current_mode = self._day_mode
+        for candidate in sorted_candidates:
+            mode_at = await self._mode_at_time(candidate, upcoming, calendar_state, now.tzinfo)
+            if mode_at != current_mode:
+                return mode_at, candidate
+
+        return None, None
+
+    async def _determine_mode(self, today_type: str, at_time: datetime | None = None) -> str | None:
         """Determine the appropriate mode based on current state.
 
         Uses configurable mappings instead of hardcoded values.
@@ -605,8 +832,11 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
         2. Weekend -> mode_weekend
         3. Holiday calendar active -> mode_holiday
         4. Default -> mode_default
+
+        at_time: datetime to use for weekday check (defaults to now).
+        Note: holiday calendar check always uses the current HA calendar state.
         """
-        now = dt_util.now()
+        now = at_time if at_time is not None else dt_util.now()
         is_weekend = now.weekday() in [5, 6]
 
         # Check holiday calendar

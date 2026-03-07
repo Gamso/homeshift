@@ -20,13 +20,19 @@ Automatic day-mode and thermostat-mode management for Home Assistant, driven by 
     - [`select.day_mode`](#selectday_mode)
     - [`select.thermostat_mode`](#selectthermostat_mode)
     - [`number.override_duration`](#numberoverride_duration)
+    - [`number.early_switch`](#numberearly_switch)
+    - [`sensor.next_scan`](#sensornext_scan)
+    - [`sensor.next_mode`](#sensornext_mode)
+    - [`sensor.next_mode_at`](#sensornext_mode_at)
   - [🛠️ Services](#️-services)
     - [`homeshift.refresh_schedulers`](#homeshiftrefresh_schedulers)
     - [`homeshift.sync_calendar`](#homeshiftsync_calendar)
   - [⚙️ Configuration Parameters](#️-configuration-parameters)
   - [🧠 Detection Logic](#-detection-logic)
     - [Half-Day Events](#half-day-events)
+    - [Early Switch](#early-switch)
   - [🗓️ Scheduler Integration](#️-scheduler-integration)
+    - [Thermostat Tags](#thermostat-tags)
   - [📄 License](#-license)
 
 ---
@@ -63,8 +69,10 @@ At regular intervals (every 60 minutes by default), it reads your calendar, pick
 
 - Home Assistant 2023.1 or later
 - A **calendar** entity containing your work or schedule events
-- Optionally, a **calendar** entity for public holidays
-- Optionally, the [Scheduler integration](https://github.com/nielsfaber/scheduler-component) if you want to automate scheduler switches
+- A **calendar** entity for public holidays
+- The [Scheduler integration](https://github.com/nielsfaber/scheduler-component) to automate scheduler switches
+
+> **Scheduler tags (required for thermostat integration):** When using the Scheduler integration alongside `thermostat_mode`, each scheduler switch that controls heating or cooling **must have the matching thermostat tag** (e.g. `Heating`, `Cooling`). Schedulers without any thermostat tag are treated as day-mode-only and are never force-disabled by the thermostat logic. See the [Thermostat Tags](#thermostat-tags) section for details.
 
 ---
 
@@ -107,6 +115,39 @@ When you manually change the day mode, this setting defines how long (in minutes
 
 ---
 
+### `number.early_switch`
+Pre-activates an upcoming timed calendar event before it officially starts. When set, HomeShift switches to the correct day mode up to X minutes before the event start.
+
+- **Type:** Number (minutes, 0–480, step 5)
+- **Default:** `0` (disabled)
+- **Only applies to timed events** — all-day events are always ignored.
+
+**Example:** You have a *Remote work* event from 14:00 to 18:00 and `early_switch = 120`. HomeShift will switch to `Remote working` mode at **12:00**, giving your heating schedule 2 hours to warm the house before you start working.
+
+The `sensor.next_mode_at` and `sensor.next_mode` sensors reflect this anticipated switch time, so you can display it on a dashboard.
+
+---
+
+### `sensor.next_scan`
+Shows the date and time of the next scheduled calendar poll.
+
+- **Type:** Sensor (timestamp)
+- **Unit:** ISO 8601 datetime
+
+### `sensor.next_mode`
+Shows the predicted next day mode that HomeShift will switch to.
+
+- **Type:** Sensor (text)
+- **Value:** Display name of the predicted mode (e.g. `Remote working`), or `unknown` if no change is expected in the next 2 days.
+
+### `sensor.next_mode_at`
+Shows when the next automatic mode change is expected to occur (taking early_switch into account for timed events).
+
+- **Type:** Sensor (timestamp)
+- **Unit:** ISO 8601 datetime
+
+---
+
 ## 🛠️ Services
 
 ### `homeshift.refresh_schedulers`
@@ -129,6 +170,7 @@ All parameters can be changed at any time via **Settings → Devices & Services 
 | **Thermostat Mode Map** | `off:Off, heating:Heating, ...` | Maps internal thermostat keys to the display names you prefer |
 | **Scan Interval**       | `60 min`                        | How often HomeShift checks the calendar (in minutes)          |
 | **Override Duration**   | `0` (disabled)                  | Minutes to block automatic updates after a manual mode change |
+| **Early Switch**        | `0` (disabled)                  | Minutes to pre-activate a timed event before its start        |
 | **Default Mode**        | `Work`                          | Mode used on regular weekdays with no calendar event          |
 | **Weekend Mode**        | `Home`                          | Mode used on Saturdays and Sundays                            |
 | **Holiday Mode**        | `Home`                          | Mode used on public holidays                                  |
@@ -141,18 +183,35 @@ All parameters can be changed at any time via **Settings → Devices & Services 
 
 Each time HomeShift refreshes, it looks at today's active calendar event and determines the day mode using this priority order:
 
-| Priority | Condition                                        | Resulting mode                 |
-| -------- | ------------------------------------------------ | ------------------------------ |
-| 1        | Active calendar event matches the event mode map | Mapped mode (e.g. `Remote`)    |
-| 2        | Today is Saturday or Sunday                      | **Weekend mode**               |
-| 3        | Today is a public holiday                        | **Holiday mode**               |
-| 4        | No special condition                             | **Default mode** (e.g. `Work`) |
+| Priority | Condition                                                                 | Resulting mode                 |
+| -------- | ------------------------------------------------------------------------- | ------------------------------ |
+| 1        | Active calendar event matches the event mode map                          | Mapped mode (e.g. `Remote`)    |
+| 2        | A timed event starts within `early_switch` minutes and it matches the map | Mapped mode (anticipated)      |
+| 3        | Today is Saturday or Sunday                                               | **Weekend mode**               |
+| 4        | Today is a public holiday                                                 | **Holiday mode**               |
+| 5        | No special condition                                                      | **Default mode** (e.g. `Work`) |
 
 > **Note:** If the day mode is currently set to the **Away mode**, all automatic updates are paused until you change it manually.
 
 ### Half-Day Events
 
 If a calendar event covers only the morning or only the afternoon, HomeShift applies the corresponding mode only during that half of the day, then reverts to the default mode for the other half.
+
+### Early Switch
+
+The `number.early_switch` entity lets you anticipate timed calendar events. When the current time is within the early-switch window before a timed event, HomeShift pre-activates the corresponding mode.
+
+```
+Calendar event:  Remote working  14:00 ──────────── 18:00
+early_switch = 120 min
+                             ↑
+                          12:00  ← HomeShift switches to Remote working here
+```
+
+**Key rules:**
+- Only applies to **timed events** (events with a specific start/end time). All-day events (e.g. public holidays) are never pre-activated.
+- The `sensor.next_mode` and `sensor.next_mode_at` sensors reflect the anticipated switch time, not the original event start.
+- Setting `early_switch` to `0` disables the feature entirely.
 
 ---
 
@@ -165,6 +224,27 @@ In the integration settings, you can assign one or more switch entities to each 
 - The switches for **all other modes** are turned **off**
 
 This lets you, for example, run different heating schedules depending on whether you're working from home or at the office — without any automation to write.
+
+### Thermostat Tags
+
+When you also use `thermostat_mode`, HomeShift needs to know which scheduler switches control heating or cooling so it can disable them automatically when the thermostat is off.
+
+To make this work, each scheduler switch that is linked to a specific thermostat mode **must have the corresponding thermostat mode name set as a tag** in the Scheduler card.
+
+**Example:**
+
+Suppose your thermostat modes are `Heating` and `Cooling`. You create the following schedulers:
+
+| Scheduler switch                 | Tags       | Purpose                                   |
+| -------------------------------- | ---------- | ----------------------------------------- |
+| `switch.schedule_home_heating`   | `Heating`  | Heating schedule when you're at home      |
+| `switch.schedule_work_heating`   | `Heating`  | Heating schedule when you're at work      |
+| `switch.schedule_home_cooling`   | `Cooling`  | Cooling schedule when you're at home      |
+| `switch.schedule_presence_light` | *(no tag)* | Lighting schedule, not thermostat-related |
+
+When `thermostat_mode` is set to **Off**, HomeShift will force-disable all switches tagged with `Heating` or `Cooling`, regardless of the current day mode. Switches without any thermostat tag (like `switch.schedule_presence_light`) are left untouched.
+
+> **How to add a tag in the Scheduler card:** Open the Scheduler card → edit a schedule → scroll to *Tags* → add the thermostat mode name exactly as defined in your thermostat mode map (e.g. `Heating`, `Cooling`).
 
 ---
 

@@ -10,7 +10,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
 
-from .const import DOMAIN, NUMBER_OVERRIDE_DURATION, DEFAULT_OVERRIDE_DURATION
+from .const import DOMAIN, NUMBER_OVERRIDE_DURATION, NUMBER_EARLY_SWITCH, DEFAULT_OVERRIDE_DURATION
 from .coordinator import HomeShiftCoordinator
 
 _LOGGER = logging.getLogger(__name__)
@@ -23,7 +23,10 @@ async def async_setup_entry(
 ) -> None:
     """Set up HomeShift number entities."""
     coordinator: HomeShiftCoordinator = hass.data[DOMAIN][entry.entry_id]
-    async_add_entities([HomeShiftOverrideDurationNumber(coordinator, entry)])
+    async_add_entities([
+        HomeShiftOverrideDurationNumber(coordinator, entry),
+        HomeShiftEarlySwitchNumber(coordinator, entry),
+    ])
 
 
 class HomeShiftOverrideDurationNumber(NumberEntity, RestoreEntity):
@@ -80,6 +83,74 @@ class HomeShiftOverrideDurationNumber(NumberEntity, RestoreEntity):
         """Update the override duration."""
         minutes = int(value)
         self._coordinator.set_override_duration_minutes(minutes)
+        self._attr_native_value = float(minutes)
+        self.async_write_ha_state()
+
+    @property
+    def device_info(self):
+        """Return device information."""
+        return {
+            "identifiers": {(DOMAIN, self._entry.entry_id)},
+            "name": "HomeShift",
+            "manufacturer": "Gamso",
+            "model": "HomeShift",
+        }
+
+
+class HomeShiftEarlySwitchNumber(NumberEntity, RestoreEntity):
+    """Number entity controlling the early-switch advance time in minutes.
+
+    When set to a value > 0, the coordinator will pre-activate a timed (non-all-day)
+    calendar event that many minutes before its scheduled start.  All-day events are
+    never affected by this setting.
+    """
+
+    _attr_has_entity_name = True
+    _attr_translation_key = "early_switch"
+
+    _attr_native_min_value = 0
+    _attr_native_max_value = 480  # 8 h maximum
+    _attr_native_step = 5
+    _attr_native_unit_of_measurement = UnitOfTime.MINUTES
+    _attr_mode = NumberMode.BOX
+    _attr_icon = "mdi:clock-fast"
+
+    def __init__(self, coordinator: HomeShiftCoordinator, entry: ConfigEntry) -> None:
+        """Initialize the number entity."""
+        self._coordinator = coordinator
+        self._entry = entry
+        self._attr_unique_id = f"{entry.entry_id}_{NUMBER_EARLY_SWITCH}"
+        self._attr_native_value = float(coordinator.early_switch_minutes)
+
+    async def async_added_to_hass(self) -> None:
+        """Restore state from the previous run if available."""
+        await super().async_added_to_hass()
+        last_state = await self.async_get_last_state()
+        if last_state is not None:
+            try:
+                restored = int(float(last_state.state))
+                self._attr_native_value = float(restored)
+                self._coordinator.set_early_switch_minutes(restored)
+                _LOGGER.debug(
+                    "Early switch duration restored to %d min from previous state",
+                    restored,
+                )
+            except (ValueError, TypeError):
+                pass
+
+    @property
+    def native_value(self) -> float:
+        """Return the current early switch duration in minutes."""
+        return float(self._coordinator.early_switch_minutes)
+
+    def set_native_value(self, value: float) -> None:
+        """Set the early switch duration (sync stub — async_set_native_value is used)."""
+        raise NotImplementedError
+
+    async def async_set_native_value(self, value: float) -> None:
+        """Update the early switch duration."""
+        minutes = int(value)
+        self._coordinator.set_early_switch_minutes(minutes)
         self._attr_native_value = float(minutes)
         self.async_write_ha_state()
 

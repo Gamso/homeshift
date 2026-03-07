@@ -16,5 +16,6 @@
         //    "/home/vscode/core",
         "/workspaces/day_mode/custom_components/homeshift",
         "/home/vscode/.local/lib/python3.13/site-packages/homeassistant"
-    ]
+    ],
+    "python-envs.defaultEnvManager": "ms-python.python:system"
 }

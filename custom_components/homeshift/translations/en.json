@@ -158,12 +158,31 @@
     }
   },
   "entity": {
+    "number": {
+      "override_duration": {
+        "name": "Override Duration"
+      },
+      "early_switch": {
+        "name": "Early Switch"
+      }
+    },
     "select": {
       "day_mode": {
         "name": "HomeShift"
       },
       "thermostat_mode": {
         "name": "Thermostat Mode"
+      }
+    },
+    "sensor": {
+      "next_scan": {
+        "name": "Next Scan"
+      },
+      "next_mode": {
+        "name": "Next Mode"
+      },
+      "next_mode_at": {
+        "name": "Next Mode At"
       }
     }
   },

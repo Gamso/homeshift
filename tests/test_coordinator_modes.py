@@ -8,11 +8,6 @@ from unittest.mock import patch
 from custom_components.homeshift.coordinator import HomeShiftCoordinator
 from custom_components.homeshift.const import CONF_DAY_MODE_MAP
 
-from custom_components.homeshift.const import (
-    EVENT_PERIOD_ALL_DAY,
-    EVENT_PERIOD_AFTERNOON,
-    EVENT_PERIOD_MORNING,
-)
 from .conftest import (
     EVENT_NONE,
     EVENT_REMOTE,
@@ -65,7 +60,6 @@ class TestDefaultModeMapping:
 
         assert coordinator.day_mode == "Télétravail"
         assert result["today_type"] == EVENT_REMOTE
-        assert result["event_period"] == EVENT_PERIOD_ALL_DAY
 
     def test_afternoon_remote_active(self):
         """Afternoon remote active."""
@@ -83,7 +77,6 @@ class TestDefaultModeMapping:
             result = asyncio.get_event_loop().run_until_complete(coordinator.async_update_data())
 
         assert coordinator.day_mode == "Télétravail"
-        assert result["event_period"] == EVENT_PERIOD_AFTERNOON
 
     def test_afternoon_remote_morning_no_event(self):
         """Afternoon remote morning no event."""
@@ -116,7 +109,6 @@ class TestDefaultModeMapping:
             result = asyncio.get_event_loop().run_until_complete(coordinator.async_update_data())
 
         assert coordinator.day_mode == "Télétravail"
-        assert result["event_period"] == EVENT_PERIOD_MORNING
 
     def test_morning_remote_afternoon_reverts(self):
         """Morning remote afternoon reverts."""
@@ -218,7 +210,6 @@ class TestDefaultModeMapping:
         assert "thermostat_mode" in result
         assert "today_type" in result
         assert "current_event" in result
-        assert "event_period" in result
 
 
 # ---------------------------------------------------------------------------

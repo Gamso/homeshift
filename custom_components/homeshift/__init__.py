@@ -12,7 +12,7 @@ from .coordinator import HomeShiftCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS: list[Platform] = [Platform.SELECT, Platform.NUMBER]
+PLATFORMS: list[Platform] = [Platform.SELECT, Platform.NUMBER, Platform.SENSOR]
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:

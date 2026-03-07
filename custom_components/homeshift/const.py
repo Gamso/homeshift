@@ -36,14 +36,12 @@ DEFAULT_MODE_ABSENCE = "away"
 SELECT_DAY_MODE = "day_mode"
 SELECT_THERMOSTAT_MODE = "thermostat_mode"
 NUMBER_OVERRIDE_DURATION = "override_duration"
+SENSOR_NEXT_SCAN = "next_scan"
+SENSOR_NEXT_MODE = "next_mode"
+SENSOR_NEXT_MODE_AT = "next_mode_at"
 
 # Sentinel value used as today_type when no calendar event is active
 EVENT_NONE = "None"
-
-# Event period types
-EVENT_PERIOD_ALL_DAY = "all_day"
-EVENT_PERIOD_MORNING = "morning"
-EVENT_PERIOD_AFTERNOON = "afternoon"
 
 # Service names
 SERVICE_REFRESH_SCHEDULERS = "refresh_schedulers"

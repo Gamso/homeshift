@@ -165,6 +165,17 @@
       "thermostat_mode": {
         "name": "Mode Thermostat"
       }
+    },
+    "sensor": {
+      "next_scan": {
+        "name": "Prochain scan"
+      },
+      "next_mode": {
+        "name": "Prochain mode"
+      },
+      "next_mode_at": {
+        "name": "Prochain changement à"
+      }
     }
   },
   "services": {

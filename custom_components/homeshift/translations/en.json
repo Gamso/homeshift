@@ -165,6 +165,17 @@
       "thermostat_mode": {
         "name": "Thermostat Mode"
       }
+    },
+    "sensor": {
+      "next_scan": {
+        "name": "Next Scan"
+      },
+      "next_mode": {
+        "name": "Next Mode"
+      },
+      "next_mode_at": {
+        "name": "Next Mode At"
+      }
     }
   },
   "services": {

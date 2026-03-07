@@ -1,7 +1,6 @@
 """Tests for the HomeShiftCoordinator — static utilities and scan interval configuration.
 
 These tests cover:
-- detect_event_period classifies events correctly
 - parse_event_mode_map parses event-to-mode mappings
 - parse_thermostat_mode_map parses thermostat mode mappings
 - scan_interval configuration is respected
@@ -32,9 +31,6 @@ from custom_components.homeshift.const import (
     CONF_MODE_ABSENCE,
     DEFAULT_SCAN_INTERVAL,
     DEFAULT_OVERRIDE_DURATION,
-    EVENT_PERIOD_ALL_DAY,
-    EVENT_PERIOD_MORNING,
-    EVENT_PERIOD_AFTERNOON,
     LOCALIZED_DEFAULTS,
 )
 
@@ -66,64 +62,6 @@ def _make_mock_hass() -> MagicMock:
     hass = MagicMock()
     hass.config.language = "fr"
     return hass
-
-
-# ---------------------------------------------------------------------------
-# detect_event_period unit tests
-# ---------------------------------------------------------------------------
-
-class TestDetectEventPeriod:
-    """Tests for detect_event_period static method."""
-
-    def test_all_day_event_midnight_to_midnight(self):
-        """All day event midnight to midnight."""
-        result = HomeShiftCoordinator.detect_event_period("2026-03-03 00:00:00", "2026-03-04 00:00:00")
-        assert result == EVENT_PERIOD_ALL_DAY
-
-    def test_all_day_event_multi_day(self):
-        """All day event multi day."""
-        result = HomeShiftCoordinator.detect_event_period("2026-08-03 00:00:00", "2026-08-17 00:00:00")
-        assert result == EVENT_PERIOD_ALL_DAY
-
-    def test_morning_event(self):
-        """Morning event."""
-        result = HomeShiftCoordinator.detect_event_period("2026-03-12 08:00:00", "2026-03-12 12:00:00")
-        assert result == EVENT_PERIOD_MORNING
-
-    def test_morning_event_ending_at_13(self):
-        """Morning event ending at 13."""
-        result = HomeShiftCoordinator.detect_event_period("2026-03-12 08:00:00", "2026-03-12 13:00:00")
-        assert result == EVENT_PERIOD_MORNING
-
-    def test_afternoon_event(self):
-        """Afternoon event."""
-        result = HomeShiftCoordinator.detect_event_period("2026-03-04 13:00:00", "2026-03-04 18:00:00")
-        assert result == EVENT_PERIOD_AFTERNOON
-
-    def test_afternoon_event_starting_at_14(self):
-        """Afternoon event starting at 14."""
-        result = HomeShiftCoordinator.detect_event_period("2026-03-04 14:00:00", "2026-03-04 18:00:00")
-        assert result == EVENT_PERIOD_AFTERNOON
-
-    def test_spanning_event_treated_as_all_day(self):
-        """Spanning event treated as all day."""
-        result = HomeShiftCoordinator.detect_event_period("2026-03-04 08:00:00", "2026-03-04 18:00:00")
-        assert result == EVENT_PERIOD_ALL_DAY
-
-    def test_invalid_format_defaults_to_all_day(self):
-        """Invalid format defaults to all day."""
-        result = HomeShiftCoordinator.detect_event_period("invalid", "also-invalid")
-        assert result == EVENT_PERIOD_ALL_DAY
-
-    def test_none_values_default_to_all_day(self):
-        """None values default to all day."""
-        result = HomeShiftCoordinator.detect_event_period(None, None)
-        assert result == EVENT_PERIOD_ALL_DAY
-
-    def test_empty_strings_default_to_all_day(self):
-        """Empty strings default to all day."""
-        result = HomeShiftCoordinator.detect_event_period("", "")
-        assert result == EVENT_PERIOD_ALL_DAY
 
 
 # ---------------------------------------------------------------------------

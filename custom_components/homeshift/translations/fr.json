@@ -158,6 +158,14 @@
     }
   },
   "entity": {
+    "number": {
+      "override_duration": {
+        "name": "Durée de surcharge"
+      },
+      "early_switch": {
+        "name": "Bascule anticipée"
+      }
+    },
     "select": {
       "day_mode": {
         "name": "Mode Jour"

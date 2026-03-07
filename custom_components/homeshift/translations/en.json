@@ -158,6 +158,14 @@
     }
   },
   "entity": {
+    "number": {
+      "override_duration": {
+        "name": "Override Duration"
+      },
+      "early_switch": {
+        "name": "Early Switch"
+      }
+    },
     "select": {
       "day_mode": {
         "name": "HomeShift"

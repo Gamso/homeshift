@@ -10,6 +10,7 @@ CONF_THERMOSTAT_MODE_MAP = "thermostat_mode_map"  # Mapping: internal key → di
 CONF_SCHEDULERS_PER_MODE = "schedulers_per_mode"  # Scheduler entities per day mode
 CONF_SCAN_INTERVAL = "scan_interval"
 CONF_OVERRIDE_DURATION = "override_duration"  # minutes to lock auto-update after manual change
+CONF_EARLY_SWITCH_MINUTES = "early_switch_minutes"  # minutes to pre-activate a timed event
 
 # Mode mapping configuration
 CONF_MODE_DEFAULT = "mode_default"  # Day mode key for regular work days
@@ -26,6 +27,7 @@ DEFAULT_THERMOSTAT_MODE_MAP = "off:Off, heating:Heating, cooling:Cooling, ventil
 THERMOSTAT_OFF_KEY = "off"
 DEFAULT_SCAN_INTERVAL = 60  # minutes
 DEFAULT_OVERRIDE_DURATION = 0  # 0 = disabled
+DEFAULT_EARLY_SWITCH_MINUTES = 0  # 0 = disabled
 DEFAULT_MODE_DEFAULT = "work"
 DEFAULT_MODE_WEEKEND = "home"
 DEFAULT_MODE_HOLIDAY = "home"
@@ -36,6 +38,7 @@ DEFAULT_MODE_ABSENCE = "away"
 SELECT_DAY_MODE = "day_mode"
 SELECT_THERMOSTAT_MODE = "thermostat_mode"
 NUMBER_OVERRIDE_DURATION = "override_duration"
+NUMBER_EARLY_SWITCH = "early_switch"
 SENSOR_NEXT_SCAN = "next_scan"
 SENSOR_NEXT_MODE = "next_mode"
 SENSOR_NEXT_MODE_AT = "next_mode_at"

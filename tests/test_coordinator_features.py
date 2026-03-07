@@ -588,3 +588,131 @@ class TestStatePersistence:
         # Day mode should have changed (auto-update), triggering a save
         assert coordinator.day_mode == "Télétravail"
         mock_store.async_save.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# Early switch tests
+# ---------------------------------------------------------------------------
+
+def _mock_get_events(calendar_entity: str, events: list[dict]):
+    """Return an AsyncMock that simulates calendar.get_events returning `events`."""
+    return AsyncMock(return_value={calendar_entity: {"events": events}})
+
+
+class TestEarlySwitch:
+    """Verify the early_switch_minutes feature pre-activates timed events."""
+
+    def test_early_switch_activates_before_timed_event(self):
+        """Calendar off; timed event starts in 90 min; early_switch=120 → mode switches now."""
+        hass = make_mock_hass()
+        entry = make_mock_entry(early_switch_minutes=120)
+        hass.states.get.return_value = make_calendar_state(state="off")
+        hass.services.async_call = _mock_get_events(
+            "calendar.teletravail",
+            [{"summary": "Télétravail", "start": "2026-03-11T14:00:00", "end": "2026-03-11T18:00:00"}],
+        )
+        coordinator = HomeShiftCoordinator(hass, entry)
+
+        now = datetime(2026, 3, 11, 12, 0, 0)  # 90 min before 14:00
+        with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
+            mock_dt.now.return_value = now
+            asyncio.get_event_loop().run_until_complete(coordinator.async_update_data())
+
+        assert coordinator.day_mode == "Télétravail"
+
+    def test_early_switch_not_active_outside_window(self):
+        """Event starts in 3h; early_switch=120 → still too far out, no pre-activation."""
+        hass = make_mock_hass()
+        entry = make_mock_entry(early_switch_minutes=120)
+        hass.states.get.return_value = make_calendar_state(state="off")
+        hass.services.async_call = _mock_get_events(
+            "calendar.teletravail",
+            [{"summary": "Télétravail", "start": "2026-03-11T15:00:00", "end": "2026-03-11T18:00:00"}],
+        )
+        coordinator = HomeShiftCoordinator(hass, entry)
+
+        now = datetime(2026, 3, 11, 12, 0, 0)  # 3 h before 15:00
+        with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
+            mock_dt.now.return_value = now
+            asyncio.get_event_loop().run_until_complete(coordinator.async_update_data())
+
+        assert coordinator.day_mode == "Travail"  # default, no early switch
+
+    def test_early_switch_does_not_activate_for_allday_event(self):
+        """All-day event (date-only start); early_switch=120 → no pre-activation."""
+        hass = make_mock_hass()
+        entry = make_mock_entry(early_switch_minutes=120)
+        hass.states.get.return_value = make_calendar_state(state="off")
+        hass.services.async_call = _mock_get_events(
+            "calendar.teletravail",
+            # All-day event: start has no 'T' time separator
+            [{"summary": "Télétravail", "start": "2026-03-12", "end": "2026-03-13"}],
+        )
+        coordinator = HomeShiftCoordinator(hass, entry)
+
+        now = datetime(2026, 3, 11, 23, 0, 0)  # within 120 min of midnight → all-day ignored
+        with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
+            mock_dt.now.return_value = now
+            asyncio.get_event_loop().run_until_complete(coordinator.async_update_data())
+
+        assert coordinator.day_mode == "Travail"  # no early switch for all-day
+
+    def test_early_switch_zero_no_effect(self):
+        """early_switch=0 (disabled): timed event in 30 min, no pre-activation."""
+        hass = make_mock_hass()
+        entry = make_mock_entry(early_switch_minutes=0)
+        hass.states.get.return_value = make_calendar_state(state="off")
+        hass.services.async_call = _mock_get_events(
+            "calendar.teletravail",
+            [{"summary": "Télétravail", "start": "2026-03-11T14:00:00", "end": "2026-03-11T18:00:00"}],
+        )
+        coordinator = HomeShiftCoordinator(hass, entry)
+
+        now = datetime(2026, 3, 11, 13, 30, 0)  # 30 min before event
+        with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
+            mock_dt.now.return_value = now
+            asyncio.get_event_loop().run_until_complete(coordinator.async_update_data())
+
+        assert coordinator.day_mode == "Travail"
+
+    def test_next_mode_at_reflects_early_switch(self):
+        """next_mode_at = event_start - early_switch_minutes for a timed event."""
+        hass = make_mock_hass()
+        entry = make_mock_entry(early_switch_minutes=120)
+        hass.states.get.return_value = make_calendar_state(state="off")
+        hass.services.async_call = _mock_get_events(
+            "calendar.teletravail",
+            [{"summary": "Télétravail", "start": "2026-03-11T14:00:00", "end": "2026-03-11T18:00:00"}],
+        )
+        coordinator = HomeShiftCoordinator(hass, entry)
+
+        now = datetime(2026, 3, 11, 9, 0, 0)  # before the early window
+        with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
+            mock_dt.now.return_value = now
+            asyncio.get_event_loop().run_until_complete(coordinator.async_update_data())
+
+        # next_mode_at should be 14:00 - 120 min = 12:00
+        assert coordinator.next_mode_at == datetime(2026, 3, 11, 12, 0, 0)
+        assert coordinator.next_mode_predicted == "Télétravail"
+
+    def test_next_mode_at_allday_not_shifted(self):
+        """All-day event: next_mode_at is not shifted by early_switch."""
+        hass = make_mock_hass()
+        entry = make_mock_entry(early_switch_minutes=120)
+        hass.states.get.return_value = make_calendar_state(state="off")
+        hass.services.async_call = _mock_get_events(
+            "calendar.teletravail",
+            [{"summary": "Télétravail", "start": "2026-03-13", "end": "2026-03-14"}],
+        )
+        coordinator = HomeShiftCoordinator(hass, entry)
+
+        # Friday 10:00 — all-day event on Saturday; early switch should not shift it
+        now = datetime(2026, 3, 13, 10, 0, 0)  # Saturday all-day event already active
+        with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
+            mock_dt.now.return_value = now
+            asyncio.get_event_loop().run_until_complete(coordinator.async_update_data())
+
+        # All-day events start at midnight (parsed as 00:00:00 from date-only string)
+        # The event is active now, so next change is when it ends (Sunday midnight)
+        assert coordinator.next_mode_at is not None
+        assert coordinator.next_mode_at.hour == 0 and coordinator.next_mode_at.minute == 0

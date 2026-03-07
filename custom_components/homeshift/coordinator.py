@@ -20,6 +20,7 @@ from .const import (
     CONF_SCHEDULERS_PER_MODE,
     CONF_SCAN_INTERVAL,
     CONF_OVERRIDE_DURATION,
+    CONF_EARLY_SWITCH_MINUTES,
     CONF_MODE_DEFAULT,
     CONF_MODE_WEEKEND,
     CONF_MODE_HOLIDAY,
@@ -29,6 +30,7 @@ from .const import (
     DEFAULT_THERMOSTAT_MODE_MAP,
     DEFAULT_SCAN_INTERVAL,
     DEFAULT_OVERRIDE_DURATION,
+    DEFAULT_EARLY_SWITCH_MINUTES,
     DEFAULT_MODE_DEFAULT,
     DEFAULT_MODE_WEEKEND,
     DEFAULT_MODE_HOLIDAY,
@@ -112,6 +114,12 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
             self._override_duration_minutes: int = int(override_raw or 0)
         except (ValueError, TypeError):
             self._override_duration_minutes = DEFAULT_OVERRIDE_DURATION
+        # Early switch: number of minutes to pre-activate a timed event before its start
+        early_raw = _config.get(CONF_EARLY_SWITCH_MINUTES, DEFAULT_EARLY_SWITCH_MINUTES)
+        try:
+            self._early_switch_minutes: int = int(early_raw or 0)
+        except (ValueError, TypeError):
+            self._early_switch_minutes = DEFAULT_EARLY_SWITCH_MINUTES
         # Manual override: blocks auto-update until this datetime
         self._override_until: datetime | None = None
         # Timestamp of the last successful data fetch (used to compute next_scan_at)
@@ -360,6 +368,19 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
             self._override_duration_minutes,
         )
 
+    @property
+    def early_switch_minutes(self) -> int:
+        """Return the early switch advance time in minutes (0 = disabled)."""
+        return self._early_switch_minutes
+
+    def set_early_switch_minutes(self, minutes: int) -> None:
+        """Update the early switch duration (called by the number entity)."""
+        self._early_switch_minutes = max(0, int(minutes))
+        _LOGGER.info(
+            "Early switch duration updated: %d min",
+            self._early_switch_minutes,
+        )
+
     def _resolve_day_mode_display(self, mode: str) -> str | None:
         """Resolve a day mode value to its display string.
 
@@ -547,6 +568,36 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
                 if today_type != EVENT_NONE:
                     self._today_type = today_type
 
+        # Early switch: if calendar is currently off and early_switch_minutes > 0, check
+        # if a timed (non-all-day) event starts within the early window.
+        if calendar_state.state != "on" and self._early_switch_minutes > 0:
+            early_end = now + timedelta(minutes=self._early_switch_minutes)
+            early_events = await self._async_get_upcoming_events(calendar_entity, now, early_end)
+            now_naive = self._to_naive(now)
+            early_end_naive = self._to_naive(early_end)
+            for event in early_events:
+                if self._is_all_day_event(event):
+                    continue
+                start_dt = _parse_event_dt(event.get("start", ""), now.tzinfo)
+                if start_dt is None:
+                    continue
+                start_naive = self._to_naive(start_dt)
+                # Only pre-activate events that actually start within (now, early_end]
+                if not now_naive < start_naive <= early_end_naive:
+                    continue
+                summary = event.get("summary", "")
+                for kw in self._event_mode_map:
+                    if kw in summary.lower():
+                        today_type = kw
+                        break
+                if today_type != EVENT_NONE:
+                    _LOGGER.debug(
+                        "Early switch: pre-activating event '%s' (starts within %d min)",
+                        summary,
+                        self._early_switch_minutes,
+                    )
+                    break
+
         # Auto-update mode (skip if absence mode or manual override is active)
         if self._day_mode == self._mode_absence:
             _LOGGER.debug(
@@ -632,6 +683,14 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
         return []
 
     @staticmethod
+    def _is_all_day_event(event: dict) -> bool:
+        """Return True if the event from calendar.get_events is an all-day event.
+
+        All-day events have a date-only 'start' value (no 'T' time separator).
+        """
+        return "T" not in str(event.get("start", ""))
+
+    @staticmethod
     def _to_naive(dt: datetime) -> datetime:
         """Strip tzinfo for mixed-timezone-safe comparisons."""
         return dt.replace(tzinfo=None) if dt.tzinfo is not None else dt
@@ -680,7 +739,23 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
             except (ValueError, TypeError):
                 pass
 
-        # 3. No active mapped event → weekend / holiday / default
+        # 3. Early switch — timed event starts within early_switch_minutes after `at`
+        if self._early_switch_minutes > 0:
+            early_delta = timedelta(minutes=self._early_switch_minutes)
+            for event in upcoming_events:
+                if self._is_all_day_event(event):
+                    continue
+                start_dt = _parse_event_dt(event.get("start", ""), ref_tzinfo)
+                if start_dt is None:
+                    continue
+                start_naive = self._to_naive(start_dt)
+                if start_naive - early_delta <= at_naive < start_naive:
+                    summary = event.get("summary", "")
+                    for kw, mode in self._event_mode_map.items():
+                        if kw in summary.lower():
+                            return mode
+
+        # 4. No active mapped event → weekend / holiday / default
         return await self._determine_mode(EVENT_NONE, at_time=at)
 
     async def _compute_next_mode_change(self, calendar_state, now: datetime) -> tuple[str | None, datetime | None]:
@@ -723,6 +798,18 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
                 dt = _parse_event_dt(event.get(time_key, ""), now.tzinfo)
                 if dt is not None and self._to_naive(dt) > now_naive:
                     candidates.add(dt)
+
+        # Early switch: for timed events add event_start - early_switch_minutes as candidate
+        if self._early_switch_minutes > 0:
+            early_delta = timedelta(minutes=self._early_switch_minutes)
+            for event in upcoming:
+                if self._is_all_day_event(event):
+                    continue
+                start_dt = _parse_event_dt(event.get("start", ""), now.tzinfo)
+                if start_dt is not None:
+                    early_dt = start_dt - early_delta
+                    if self._to_naive(early_dt) > now_naive:
+                        candidates.add(early_dt)
 
         # Sort chronologically using naive times to avoid tz comparison errors
         sorted_candidates = sorted(candidates, key=self._to_naive)

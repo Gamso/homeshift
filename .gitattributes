@@ -1,0 +1,5 @@
+# Ensure shell scripts always use LF line endings (prevents CRLF breaking shebangs on Linux)
+*.sh text eol=lf
+
+# Normalize other text files
+* text=auto

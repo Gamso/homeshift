@@ -106,7 +106,7 @@ class HomeShiftEarlySwitchNumber(NumberEntity, RestoreEntity):
     """
 
     _attr_has_entity_name = True
-    _attr_translation_key = "early_switch"
+    _attr_name = "Early Switch"
 
     _attr_native_min_value = 0
     _attr_native_max_value = 480  # 8 h maximum

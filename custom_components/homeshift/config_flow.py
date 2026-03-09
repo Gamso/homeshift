@@ -32,6 +32,17 @@ from .const import (
     DEFAULT_MODE_HOLIDAY,
     DEFAULT_MODE_ABSENCE,
     DEFAULT_EVENT_MODE_MAP,
+    CONF_COVER_ENTITIES,
+    CONF_COVER_TEMP_SENSOR,
+    CONF_COVER_TEMP_THRESHOLD,
+    CONF_COVER_TIME_START,
+    CONF_COVER_TIME_END,
+    DEFAULT_COVER_TEMP_THRESHOLD,
+    DEFAULT_COVER_TIME_START,
+    DEFAULT_COVER_TIME_END,
+    CONF_SUNRISE_SCHEDULERS,
+    CONF_SUNRISE_EARLIEST,
+    DEFAULT_SUNRISE_EARLIEST,
     LOCALIZED_DEFAULTS,
     get_localized_defaults,
 )
@@ -283,6 +294,62 @@ def _extract_schedulers(user_input: dict[str, Any], data: dict[str, Any]) -> dic
     return result
 
 
+def _covers_schema(data: dict[str, Any]) -> vol.Schema:
+    """Build the cover heat-control form schema."""
+    return vol.Schema(
+        {
+            vol.Optional(
+                CONF_COVER_ENTITIES,
+                default=data.get(CONF_COVER_ENTITIES, []),
+            ): selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="cover", multiple=True)
+            ),
+            vol.Optional(
+                CONF_COVER_TEMP_SENSOR,
+                default=data.get(CONF_COVER_TEMP_SENSOR, ""),
+            ): selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="sensor")
+            ),
+            vol.Optional(
+                CONF_COVER_TEMP_THRESHOLD,
+                default=data.get(CONF_COVER_TEMP_THRESHOLD, DEFAULT_COVER_TEMP_THRESHOLD),
+            ): selector.NumberSelector(
+                selector.NumberSelectorConfig(
+                    min=0,
+                    max=60,
+                    step=0.5,
+                    mode=selector.NumberSelectorMode.BOX,
+                )
+            ),
+            vol.Optional(
+                CONF_COVER_TIME_START,
+                default=data.get(CONF_COVER_TIME_START, DEFAULT_COVER_TIME_START),
+            ): selector.TimeSelector(),
+            vol.Optional(
+                CONF_COVER_TIME_END,
+                default=data.get(CONF_COVER_TIME_END, DEFAULT_COVER_TIME_END),
+            ): selector.TimeSelector(),
+        }
+    )
+
+
+def _sunrise_schedulers_schema(hass, data: dict[str, Any]) -> vol.Schema:
+    """Build the sunrise-scheduler adjustment form schema."""
+    sel = _scheduler_selector(hass)
+    return vol.Schema(
+        {
+            vol.Optional(
+                CONF_SUNRISE_SCHEDULERS,
+                default=data.get(CONF_SUNRISE_SCHEDULERS, []),
+            ): sel,
+            vol.Optional(
+                CONF_SUNRISE_EARLIEST,
+                default=data.get(CONF_SUNRISE_EARLIEST, DEFAULT_SUNRISE_EARLIEST),
+            ): selector.TimeSelector(),
+        }
+    )
+
+
 # ---------------------------------------------------------------------------
 # Config flow (initial setup) – menu-based
 # ---------------------------------------------------------------------------
@@ -327,7 +394,7 @@ class HomeShiftConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         _user_input: dict[str, Any] | None = None,
     ) -> config_entries.ConfigFlowResult:
         """Show the configuration menu."""
-        menu_options = ["calendars", "mapping", "schedulers"]
+        menu_options = ["calendars", "mapping", "schedulers", "covers", "sunrise_schedulers"]
         if self._is_config_complete():
             menu_options.append("finalize")
         return self.async_show_menu(step_id="menu", menu_options=menu_options)
@@ -391,6 +458,44 @@ class HomeShiftConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id="schedulers",
             data_schema=_schedulers_schema(self.hass, self._data),
+        )
+
+    # -- covers ------------------------------------------------------------
+
+    async def async_step_covers(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> config_entries.ConfigFlowResult:
+        """Configure cover heat-control settings."""
+        if user_input is not None:
+            self._data.update(user_input)
+            return await self.async_step_menu()
+
+        return self.async_show_form(
+            step_id="covers",
+            data_schema=_covers_schema(self._effective_data()),
+        )
+
+    # -- sunrise schedulers ------------------------------------------------
+
+    async def async_step_sunrise_schedulers(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> config_entries.ConfigFlowResult:
+        """Configure sunrise-based scheduler adjustment."""
+        if user_input is not None:
+            value = user_input.get(CONF_SUNRISE_SCHEDULERS, [])
+            if isinstance(value, str):
+                value = [value] if value else []
+            self._data[CONF_SUNRISE_SCHEDULERS] = value
+            self._data[CONF_SUNRISE_EARLIEST] = user_input.get(
+                CONF_SUNRISE_EARLIEST, DEFAULT_SUNRISE_EARLIEST
+            )
+            return await self.async_step_menu()
+
+        return self.async_show_form(
+            step_id="sunrise_schedulers",
+            data_schema=_sunrise_schedulers_schema(self.hass, self._effective_data()),
         )
 
     # -- finalize ----------------------------------------------------------
@@ -452,7 +557,7 @@ class HomeShiftOptionsFlow(config_entries.OptionsFlow):
         _user_input: dict[str, Any] | None = None,
     ) -> config_entries.ConfigFlowResult:
         """Show the options menu."""
-        menu_options = ["calendars", "mapping", "schedulers"]
+        menu_options = ["calendars", "mapping", "schedulers", "covers", "sunrise_schedulers"]
         if self._is_config_complete():
             menu_options.append("finalize")
         return self.async_show_menu(step_id="menu", menu_options=menu_options)
@@ -516,6 +621,44 @@ class HomeShiftOptionsFlow(config_entries.OptionsFlow):
         return self.async_show_form(
             step_id="schedulers",
             data_schema=_schedulers_schema(self.hass, self._data),
+        )
+
+    # -- covers ------------------------------------------------------------
+
+    async def async_step_covers(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> config_entries.ConfigFlowResult:
+        """Configure cover heat-control settings."""
+        if user_input is not None:
+            self._data.update(user_input)
+            return await self.async_step_menu()
+
+        return self.async_show_form(
+            step_id="covers",
+            data_schema=_covers_schema(self._effective_data()),
+        )
+
+    # -- sunrise schedulers ------------------------------------------------
+
+    async def async_step_sunrise_schedulers(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> config_entries.ConfigFlowResult:
+        """Configure sunrise-based scheduler adjustment."""
+        if user_input is not None:
+            value = user_input.get(CONF_SUNRISE_SCHEDULERS, [])
+            if isinstance(value, str):
+                value = [value] if value else []
+            self._data[CONF_SUNRISE_SCHEDULERS] = value
+            self._data[CONF_SUNRISE_EARLIEST] = user_input.get(
+                CONF_SUNRISE_EARLIEST, DEFAULT_SUNRISE_EARLIEST
+            )
+            return await self.async_step_menu()
+
+        return self.async_show_form(
+            step_id="sunrise_schedulers",
+            data_schema=_sunrise_schedulers_schema(self.hass, self._effective_data()),
         )
 
     # -- finalize ----------------------------------------------------------

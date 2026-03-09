@@ -34,6 +34,23 @@ DEFAULT_MODE_HOLIDAY = "home"
 DEFAULT_EVENT_MODE_MAP = "Vacation:home, Remote:remote"
 DEFAULT_MODE_ABSENCE = "away"
 
+# Cover heat control
+CONF_COVER_ENTITIES = "cover_entities"
+CONF_COVER_TEMP_SENSOR = "cover_temp_sensor"
+CONF_COVER_TEMP_THRESHOLD = "cover_temp_threshold"
+CONF_COVER_TIME_START = "cover_time_start"
+CONF_COVER_TIME_END = "cover_time_end"
+
+DEFAULT_COVER_TEMP_THRESHOLD = 30.0
+DEFAULT_COVER_TIME_START = "08:35:00"
+DEFAULT_COVER_TIME_END = "18:00:00"
+
+# Sunrise-based scheduler adjustment
+CONF_SUNRISE_SCHEDULERS = "sunrise_schedulers"
+CONF_SUNRISE_EARLIEST = "sunrise_earliest"
+
+DEFAULT_SUNRISE_EARLIEST = "07:00:00"
+
 # Entity IDs
 SELECT_DAY_MODE = "day_mode"
 SELECT_THERMOSTAT_MODE = "thermostat_mode"
@@ -42,6 +59,7 @@ NUMBER_EARLY_SWITCH = "early_switch"
 SENSOR_NEXT_SCAN = "next_scan"
 SENSOR_NEXT_MODE = "next_mode"
 SENSOR_NEXT_MODE_AT = "next_mode_at"
+SENSOR_COVER_OPEN_TIME = "cover_open_time"
 
 # Sentinel value used as today_type when no calendar event is active
 EVENT_NONE = "None"

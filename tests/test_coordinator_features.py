@@ -716,3 +716,304 @@ class TestEarlySwitch:
         # The event is active now, so next change is when it ends (Sunday midnight)
         assert coordinator.next_mode_at is not None
         assert coordinator.next_mode_at.hour == 0 and coordinator.next_mode_at.minute == 0
+
+
+# ---------------------------------------------------------------------------
+# Cover heat control
+# ---------------------------------------------------------------------------
+
+class TestCoverHeatControl:
+    """Verify CoverManager.async_check_heat_protection closes covers when conditions are met."""
+
+    def _make_entry(self, cover_entities=None, temp_sensor="sensor.temp",
+                    threshold=30.0, time_start="08:00:00", time_end="20:00:00"):
+        from custom_components.homeshift.const import (
+            CONF_COVER_ENTITIES, CONF_COVER_TEMP_SENSOR, CONF_COVER_TEMP_THRESHOLD,
+            CONF_COVER_TIME_START, CONF_COVER_TIME_END,
+        )
+        entry = make_mock_entry()
+        entry.options = {
+            CONF_COVER_ENTITIES: cover_entities or ["cover.volet_salon"],
+            CONF_COVER_TEMP_SENSOR: temp_sensor,
+            CONF_COVER_TEMP_THRESHOLD: threshold,
+            CONF_COVER_TIME_START: time_start,
+            CONF_COVER_TIME_END: time_end,
+        }
+        return entry
+
+    def _temp_state(self, temperature: float):
+        state = MagicMock()
+        state.state = str(temperature)
+        return state
+
+    def test_stop_cover_called_when_hot_and_in_window(self):
+        """cover.stop_cover is called when temperature > threshold inside the window."""
+        hass = make_mock_hass()
+        hass.services.async_call = AsyncMock()
+        entry = self._make_entry(threshold=30.0, time_start="08:00:00", time_end="20:00:00")
+
+        def _get_state(entity_id):
+            if entity_id == "sensor.temp":
+                return self._temp_state(35.0)
+            return make_calendar_state(state="off")
+
+        hass.states.get.side_effect = _get_state
+
+        coordinator = HomeShiftCoordinator(hass, entry)
+        now = datetime(2026, 7, 1, 14, 0, 0)
+
+        asyncio.get_event_loop().run_until_complete(
+            coordinator._cover_manager.async_check_heat_protection(now)
+        )
+
+        hass.services.async_call.assert_called_once()
+        call = hass.services.async_call.call_args
+        assert call.args[0] == "cover"
+        assert call.args[1] == "stop_cover"
+        assert "cover.volet_salon" in call.args[2]["entity_id"]
+
+    def test_no_call_when_below_threshold(self):
+        """cover.stop_cover is NOT called when temperature is below threshold."""
+        hass = make_mock_hass()
+        hass.services.async_call = AsyncMock()
+        entry = self._make_entry(threshold=30.0)
+
+        def _get_state(entity_id):
+            if entity_id == "sensor.temp":
+                return self._temp_state(25.0)
+            return make_calendar_state(state="off")
+
+        hass.states.get.side_effect = _get_state
+
+        coordinator = HomeShiftCoordinator(hass, entry)
+        now = datetime(2026, 7, 1, 14, 0, 0)
+
+        asyncio.get_event_loop().run_until_complete(
+            coordinator._cover_manager.async_check_heat_protection(now)
+        )
+
+        hass.services.async_call.assert_not_called()
+
+    def test_no_call_outside_time_window(self):
+        """cover.stop_cover is NOT called when current time is outside the window."""
+        hass = make_mock_hass()
+        hass.services.async_call = AsyncMock()
+        entry = self._make_entry(threshold=30.0, time_start="08:00:00", time_end="18:00:00")
+
+        def _get_state(entity_id):
+            if entity_id == "sensor.temp":
+                return self._temp_state(35.0)
+            return make_calendar_state(state="off")
+
+        hass.states.get.side_effect = _get_state
+
+        coordinator = HomeShiftCoordinator(hass, entry)
+        # 19:00 — outside the 08:00–18:00 window
+        now = datetime(2026, 7, 1, 19, 0, 0)
+
+        asyncio.get_event_loop().run_until_complete(
+            coordinator._cover_manager.async_check_heat_protection(now)
+        )
+
+        hass.services.async_call.assert_not_called()
+
+    def test_no_call_when_no_cover_entities_configured(self):
+        """cover.stop_cover is NOT called when no cover entities are configured."""
+        hass = make_mock_hass()
+        hass.services.async_call = AsyncMock()
+        # No cover config: use plain entry without cover settings
+        entry = make_mock_entry()
+
+        hass.states.get.return_value = make_calendar_state(state="off")
+        coordinator = HomeShiftCoordinator(hass, entry)
+        now = datetime(2026, 7, 1, 14, 0, 0)
+
+        asyncio.get_event_loop().run_until_complete(
+            coordinator._cover_manager.async_check_heat_protection(now)
+        )
+
+        hass.services.async_call.assert_not_called()
+
+    def test_no_call_when_temp_sensor_unavailable(self):
+        """cover.stop_cover is NOT called when the temperature sensor is missing."""
+        hass = make_mock_hass()
+        hass.services.async_call = AsyncMock()
+        entry = self._make_entry(threshold=30.0)
+
+        # Return None for the sensor
+        hass.states.get.return_value = None
+
+        coordinator = HomeShiftCoordinator(hass, entry)
+        now = datetime(2026, 7, 1, 14, 0, 0)
+
+        asyncio.get_event_loop().run_until_complete(
+            coordinator._cover_manager.async_check_heat_protection(now)
+        )
+
+        hass.services.async_call.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# Sunrise scheduler adjustment
+# ---------------------------------------------------------------------------
+
+class TestSunriseSchedulerAdjustment:
+    """Verify async_adjust_sunrise_schedulers edits scheduler timeslots."""
+
+    def _make_entry(self, schedulers=None, earliest="07:10:00"):
+        from custom_components.homeshift.const import (
+            CONF_SUNRISE_SCHEDULERS, CONF_SUNRISE_EARLIEST,
+        )
+        entry = make_mock_entry()
+        entry.options = {
+            CONF_SUNRISE_SCHEDULERS: schedulers or ["switch.schedule_volets"],
+            CONF_SUNRISE_EARLIEST: earliest,
+        }
+        return entry
+
+    def _sun_state(self, next_rising_iso: str):
+        state = MagicMock()
+        state.attributes = {"next_rising": next_rising_iso}
+        return state
+
+    def _scheduler_state(self, actions=None, entities=None):
+        state = MagicMock()
+        state.attributes = {
+            "actions": actions or [{"service": "cover.open_cover"}],
+            "entities": entities or ["cover.volet_salon"],
+        }
+        return state
+
+    def test_scheduler_edit_called_with_sunrise_when_after_earliest(self):
+        """scheduler.edit is called with sunrise time when sunrise > earliest."""
+        hass = make_mock_hass()
+        hass.services.async_call = AsyncMock()
+
+        entry = self._make_entry(earliest="07:10:00")
+
+        def _get_state(entity_id):
+            if entity_id == "sun.sun":
+                # sunrise at 07:45 local
+                return self._sun_state("2026-07-01T05:45:00+00:00")
+            if entity_id == "switch.schedule_volets":
+                return self._scheduler_state()
+            return None
+
+        hass.states.get.side_effect = _get_state
+
+        coordinator = HomeShiftCoordinator(hass, entry)
+
+        with patch("custom_components.homeshift.cover_manager.dt_util") as mock_dt:
+            from datetime import timezone, timedelta as tdelta
+            tz_paris = timezone(tdelta(hours=2))
+            mock_dt.as_local.side_effect = lambda dt: dt.astimezone(tz_paris)
+            asyncio.get_event_loop().run_until_complete(
+                coordinator._cover_manager.async_adjust_sunrise_schedulers()
+            )
+
+        hass.services.async_call.assert_called_once()
+        call = hass.services.async_call.call_args
+        assert call.args[0] == "scheduler"
+        assert call.args[1] == "edit"
+        timeslots = call.args[2]["timeslots"]
+        assert len(timeslots) == 1
+        # sunrise 07:45 > earliest 07:10 → use sunrise
+        assert timeslots[0]["start"] == "07:45"
+
+    def test_scheduler_edit_called_with_earliest_when_sunrise_before(self):
+        """scheduler.edit is called with earliest time when sunrise < earliest."""
+        hass = make_mock_hass()
+        hass.services.async_call = AsyncMock()
+
+        entry = self._make_entry(earliest="07:10:00")
+
+        def _get_state(entity_id):
+            if entity_id == "sun.sun":
+                # sunrise at 06:30 local (before earliest 07:10)
+                return self._sun_state("2026-03-01T05:30:00+00:00")
+            if entity_id == "switch.schedule_volets":
+                return self._scheduler_state()
+            return None
+
+        hass.states.get.side_effect = _get_state
+
+        coordinator = HomeShiftCoordinator(hass, entry)
+
+        with patch("custom_components.homeshift.cover_manager.dt_util") as mock_dt:
+            from datetime import timezone, timedelta as tdelta
+            tz_paris = timezone(tdelta(hours=1))
+            mock_dt.as_local.side_effect = lambda dt: dt.astimezone(tz_paris)
+            asyncio.get_event_loop().run_until_complete(
+                coordinator._cover_manager.async_adjust_sunrise_schedulers()
+            )
+
+        hass.services.async_call.assert_called_once()
+        call = hass.services.async_call.call_args
+        timeslots = call.args[2]["timeslots"]
+        # sunrise 06:30 < earliest 07:10 → use earliest
+        assert timeslots[0]["start"] == "07:10"
+
+    def test_no_call_when_no_sunrise_schedulers_configured(self):
+        """scheduler.edit is NOT called when no sunrise schedulers are configured."""
+        hass = make_mock_hass()
+        hass.services.async_call = AsyncMock()
+        entry = make_mock_entry()  # no sunrise_schedulers in config
+
+        hass.states.get.return_value = make_calendar_state(state="off")
+        coordinator = HomeShiftCoordinator(hass, entry)
+
+        asyncio.get_event_loop().run_until_complete(
+            coordinator._cover_manager.async_adjust_sunrise_schedulers()
+        )
+
+        hass.services.async_call.assert_not_called()
+
+    def test_no_call_when_sun_entity_missing(self):
+        """scheduler.edit is NOT called when sun.sun entity is unavailable."""
+        hass = make_mock_hass()
+        hass.services.async_call = AsyncMock()
+        entry = self._make_entry()
+
+        hass.states.get.return_value = None
+
+        coordinator = HomeShiftCoordinator(hass, entry)
+
+        asyncio.get_event_loop().run_until_complete(
+            coordinator._cover_manager.async_adjust_sunrise_schedulers()
+        )
+
+        hass.services.async_call.assert_not_called()
+
+    def test_action_gets_entity_id_merged_in(self):
+        """The entity_id from scheduler.entities[0] is merged into the action dict."""
+        hass = make_mock_hass()
+        hass.services.async_call = AsyncMock()
+
+        entry = self._make_entry(earliest="06:00:00")
+
+        def _get_state(entity_id):
+            if entity_id == "sun.sun":
+                return self._sun_state("2026-07-01T04:30:00+00:00")
+            if entity_id == "switch.schedule_volets":
+                return self._scheduler_state(
+                    actions=[{"service": "cover.open_cover", "data": {"position": 100}}],
+                    entities=["cover.volet_salon"],
+                )
+            return None
+
+        hass.states.get.side_effect = _get_state
+
+        coordinator = HomeShiftCoordinator(hass, entry)
+
+        with patch("custom_components.homeshift.cover_manager.dt_util") as mock_dt:
+            from datetime import timezone, timedelta as tdelta
+            tz_paris = timezone(tdelta(hours=2))
+            mock_dt.as_local.side_effect = lambda dt: dt.astimezone(tz_paris)
+            asyncio.get_event_loop().run_until_complete(
+                coordinator._cover_manager.async_adjust_sunrise_schedulers()
+            )
+
+        call = hass.services.async_call.call_args
+        action = call.args[2]["timeslots"][0]["actions"][0]
+        assert action.get("entity_id") == "cover.volet_salon"
+        assert action.get("service") == "cover.open_cover"

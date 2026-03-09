@@ -34,3 +34,65 @@ lovelace:
 # Scheduler integration
 scheduler:
   # No specific config needed, component will auto-configure
+
+# Simulated test devices
+input_boolean:
+  living_room_cover_open:
+    name: Living Room Cover State
+    initial: true
+  office_cover_open:
+    name: Office Cover State
+    initial: true
+
+input_number:
+  outdoor_temperature:
+    name: Outdoor Temperature (simulated)
+    initial: 20
+    min: -10
+    max: 50
+    step: 0.5
+    unit_of_measurement: "°C"
+    icon: mdi:thermometer
+
+template:
+  - sensor:
+      - name: "Outdoor Temperature"
+        unique_id: sensor_outdoor_temperature
+        device_class: temperature
+        state_class: measurement
+        unit_of_measurement: "°C"
+        icon: mdi:thermometer
+        state: "{{ states('input_number.outdoor_temperature') }}"
+  - cover:
+      - name: "Living Room Cover"
+        unique_id: cover_living_room
+        device_class: shutter
+        state: "{{ 'open' if is_state('input_boolean.living_room_cover_open', 'on') else 'closed' }}"
+        open_cover:
+          action: input_boolean.turn_on
+          target:
+            entity_id: input_boolean.living_room_cover_open
+        close_cover:
+          action: input_boolean.turn_off
+          target:
+            entity_id: input_boolean.living_room_cover_open
+        stop_cover:
+          action: input_boolean.turn_off
+          target:
+            entity_id: input_boolean.living_room_cover_open
+      - name: "Office Cover"
+        unique_id: cover_office
+        device_class: shutter
+        state: "{{ 'open' if is_state('input_boolean.office_cover_open', 'on') else 'closed' }}"
+        open_cover:
+          action: input_boolean.turn_on
+          target:
+            entity_id: input_boolean.office_cover_open
+        close_cover:
+          action: input_boolean.turn_off
+          target:
+            entity_id: input_boolean.office_cover_open
+        stop_cover:
+          action: input_boolean.turn_off
+          target:
+            entity_id: input_boolean.office_cover_open

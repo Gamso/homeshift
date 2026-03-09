@@ -41,6 +41,8 @@ from .const import (
     get_localized_defaults,
 )
 
+from .cover_manager import CoverManager
+
 _LOGGER = logging.getLogger(__name__)
 
 # Midday threshold for determining morning vs afternoon half-days
@@ -166,6 +168,9 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
 
         # Persistent storage — used to restore modes after HA restart
         self._store: Store = Store(hass, STORAGE_VERSION, f"{STORAGE_KEY}.{entry.entry_id}")
+
+        # Cover heat-protection and sunrise scheduler adjustment
+        self._cover_manager = CoverManager(hass, entry)
 
     @property
     def _config(self) -> dict:
@@ -350,6 +355,11 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
     def next_mode_at(self) -> datetime | None:
         """Timestamp when the next automatic day mode change is expected."""
         return self._next_mode_at
+
+    @property
+    def cover_open_time(self) -> str | None:
+        """Today's computed cover opening time (HH:MM), or None if sunrise adjustment is not configured."""
+        return self._cover_manager.cover_open_time
 
     def set_override_duration_minutes(self, minutes: int) -> None:
         """Update the override duration (called by the number entity)."""
@@ -538,11 +548,11 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
             _LOGGER.debug("New calendar day (%s), resetting today_type", today)
             self._today_type = EVENT_NONE
             self._today_date = today
+            # Adjust sunrise-based schedulers for the new day
+            await self._cover_manager.async_adjust_sunrise_schedulers()
 
         if calendar_state.state == "on":
             event_message = calendar_state.attributes.get("message", "")
-            event_start = calendar_state.attributes.get("start_time", "")
-            event_end = calendar_state.attributes.get("end_time", "")
 
             if event_message:
                 self._current_event = event_message
@@ -627,6 +637,9 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
 
         # Compute when and to what mode the next automatic change is expected
         self._next_mode, self._next_mode_at = await self._compute_next_mode_change(calendar_state, now)
+
+        # Cover heat protection — close covers if temperature exceeds threshold in window
+        await self._cover_manager.async_check_heat_protection(now)
 
         return self._build_result()
 

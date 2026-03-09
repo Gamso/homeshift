@@ -6,13 +6,33 @@ import logging
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EVENT_HOMEASSISTANT_STARTED, Platform
 from homeassistant.core import CoreState, Event, HomeAssistant
+from homeassistant.helpers import entity_registry as er
 
-from .const import DOMAIN, SERVICE_REFRESH_SCHEDULERS, SERVICE_SYNC_CALENDAR
+from .const import DOMAIN, SENSOR_NEXT_SCAN, SERVICE_REFRESH_SCHEDULERS, SERVICE_SYNC_CALENDAR
 from .coordinator import HomeShiftCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
 PLATFORMS: list[Platform] = [Platform.SELECT, Platform.NUMBER, Platform.SENSOR]
+
+
+async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Migrate config entry to the current version."""
+    _LOGGER.debug("Migrating HomeShift config entry from version %s", entry.version)
+
+    if entry.version < 2:
+        # v1 → v2: remove the deprecated "Next Scan" sensor entity
+        ent_reg = er.async_get(hass)
+        unique_id = f"{entry.entry_id}_{SENSOR_NEXT_SCAN}"
+        entity_id = ent_reg.async_get_entity_id("sensor", DOMAIN, unique_id)
+        if entity_id:
+            ent_reg.async_remove(entity_id)
+            _LOGGER.info("Removed deprecated 'Next Scan' sensor entity (%s)", entity_id)
+
+        hass.config_entries.async_update_entry(entry, version=2)
+        _LOGGER.info("HomeShift config entry migrated to version 2")
+
+    return True
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:

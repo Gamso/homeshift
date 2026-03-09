@@ -122,8 +122,6 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
             self._early_switch_minutes = DEFAULT_EARLY_SWITCH_MINUTES
         # Manual override: blocks auto-update until this datetime
         self._override_until: datetime | None = None
-        # Timestamp of the last successful data fetch (used to compute next_scan_at)
-        self._last_update_time: datetime | None = None
         # Predicted next automatic mode change
         self._next_mode: str | None = None
         self._next_mode_at: datetime | None = None
@@ -344,13 +342,6 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
         return self._override_until
 
     @property
-    def next_scan_at(self) -> datetime | None:
-        """Timestamp of the next scheduled calendar scan, or None before first scan."""
-        if self._last_update_time is not None and self.update_interval is not None:
-            return self._last_update_time + self.update_interval
-        return None
-
-    @property
     def next_mode_predicted(self) -> str | None:
         """Predicted day mode at the next automatic change."""
         return self._next_mode
@@ -508,7 +499,6 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
         active during its time window.
         """
         now = dt_util.now()
-        self._last_update_time = now
         calendar_entity = self._config.get(CONF_CALENDAR_ENTITY)
         _LOGGER.debug(
             "Calendar sync started at %s (entity=%s, current mode=%s)",
@@ -650,7 +640,6 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
             "thermostat_mode": self._thermostat_mode,
             "thermostat_mode_key": self.thermostat_mode_key,
             "override_until": self._override_until.isoformat() if self._override_until else None,
-            "next_scan_at": self.next_scan_at.isoformat() if self.next_scan_at else None,
             "next_mode_predicted": self._next_mode,
             "next_mode_at": self._next_mode_at.isoformat() if self._next_mode_at else None,
         }

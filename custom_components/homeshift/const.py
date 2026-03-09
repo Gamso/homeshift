@@ -25,7 +25,7 @@ DEFAULT_THERMOSTAT_MODE_MAP = "off:Off, heating:Heating, cooling:Cooling, ventil
 # Internal key that means 'thermostat is off' — schedulers with any thermostat
 # tag are disabled when the thermostat mode matches this key.
 THERMOSTAT_OFF_KEY = "off"
-DEFAULT_SCAN_INTERVAL = 60  # minutes
+DEFAULT_SCAN_INTERVAL = 5  # minutes
 DEFAULT_OVERRIDE_DURATION = 0  # 0 = disabled
 DEFAULT_EARLY_SWITCH_MINUTES = 0  # 0 = disabled
 DEFAULT_MODE_DEFAULT = "work"

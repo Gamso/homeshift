@@ -1,7 +1,6 @@
 """Tests for HomeShift sensor entities and coordinator timing properties.
 
 Covers:
-- next_scan_at: None before first update, correct timestamp after update
 - next_mode_predicted / next_mode_at for: morning event, afternoon event,
   all-day event, no event (weekday and Friday→weekend transition)
 - Sensor entity classes mirror the coordinator values
@@ -9,12 +8,11 @@ Covers:
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timedelta
+from datetime import datetime
 from unittest.mock import AsyncMock, patch
 
 from custom_components.homeshift.coordinator import HomeShiftCoordinator, MIDDAY_HOUR
 from custom_components.homeshift.sensor import (
-    HomeShiftNextScanSensor,
     HomeShiftNextModeSensor,
     HomeShiftNextModeAtSensor,
 )
@@ -34,47 +32,13 @@ def _mock_get_events(calendar_entity: str, events: list[dict]):
     return AsyncMock(return_value={calendar_entity: {"events": events}})
 
 
+
 # ---------------------------------------------------------------------------
-# next_scan_at
+# next_mode / next_mode_at — no event
 # ---------------------------------------------------------------------------
 
-class TestNextScanAt:
-    """Tests for the next_scan_at coordinator property."""
-
-    def test_none_before_first_update(self):
-        """next_scan_at is None before any update has run."""
-        hass = make_mock_hass()
-        entry = make_mock_entry()
-        coordinator = HomeShiftCoordinator(hass, entry)
-        assert coordinator.next_scan_at is None
-
-    def test_scan_at_after_update(self):
-        """next_scan_at equals last update time + configured scan interval."""
-        hass = make_mock_hass()
-        entry = make_mock_entry(scan_interval=60)
-        hass.states.get.return_value = make_calendar_state(state="off")
-        coordinator = HomeShiftCoordinator(hass, entry)
-
-        update_time = datetime(2026, 3, 7, 10, 0, 0)
-        with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
-            mock_dt.now.return_value = update_time
-            asyncio.get_event_loop().run_until_complete(coordinator.async_update_data())
-
-        assert coordinator.next_scan_at == update_time + timedelta(minutes=60)
-
-    def test_scan_at_with_custom_interval(self):
-        """next_scan_at respects a custom scan interval."""
-        hass = make_mock_hass()
-        entry = make_mock_entry(scan_interval=30)
-        hass.states.get.return_value = make_calendar_state(state="off")
-        coordinator = HomeShiftCoordinator(hass, entry)
-
-        update_time = datetime(2026, 3, 7, 8, 0, 0)
-        with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
-            mock_dt.now.return_value = update_time
-            asyncio.get_event_loop().run_until_complete(coordinator.async_update_data())
-
-        assert coordinator.next_scan_at == update_time + timedelta(minutes=30)
+class TestNextModeNoEvent:
+    """next_mode_* when no calendar event is active."""
 
     def test_next_mode_none_before_first_update(self):
         """next_mode_predicted and next_mode_at are None before any update."""
@@ -83,14 +47,6 @@ class TestNextScanAt:
         coordinator = HomeShiftCoordinator(hass, entry)
         assert coordinator.next_mode_predicted is None
         assert coordinator.next_mode_at is None
-
-
-# ---------------------------------------------------------------------------
-# next_mode / next_mode_at — no event
-# ---------------------------------------------------------------------------
-
-class TestNextModeNoEvent:
-    """next_mode_* when no calendar event is active."""
 
     def test_weekday_no_event_next_mode_is_weekend(self):
         """Thursday, no event: first mode CHANGE in the 2-day window is Saturday (weekend)."""
@@ -287,22 +243,6 @@ class TestNextModeAllDayEvent:
 class TestSensorEntities:
     """Sensor entity classes mirror coordinator values correctly."""
 
-    def test_next_scan_sensor_returns_coordinator_value(self):
-        """HomeShiftNextScanSensor.native_value == coordinator.next_scan_at."""
-        hass = make_mock_hass()
-        entry = make_mock_entry(scan_interval=60)
-        hass.states.get.return_value = make_calendar_state(state="off")
-        coordinator = HomeShiftCoordinator(hass, entry)
-
-        now = datetime(2026, 3, 7, 9, 0, 0)
-        with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
-            mock_dt.now.return_value = now
-            asyncio.get_event_loop().run_until_complete(coordinator.async_update_data())
-
-        sensor = HomeShiftNextScanSensor(coordinator, entry)
-        assert sensor.native_value == coordinator.next_scan_at
-        assert sensor.native_value == now + timedelta(minutes=60)
-
     def test_next_mode_sensor_returns_coordinator_value(self):
         """HomeShiftNextModeSensor.native_value == coordinator.next_mode_predicted."""
         hass = make_mock_hass()
@@ -337,12 +277,11 @@ class TestSensorEntities:
         entry = make_mock_entry()
         coordinator = HomeShiftCoordinator(hass, entry)
 
-        s1 = HomeShiftNextScanSensor(coordinator, entry)
-        s2 = HomeShiftNextModeSensor(coordinator, entry)
-        s3 = HomeShiftNextModeAtSensor(coordinator, entry)
+        s1 = HomeShiftNextModeSensor(coordinator, entry)
+        s2 = HomeShiftNextModeAtSensor(coordinator, entry)
 
-        ids = {s1.unique_id, s2.unique_id, s3.unique_id}
-        assert len(ids) == 3  # all distinct
+        ids = {s1.unique_id, s2.unique_id}
+        assert len(ids) == 2  # all distinct
 
 
 # ---------------------------------------------------------------------------

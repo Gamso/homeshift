@@ -291,7 +291,7 @@ def _extract_schedulers(user_input: dict[str, Any], data: dict[str, Any]) -> dic
 class HomeShiftConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for HomeShift."""
 
-    VERSION = 1
+    VERSION = 2
 
     def __init__(self) -> None:
         """Initialise the config flow."""

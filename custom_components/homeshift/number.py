@@ -148,11 +148,12 @@ class HomeShiftEarlySwitchNumber(NumberEntity, RestoreEntity):
         raise NotImplementedError
 
     async def async_set_native_value(self, value: float) -> None:
-        """Update the early switch duration."""
+        """Update the early switch duration and immediately refresh next_mode_at."""
         minutes = int(value)
         self._coordinator.set_early_switch_minutes(minutes)
         self._attr_native_value = float(minutes)
         self.async_write_ha_state()
+        await self._coordinator.async_request_refresh()
 
     @property
     def device_info(self):

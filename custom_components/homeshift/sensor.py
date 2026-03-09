@@ -10,7 +10,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN, SENSOR_NEXT_SCAN, SENSOR_NEXT_MODE, SENSOR_NEXT_MODE_AT
+from .const import DOMAIN, SENSOR_NEXT_MODE, SENSOR_NEXT_MODE_AT
 from .coordinator import HomeShiftCoordinator
 
 _LOGGER = logging.getLogger(__name__)
@@ -25,7 +25,6 @@ async def async_setup_entry(
     coordinator: HomeShiftCoordinator = hass.data[DOMAIN][entry.entry_id]
     async_add_entities(
         [
-            HomeShiftNextScanSensor(coordinator, entry),
             HomeShiftNextModeSensor(coordinator, entry),
             HomeShiftNextModeAtSensor(coordinator, entry),
         ]
@@ -40,31 +39,6 @@ def _device_info(entry: ConfigEntry) -> dict:
         "manufacturer": "Gamso",
         "model": "HomeShift",
     }
-
-
-class HomeShiftNextScanSensor(CoordinatorEntity[HomeShiftCoordinator], SensorEntity):
-    """Timestamp sensor: when the next calendar scan is scheduled."""
-
-    _attr_device_class = SensorDeviceClass.TIMESTAMP
-    _attr_has_entity_name = True
-    _attr_name = "Next Scan"
-    _attr_icon = "mdi:calendar-sync"
-
-    def __init__(self, coordinator: HomeShiftCoordinator, entry: ConfigEntry) -> None:
-        """Initialize the sensor."""
-        super().__init__(coordinator)
-        self._attr_unique_id = f"{entry.entry_id}_{SENSOR_NEXT_SCAN}"
-        self._entry = entry
-
-    @property
-    def native_value(self) -> datetime | None:
-        """Return the next scheduled scan timestamp."""
-        return self.coordinator.next_scan_at
-
-    @property
-    def device_info(self) -> dict:
-        """Return device information."""
-        return _device_info(self._entry)
 
 
 class HomeShiftNextModeSensor(CoordinatorEntity[HomeShiftCoordinator], SensorEntity):

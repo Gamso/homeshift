@@ -10,7 +10,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN, SENSOR_NEXT_MODE, SENSOR_NEXT_MODE_AT
+from .const import CONF_SUNRISE_SCHEDULERS, DOMAIN, SENSOR_COVER_OPEN_TIME, SENSOR_NEXT_MODE, SENSOR_NEXT_MODE_AT
 from .coordinator import HomeShiftCoordinator
 
 _LOGGER = logging.getLogger(__name__)
@@ -23,12 +23,14 @@ async def async_setup_entry(
 ) -> None:
     """Set up HomeShift sensor entities."""
     coordinator: HomeShiftCoordinator = hass.data[DOMAIN][entry.entry_id]
-    async_add_entities(
-        [
-            HomeShiftNextModeSensor(coordinator, entry),
-            HomeShiftNextModeAtSensor(coordinator, entry),
-        ]
-    )
+    entities = [
+        HomeShiftNextModeSensor(coordinator, entry),
+        HomeShiftNextModeAtSensor(coordinator, entry),
+    ]
+    config = {**entry.data, **entry.options}
+    if config.get(CONF_SUNRISE_SCHEDULERS):
+        entities.append(HomeShiftCoverOpenTimeSensor(coordinator, entry))
+    async_add_entities(entities)
 
 
 def _device_info(entry: ConfigEntry) -> dict:
@@ -83,6 +85,34 @@ class HomeShiftNextModeAtSensor(CoordinatorEntity[HomeShiftCoordinator], SensorE
     def native_value(self) -> datetime | None:
         """Return when the next mode change is expected."""
         return self.coordinator.next_mode_at
+
+    @property
+    def device_info(self) -> dict:
+        """Return device information."""
+        return _device_info(self._entry)
+
+
+class HomeShiftCoverOpenTimeSensor(CoordinatorEntity[HomeShiftCoordinator], SensorEntity):
+    """String sensor: the scheduled cover opening time for today.
+
+    Only registered when CONF_SUNRISE_SCHEDULERS is configured.
+    Updated each morning when async_adjust_sunrise_schedulers() runs.
+    """
+
+    _attr_has_entity_name = True
+    _attr_name = "Cover Open Time"
+    _attr_icon = "mdi:roller-shade"
+
+    def __init__(self, coordinator: HomeShiftCoordinator, entry: ConfigEntry) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{entry.entry_id}_{SENSOR_COVER_OPEN_TIME}"
+        self._entry = entry
+
+    @property
+    def native_value(self) -> str | None:
+        """Return today's computed cover opening time (HH:MM)."""
+        return self.coordinator.cover_open_time
 
     @property
     def device_info(self) -> dict:

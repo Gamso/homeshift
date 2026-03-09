@@ -21,9 +21,9 @@ Automatic day-mode and thermostat-mode management for Home Assistant, driven by 
     - [`select.thermostat_mode`](#selectthermostat_mode)
     - [`number.override_duration`](#numberoverride_duration)
     - [`number.early_switch`](#numberearly_switch)
-    - [`sensor.next_scan`](#sensornext_scan)
     - [`sensor.next_mode`](#sensornext_mode)
     - [`sensor.next_mode_at`](#sensornext_mode_at)
+    - [`sensor.cover_open_time`](#sensorcover_open_time)
   - [🛠️ Services](#️-services)
     - [`homeshift.refresh_schedulers`](#homeshiftrefresh_schedulers)
     - [`homeshift.sync_calendar`](#homeshiftsync_calendar)
@@ -33,6 +33,8 @@ Automatic day-mode and thermostat-mode management for Home Assistant, driven by 
     - [Early Switch](#early-switch)
   - [🗓️ Scheduler Integration](#️-scheduler-integration)
     - [Thermostat Tags](#thermostat-tags)
+  - [🌅 Sunrise Scheduler Adjustment](#-sunrise-scheduler-adjustment)
+  - [☀️ Cover Heat Protection](#️-cover-heat-protection)
   - [📄 License](#-license)
 
 ---
@@ -54,7 +56,7 @@ Automatic day-mode and thermostat-mode management for Home Assistant, driven by 
 
 HomeShift is a custom Home Assistant integration that automatically manages **day modes** (e.g. Home, Work, Remote, Away) and **thermostat modes** (e.g. Heating, Cooling, Off) based on your calendar events, weekends, and public holidays.
 
-At regular intervals (every 60 minutes by default), it reads your calendar, picks the right day mode, and turns the matching scheduler switches on or off — so your home adapts automatically without any manual intervention.
+At regular intervals (every 5 minutes by default), it reads your calendar, picks the right day mode, and turns the matching scheduler switches on or off — so your home adapts automatically without any manual intervention.
 
 ### How It Works
 
@@ -67,7 +69,6 @@ At regular intervals (every 60 minutes by default), it reads your calendar, pick
 
 ## ✅ Requirements
 
-- Home Assistant 2023.1 or later
 - A **calendar** entity containing your work or schedule events
 - A **calendar** entity for public holidays
 - The [Scheduler integration](https://github.com/nielsfaber/scheduler-component) to automate scheduler switches
@@ -85,7 +86,7 @@ At regular intervals (every 60 minutes by default), it reads your calendar, pick
 5. Save — HomeShift starts working immediately
 
 Once set up, HomeShift will:
-- Periodically read your calendar (every 60 minutes by default)
+- Periodically read your calendar (every 5 minutes by default)
 - Automatically update `select.day_mode`
 - Turn the right scheduler switches on and off
 
@@ -128,12 +129,6 @@ The `sensor.next_mode_at` and `sensor.next_mode` sensors reflect this anticipate
 
 ---
 
-### `sensor.next_scan`
-Shows the date and time of the next scheduled calendar poll.
-
-- **Type:** Sensor (timestamp)
-- **Unit:** ISO 8601 datetime
-
 ### `sensor.next_mode`
 Shows the predicted next day mode that HomeShift will switch to.
 
@@ -145,6 +140,13 @@ Shows when the next automatic mode change is expected to occur (taking early_swi
 
 - **Type:** Sensor (timestamp)
 - **Unit:** ISO 8601 datetime
+
+### `sensor.cover_open_time`
+Shows the cover opening time computed for today by the Sunrise Scheduler Adjustment feature.
+
+- **Type:** Sensor (text)
+- **Value:** `HH:MM` string (e.g. `07:45`), or `unknown` if the feature is not configured or has not run yet.
+- **Only registered** when at least one scheduler entity is listed in **Sunrise Schedulers**.
 
 ---
 
@@ -162,20 +164,27 @@ Manually triggers a calendar check and updates `select.day_mode` if needed. This
 
 All parameters can be changed at any time via **Settings → Devices & Services → HomeShift → Configure**.
 
-| Parameter               | Default                         | Description                                                   |
-| ----------------------- | ------------------------------- | ------------------------------------------------------------- |
-| **Work Calendar**       | —                               | Calendar entity containing your work/schedule events          |
-| **Holiday Calendar**    | —                               | Calendar entity for public holidays (optional)                |
-| **Day Modes**           | `Home, Work, Remote, Away`      | Comma-separated list of available day modes                   |
-| **Thermostat Mode Map** | `off:Off, heating:Heating, ...` | Maps internal thermostat keys to the display names you prefer |
-| **Scan Interval**       | `60 min`                        | How often HomeShift checks the calendar (in minutes)          |
-| **Override Duration**   | `0` (disabled)                  | Minutes to block automatic updates after a manual mode change |
-| **Early Switch**        | `0` (disabled)                  | Minutes to pre-activate a timed event before its start        |
-| **Default Mode**        | `Work`                          | Mode used on regular weekdays with no calendar event          |
-| **Weekend Mode**        | `Home`                          | Mode used on Saturdays and Sundays                            |
-| **Holiday Mode**        | `Home`                          | Mode used on public holidays                                  |
-| **Event Mode Map**      | `Vacation:home, Remote:remote`  | Maps calendar event names to day modes                        |
-| **Away Mode**           | `Away`                          | When this mode is active, automatic updates are paused        |
+| Parameter                 | Default                         | Description                                                   |
+| ------------------------- | ------------------------------- | ------------------------------------------------------------- |
+| **Work Calendar**         | —                               | Calendar entity containing your work/schedule events          |
+| **Holiday Calendar**      | —                               | Calendar entity for public holidays (optional)                |
+| **Day Modes**             | `Home, Work, Remote, Away`      | Comma-separated list of available day modes                   |
+| **Thermostat Mode Map**   | `off:Off, heating:Heating, ...` | Maps internal thermostat keys to the display names you prefer |
+| **Scan Interval**         | `5 min`                         | How often HomeShift checks the calendar (in minutes)          |
+| **Override Duration**     | `0` (disabled)                  | Minutes to block automatic updates after a manual mode change |
+| **Early Switch**          | `0` (disabled)                  | Minutes to pre-activate a timed event before its start        |
+| **Default Mode**          | `Work`                          | Mode used on regular weekdays with no calendar event          |
+| **Weekend Mode**          | `Home`                          | Mode used on Saturdays and Sundays                            |
+| **Holiday Mode**          | `Home`                          | Mode used on public holidays                                  |
+| **Event Mode Map**        | `Vacation:home, Remote:remote`  | Maps calendar event names to day modes                        |
+| **Away Mode**             | `Away`                          | When this mode is active, automatic updates are paused        |
+| **Cover Entities**        | —                               | Cover entities to close when it is too hot (optional)         |
+| **Temperature Sensor**    | —                               | Sensor providing the outdoor temperature                      |
+| **Temperature Threshold** | `30 °C`                         | Temperature above which covers are closed                     |
+| **Heat Window Start**     | `08:00`                         | Earliest time of day the heat protection is active            |
+| **Heat Window End**       | `20:00`                         | Latest time of day the heat protection is active              |
+| **Sunrise Schedulers**    | —                               | Scheduler switch entities whose opening time tracks sunrise   |
+| **Earliest Open Time**    | `07:10`                         | Minimum opening time even when sunrise is earlier             |
 
 ---
 
@@ -245,6 +254,42 @@ Suppose your thermostat modes are `Heating` and `Cooling`. You create the follow
 When `thermostat_mode` is set to **Off**, HomeShift will force-disable all switches tagged with `Heating` or `Cooling`, regardless of the current day mode. Switches without any thermostat tag (like `switch.schedule_presence_light`) are left untouched.
 
 > **How to add a tag in the Scheduler card:** Open the Scheduler card → edit a schedule → scroll to *Tags* → add the thermostat mode name exactly as defined in your thermostat mode map (e.g. `Heating`, `Cooling`).
+
+---
+
+## 🌅 Sunrise Scheduler Adjustment
+
+HomeShift can adjust the opening time of scheduler switches every morning based on today's actual sunrise time.
+
+Each day shortly after midnight, HomeShift computes:
+```
+target_time = max(sunrise_local, earliest_open_time)
+```
+and calls `scheduler.edit` on each configured scheduler entity to update its first timeslot start time.
+
+**Configuration:**
+- **Sunrise Schedulers** — list of `switch.schedule_*` entities to update
+- **Earliest Open Time** — floor time so covers never open before a fixed hour (e.g. `07:10`)
+
+**`sensor.cover_open_time`** reflects the time that was applied this morning, so you can display it on your dashboard.
+
+---
+
+## ☀️ Cover Heat Protection
+
+HomeShift can automatically close covers when the outdoor temperature exceeds a threshold during a configurable time window. This prevents heat build-up without requiring any automation.
+
+Each time the coordinator runs **and** whenever the temperature sensor value changes, HomeShift checks:
+- Is the current time within the configured active window?
+- Is the temperature above the configured threshold?
+
+If both conditions are met, `cover.stop_cover` is called on all configured cover entities. For Somfy covers this closes the cover to their pre-recorded favourite position.
+
+**Configuration:**
+- **Cover Entities** — covers to control
+- **Temperature Sensor** — sensor providing the current outdoor temperature
+- **Temperature Threshold** — temperature above which covers are closed (default: `30 °C`)
+- **Heat Window Start / End** — time range during which the feature is active (default: `08:00–20:00`)
 
 ---
 

@@ -8,6 +8,8 @@
           "calendars": "Calendriers et planification",
           "mapping": "Mapping des modes",
           "schedulers": "Schedulers",
+          "heat_protection": "Protection thermique des volets",
+          "sunrise_schedulers": "Ajustement horaire lever du soleil",
           "finalize": "Enregistrer la configuration"
         }
       },
@@ -69,6 +71,36 @@
       "schedulers": {
         "title": "Schedulers",
         "description": "Assignez les schedulers à chaque mode jour."
+      },
+      "heat_protection": {
+        "title": "Protection thermique des volets",
+        "description": "Ferme les volets à leur position préréglée lorsque la température dépasse un seuil pendant un créneau horaire configuré. Utilise cover.stop_cover qui, sur les volets Somfy, déclenche la position mémorisée « my » (fermeture partielle).",
+        "data": {
+          "heat_protection_covers": "Entités volet",
+          "heat_protection_sensor": "Capteur de température",
+          "heat_protection_threshold": "Seuil de fermeture (°C)",
+          "heat_protection_start": "Début du créneau",
+          "heat_protection_end": "Fin du créneau"
+        },
+        "data_description": {
+          "heat_protection_covers": "Sélectionnez les volets à fermer lorsque la chaleur est trop forte",
+          "heat_protection_sensor": "Capteur de température déclenchant la fermeture des volets",
+          "heat_protection_threshold": "Température au-dessus de laquelle les volets se ferment à leur position préréglée",
+          "heat_protection_start": "Heure de début à partir de laquelle la protection est active",
+          "heat_protection_end": "Heure de fin au-delà de laquelle la protection n'est plus active"
+        }
+      },
+      "sunrise_schedulers": {
+        "title": "Ajustement horaire lever du soleil",
+        "description": "Chaque matin à 00h15, ajuste l'heure d'ouverture des volets dans les schedulers en fonction du lever du soleil. L'heure retenue est max(lever du soleil, heure la plus tôt).",
+        "data": {
+          "sunrise_schedulers": "Schedulers à ajuster",
+          "sunrise_earliest_time": "Heure d'ouverture la plus tôt autorisée"
+        },
+        "data_description": {
+          "sunrise_schedulers": "Sélectionnez les schedulers dont l'heure de démarrage doit suivre le lever du soleil",
+          "sunrise_earliest_time": "Les volets ne s'ouvriront jamais avant cette heure, même si le lever du soleil est plus tôt"
+        }
       }
     },
     "error": {
@@ -87,6 +119,8 @@
           "calendars": "Calendriers et planification",
           "mapping": "Mapping des modes",
           "schedulers": "Schedulers",
+          "heat_protection": "Protection thermique des volets",
+          "sunrise_schedulers": "Ajustement horaire lever du soleil",
           "finalize": "Enregistrer la configuration"
         }
       },
@@ -153,6 +187,36 @@
           "schedulers_heating": "Schedulers pour le mode 'Heating' (Chauffage)",
           "schedulers_cooling": "Schedulers pour le mode 'Cooling' (Climatisation)",
           "schedulers_ventilation": "Schedulers pour le mode 'Ventilation'"
+        }
+      },
+      "heat_protection": {
+        "title": "Protection thermique des volets",
+        "description": "Ferme les volets à leur position préréglée lorsque la température dépasse un seuil pendant un créneau horaire configuré. Utilise cover.stop_cover qui, sur les volets Somfy, déclenche la position mémorisée « my » (fermeture partielle).",
+        "data": {
+          "heat_protection_covers": "Entités volet",
+          "heat_protection_sensor": "Capteur de température",
+          "heat_protection_threshold": "Seuil de fermeture (°C)",
+          "heat_protection_start": "Début du créneau",
+          "heat_protection_end": "Fin du créneau"
+        },
+        "data_description": {
+          "heat_protection_covers": "Sélectionnez les volets à fermer lorsque la chaleur est trop forte",
+          "heat_protection_sensor": "Capteur de température déclenchant la fermeture des volets",
+          "heat_protection_threshold": "Température au-dessus de laquelle les volets se ferment à leur position préréglée",
+          "heat_protection_start": "Heure de début à partir de laquelle la protection est active",
+          "heat_protection_end": "Heure de fin au-delà de laquelle la protection n'est plus active"
+        }
+      },
+      "sunrise_schedulers": {
+        "title": "Ajustement horaire lever du soleil",
+        "description": "Chaque matin à 00h15, ajuste l'heure d'ouverture des volets dans les schedulers en fonction du lever du soleil. L'heure retenue est max(lever du soleil, heure la plus tôt).",
+        "data": {
+          "sunrise_schedulers": "Schedulers à ajuster",
+          "sunrise_earliest_time": "Heure d'ouverture la plus tôt autorisée"
+        },
+        "data_description": {
+          "sunrise_schedulers": "Sélectionnez les schedulers dont l'heure de démarrage doit suivre le lever du soleil",
+          "sunrise_earliest_time": "Les volets ne s'ouvriront jamais avant cette heure, même si le lever du soleil est plus tôt"
         }
       }
     }

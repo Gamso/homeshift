@@ -7,9 +7,17 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EVENT_HOMEASSISTANT_STARTED, Platform
 from homeassistant.core import CoreState, Event, HomeAssistant
 from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers.event import async_track_state_change_event, async_track_time_change
 
-from .const import DOMAIN, SENSOR_NEXT_SCAN, SERVICE_REFRESH_SCHEDULERS, SERVICE_SYNC_CALENDAR
+from .const import (
+    DOMAIN,
+    CONF_HEAT_PROTECTION_SENSOR,
+    SENSOR_NEXT_SCAN,
+    SERVICE_REFRESH_SCHEDULERS,
+    SERVICE_SYNC_CALENDAR,
+)
 from .coordinator import HomeShiftCoordinator
+from .cover_manager import CoverManager
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -52,6 +60,32 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Register services
     await async_setup_services(hass, coordinator)
 
+    # ------------------------------------------------------------------ #
+    # CoverManager – heat protection and sunrise scheduler adjustment      #
+    # ------------------------------------------------------------------ #
+    cover_manager = CoverManager(hass, lambda: coordinator._config)
+
+    # Temperature sensor state-change → heat-protection check
+    heat_sensor: str = coordinator._config.get(CONF_HEAT_PROTECTION_SENSOR, "")
+    if heat_sensor:
+        async def _async_temperature_changed(_event: Event) -> None:
+            await cover_manager.async_heat_protection_check()
+
+        entry.async_on_unload(
+            async_track_state_change_event(hass, [heat_sensor], _async_temperature_changed)
+        )
+
+    # Daily at 00:15 → sunrise scheduler adjustment
+    async def _async_adjust_sunrise(_now) -> None:
+        await cover_manager.async_adjust_sunrise_schedulers()
+
+    entry.async_on_unload(
+        async_track_time_change(hass, _async_adjust_sunrise, hour=0, minute=15, second=0)
+    )
+
+    # Store cover_manager alongside the coordinator so it survives reloads
+    hass.data[DOMAIN][f"{entry.entry_id}_cover"] = cover_manager
+
     # Reload the integration when options are saved so the coordinator picks up changes
     entry.async_on_unload(entry.add_update_listener(_async_reload_on_options_update))
 
@@ -83,6 +117,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
     if unload_ok := await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
         hass.data[DOMAIN].pop(entry.entry_id)
+        hass.data[DOMAIN].pop(f"{entry.entry_id}_cover", None)
 
     return unload_ok
 

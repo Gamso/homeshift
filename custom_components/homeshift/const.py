@@ -19,6 +19,17 @@ CONF_MODE_HOLIDAY = "mode_holiday"  # Day mode key for holidays
 CONF_EVENT_MODE_MAP = "event_mode_map"  # Mapping: calendar event keyword → day mode key
 CONF_MODE_ABSENCE = "mode_absence"  # Day mode key that blocks automatic updates
 
+# Cover heat protection feature
+CONF_HEAT_PROTECTION_COVERS = "heat_protection_covers"  # list of cover entity IDs to protect
+CONF_HEAT_PROTECTION_SENSOR = "heat_protection_sensor"  # temperature sensor entity ID
+CONF_HEAT_PROTECTION_THRESHOLD = "heat_protection_threshold"  # °C threshold
+CONF_HEAT_PROTECTION_START = "heat_protection_start"  # time window start (HH:MM:SS)
+CONF_HEAT_PROTECTION_END = "heat_protection_end"  # time window end (HH:MM:SS)
+
+# Sunrise-based scheduler adjustment feature
+CONF_SUNRISE_SCHEDULERS = "sunrise_schedulers"  # list of scheduler switch entity IDs to adjust
+CONF_SUNRISE_EARLIEST_TIME = "sunrise_earliest_time"  # earliest allowed start time (HH:MM:SS)
+
 # Default values (keys are stable English identifiers)
 DEFAULT_DAY_MODE_MAP = "home:Home, work:Work, remote:Remote, away:Away"
 DEFAULT_THERMOSTAT_MODE_MAP = "off:Off, heating:Heating, cooling:Cooling, ventilation:Ventilation"
@@ -33,6 +44,10 @@ DEFAULT_MODE_WEEKEND = "home"
 DEFAULT_MODE_HOLIDAY = "home"
 DEFAULT_EVENT_MODE_MAP = "Vacation:home, Remote:remote"
 DEFAULT_MODE_ABSENCE = "away"
+DEFAULT_HEAT_PROTECTION_THRESHOLD = 30.0  # °C
+DEFAULT_HEAT_PROTECTION_START = "08:35:00"
+DEFAULT_HEAT_PROTECTION_END = "18:00:00"
+DEFAULT_SUNRISE_EARLIEST_TIME = "07:10:00"
 
 # Entity IDs
 SELECT_DAY_MODE = "day_mode"

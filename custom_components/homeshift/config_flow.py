@@ -24,6 +24,13 @@ from .const import (
     CONF_MODE_HOLIDAY,
     CONF_EVENT_MODE_MAP,
     CONF_MODE_ABSENCE,
+    CONF_HEAT_PROTECTION_COVERS,
+    CONF_HEAT_PROTECTION_SENSOR,
+    CONF_HEAT_PROTECTION_THRESHOLD,
+    CONF_HEAT_PROTECTION_START,
+    CONF_HEAT_PROTECTION_END,
+    CONF_SUNRISE_SCHEDULERS,
+    CONF_SUNRISE_EARLIEST_TIME,
     DEFAULT_DAY_MODE_MAP,
     DEFAULT_THERMOSTAT_MODE_MAP,
     DEFAULT_SCAN_INTERVAL,
@@ -32,6 +39,10 @@ from .const import (
     DEFAULT_MODE_HOLIDAY,
     DEFAULT_MODE_ABSENCE,
     DEFAULT_EVENT_MODE_MAP,
+    DEFAULT_HEAT_PROTECTION_THRESHOLD,
+    DEFAULT_HEAT_PROTECTION_START,
+    DEFAULT_HEAT_PROTECTION_END,
+    DEFAULT_SUNRISE_EARLIEST_TIME,
     LOCALIZED_DEFAULTS,
     get_localized_defaults,
 )
@@ -283,6 +294,62 @@ def _extract_schedulers(user_input: dict[str, Any], data: dict[str, Any]) -> dic
     return result
 
 
+def _heat_protection_schema(data: dict[str, Any]) -> vol.Schema:
+    """Build the cover heat-protection configuration form schema."""
+    return vol.Schema(
+        {
+            vol.Optional(
+                CONF_HEAT_PROTECTION_COVERS,
+                default=data.get(CONF_HEAT_PROTECTION_COVERS, []),
+            ): selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="cover", multiple=True),
+            ),
+            vol.Optional(
+                CONF_HEAT_PROTECTION_SENSOR,
+                default=data.get(CONF_HEAT_PROTECTION_SENSOR, ""),
+            ): selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="sensor"),
+            ),
+            vol.Optional(
+                CONF_HEAT_PROTECTION_THRESHOLD,
+                default=data.get(CONF_HEAT_PROTECTION_THRESHOLD, DEFAULT_HEAT_PROTECTION_THRESHOLD),
+            ): selector.NumberSelector(
+                selector.NumberSelectorConfig(
+                    min=0,
+                    max=60,
+                    step=0.5,
+                    unit_of_measurement="°C",
+                    mode=selector.NumberSelectorMode.BOX,
+                ),
+            ),
+            vol.Optional(
+                CONF_HEAT_PROTECTION_START,
+                default=data.get(CONF_HEAT_PROTECTION_START, DEFAULT_HEAT_PROTECTION_START),
+            ): selector.TimeSelector(),
+            vol.Optional(
+                CONF_HEAT_PROTECTION_END,
+                default=data.get(CONF_HEAT_PROTECTION_END, DEFAULT_HEAT_PROTECTION_END),
+            ): selector.TimeSelector(),
+        }
+    )
+
+
+def _sunrise_schedulers_schema(hass, data: dict[str, Any]) -> vol.Schema:
+    """Build the sunrise-based scheduler-adjustment configuration form schema."""
+    return vol.Schema(
+        {
+            vol.Optional(
+                CONF_SUNRISE_SCHEDULERS,
+                default=data.get(CONF_SUNRISE_SCHEDULERS, []),
+            ): _scheduler_selector(hass),
+            vol.Optional(
+                CONF_SUNRISE_EARLIEST_TIME,
+                default=data.get(CONF_SUNRISE_EARLIEST_TIME, DEFAULT_SUNRISE_EARLIEST_TIME),
+            ): selector.TimeSelector(),
+        }
+    )
+
+
 # ---------------------------------------------------------------------------
 # Config flow (initial setup) – menu-based
 # ---------------------------------------------------------------------------
@@ -327,7 +394,7 @@ class HomeShiftConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         _user_input: dict[str, Any] | None = None,
     ) -> config_entries.ConfigFlowResult:
         """Show the configuration menu."""
-        menu_options = ["calendars", "mapping", "schedulers"]
+        menu_options = ["calendars", "mapping", "schedulers", "heat_protection", "sunrise_schedulers"]
         if self._is_config_complete():
             menu_options.append("finalize")
         return self.async_show_menu(step_id="menu", menu_options=menu_options)
@@ -391,6 +458,38 @@ class HomeShiftConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id="schedulers",
             data_schema=_schedulers_schema(self.hass, self._data),
+        )
+
+    # -- heat_protection ---------------------------------------------------
+
+    async def async_step_heat_protection(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> config_entries.ConfigFlowResult:
+        """Configure cover heat protection."""
+        if user_input is not None:
+            self._data.update(user_input)
+            return await self.async_step_menu()
+
+        return self.async_show_form(
+            step_id="heat_protection",
+            data_schema=_heat_protection_schema(self._effective_data()),
+        )
+
+    # -- sunrise_schedulers ------------------------------------------------
+
+    async def async_step_sunrise_schedulers(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> config_entries.ConfigFlowResult:
+        """Configure sunrise-based scheduler-start-time adjustment."""
+        if user_input is not None:
+            self._data.update(user_input)
+            return await self.async_step_menu()
+
+        return self.async_show_form(
+            step_id="sunrise_schedulers",
+            data_schema=_sunrise_schedulers_schema(self.hass, self._effective_data()),
         )
 
     # -- finalize ----------------------------------------------------------
@@ -452,7 +551,7 @@ class HomeShiftOptionsFlow(config_entries.OptionsFlow):
         _user_input: dict[str, Any] | None = None,
     ) -> config_entries.ConfigFlowResult:
         """Show the options menu."""
-        menu_options = ["calendars", "mapping", "schedulers"]
+        menu_options = ["calendars", "mapping", "schedulers", "heat_protection", "sunrise_schedulers"]
         if self._is_config_complete():
             menu_options.append("finalize")
         return self.async_show_menu(step_id="menu", menu_options=menu_options)
@@ -516,6 +615,38 @@ class HomeShiftOptionsFlow(config_entries.OptionsFlow):
         return self.async_show_form(
             step_id="schedulers",
             data_schema=_schedulers_schema(self.hass, self._data),
+        )
+
+    # -- heat_protection ---------------------------------------------------
+
+    async def async_step_heat_protection(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> config_entries.ConfigFlowResult:
+        """Configure cover heat protection."""
+        if user_input is not None:
+            self._data.update(user_input)
+            return await self.async_step_menu()
+
+        return self.async_show_form(
+            step_id="heat_protection",
+            data_schema=_heat_protection_schema(self._effective_data()),
+        )
+
+    # -- sunrise_schedulers ------------------------------------------------
+
+    async def async_step_sunrise_schedulers(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> config_entries.ConfigFlowResult:
+        """Configure sunrise-based scheduler-start-time adjustment."""
+        if user_input is not None:
+            self._data.update(user_input)
+            return await self.async_step_menu()
+
+        return self.async_show_form(
+            step_id="sunrise_schedulers",
+            data_schema=_sunrise_schedulers_schema(self.hass, self._effective_data()),
         )
 
     # -- finalize ----------------------------------------------------------

@@ -8,6 +8,8 @@
           "calendars": "Calendars & Schedule",
           "mapping": "Mode Mapping",
           "schedulers": "Schedulers",
+          "heat_protection": "Cover Heat Protection",
+          "sunrise_schedulers": "Sunrise Scheduler Adjustment",
           "finalize": "Save Configuration"
         }
       },
@@ -69,6 +71,36 @@
       "schedulers": {
         "title": "Schedulers",
         "description": "Assign scheduler switch entities to each day mode."
+      },
+      "heat_protection": {
+        "title": "Cover Heat Protection",
+        "description": "Close covers to their preset position when the temperature rises above a threshold during a configured time window. Uses cover.stop_cover which, on Somfy covers, triggers the 'my' preset (partially-closed position).",
+        "data": {
+          "heat_protection_covers": "Cover Entities",
+          "heat_protection_sensor": "Temperature Sensor",
+          "heat_protection_threshold": "Closing Threshold (°C)",
+          "heat_protection_start": "Window Start",
+          "heat_protection_end": "Window End"
+        },
+        "data_description": {
+          "heat_protection_covers": "Select the covers to close when the temperature is too high",
+          "heat_protection_sensor": "Temperature sensor that triggers the cover closure",
+          "heat_protection_threshold": "Temperature above which covers are closed to their preset position",
+          "heat_protection_start": "Earliest time of day when heat protection is active",
+          "heat_protection_end": "Latest time of day when heat protection is active"
+        }
+      },
+      "sunrise_schedulers": {
+        "title": "Sunrise Scheduler Adjustment",
+        "description": "Every morning at 00:15, adjust the opening time of cover schedulers based on the next sunrise. The start time will be max(sunrise, earliest_time).",
+        "data": {
+          "sunrise_schedulers": "Scheduler Entities to Adjust",
+          "sunrise_earliest_time": "Earliest Allowed Opening Time"
+        },
+        "data_description": {
+          "sunrise_schedulers": "Select the scheduler switches whose start time should follow sunrise",
+          "sunrise_earliest_time": "Covers will never open earlier than this time, even when sunrise is earlier"
+        }
       }
     },
     "error": {
@@ -87,6 +119,8 @@
           "calendars": "Calendars & Schedule",
           "mapping": "Mode Mapping",
           "schedulers": "Schedulers",
+          "heat_protection": "Cover Heat Protection",
+          "sunrise_schedulers": "Sunrise Scheduler Adjustment",
           "finalize": "Save Configuration"
         }
       },
@@ -153,6 +187,36 @@
           "schedulers_heating": "Schedulers for 'Heating' mode",
           "schedulers_cooling": "Schedulers for 'Cooling' mode",
           "schedulers_ventilation": "Schedulers for 'Ventilation' mode"
+        }
+      },
+      "heat_protection": {
+        "title": "Cover Heat Protection",
+        "description": "Close covers to their preset position when the temperature rises above a threshold during a configured time window. Uses cover.stop_cover which, on Somfy covers, triggers the 'my' preset (partially-closed position).",
+        "data": {
+          "heat_protection_covers": "Cover Entities",
+          "heat_protection_sensor": "Temperature Sensor",
+          "heat_protection_threshold": "Closing Threshold (°C)",
+          "heat_protection_start": "Window Start",
+          "heat_protection_end": "Window End"
+        },
+        "data_description": {
+          "heat_protection_covers": "Select the covers to close when the temperature is too high",
+          "heat_protection_sensor": "Temperature sensor that triggers the cover closure",
+          "heat_protection_threshold": "Temperature above which covers are closed to their preset position",
+          "heat_protection_start": "Earliest time of day when heat protection is active",
+          "heat_protection_end": "Latest time of day when heat protection is active"
+        }
+      },
+      "sunrise_schedulers": {
+        "title": "Sunrise Scheduler Adjustment",
+        "description": "Every morning at 00:15, adjust the opening time of cover schedulers based on the next sunrise. The start time will be max(sunrise, earliest_time).",
+        "data": {
+          "sunrise_schedulers": "Scheduler Entities to Adjust",
+          "sunrise_earliest_time": "Earliest Allowed Opening Time"
+        },
+        "data_description": {
+          "sunrise_schedulers": "Select the scheduler switches whose start time should follow sunrise",
+          "sunrise_earliest_time": "Covers will never open earlier than this time, even when sunrise is earlier"
         }
       }
     }

@@ -8,6 +8,8 @@
           "calendars": "Calendars & Schedule",
           "mapping": "Mode Mapping",
           "schedulers": "Schedulers",
+          "covers": "Cover Heat Control",
+          "sunrise_schedulers": "Sunrise Scheduler Adjustment",
           "finalize": "Save Configuration"
         }
       },
@@ -69,6 +71,36 @@
       "schedulers": {
         "title": "Schedulers",
         "description": "Assign scheduler switch entities to each day mode."
+      },
+      "covers": {
+        "title": "Cover Heat Control",
+        "description": "Stop covers automatically when the temperature exceeds the threshold during the configured time window.",
+        "data": {
+          "cover_entities": "Cover Entities",
+          "cover_temp_sensor": "Temperature Sensor",
+          "cover_temp_threshold": "Temperature Threshold (°C)",
+          "cover_time_start": "Active Window Start",
+          "cover_time_end": "Active Window End"
+        },
+        "data_description": {
+          "cover_entities": "Select the cover entities to control when it is too hot.",
+          "cover_temp_sensor": "Sensor providing the outdoor temperature.",
+          "cover_temp_threshold": "Temperature above which covers are closed.",
+          "cover_time_start": "Earliest time of day the feature is active.",
+          "cover_time_end": "Latest time of day the feature is active."
+        }
+      },
+      "sunrise_schedulers": {
+        "title": "Sunrise Scheduler Adjustment",
+        "description": "Adjust the opening time of scheduler switches daily based on sunrise, respecting a configurable earliest time.",
+        "data": {
+          "sunrise_schedulers": "Scheduler Entities to Adjust",
+          "sunrise_earliest": "Earliest Allowed Opening Time"
+        },
+        "data_description": {
+          "sunrise_schedulers": "Select the scheduler switch entities whose first timeslot will be adjusted at each new day.",
+          "sunrise_earliest": "The opening time will be the later of sunrise and this value."
+        }
       }
     },
     "error": {
@@ -87,6 +119,8 @@
           "calendars": "Calendars & Schedule",
           "mapping": "Mode Mapping",
           "schedulers": "Schedulers",
+          "covers": "Cover Heat Control",
+          "sunrise_schedulers": "Sunrise Scheduler Adjustment",
           "finalize": "Save Configuration"
         }
       },
@@ -154,6 +188,36 @@
           "schedulers_cooling": "Schedulers for 'Cooling' mode",
           "schedulers_ventilation": "Schedulers for 'Ventilation' mode"
         }
+      },
+      "covers": {
+        "title": "Cover Heat Control",
+        "description": "Stop covers automatically when the temperature exceeds the threshold during the configured time window.",
+        "data": {
+          "cover_entities": "Cover Entities",
+          "cover_temp_sensor": "Temperature Sensor",
+          "cover_temp_threshold": "Temperature Threshold (°C)",
+          "cover_time_start": "Active Window Start",
+          "cover_time_end": "Active Window End"
+        },
+        "data_description": {
+          "cover_entities": "Select the cover entities to control when it is too hot.",
+          "cover_temp_sensor": "Sensor providing the outdoor temperature.",
+          "cover_temp_threshold": "Temperature above which covers are closed.",
+          "cover_time_start": "Earliest time of day the feature is active.",
+          "cover_time_end": "Latest time of day the feature is active."
+        }
+      },
+      "sunrise_schedulers": {
+        "title": "Sunrise Scheduler Adjustment",
+        "description": "Adjust the opening time of scheduler switches daily based on sunrise, respecting a configurable earliest time.",
+        "data": {
+          "sunrise_schedulers": "Scheduler Entities to Adjust",
+          "sunrise_earliest": "Earliest Allowed Opening Time"
+        },
+        "data_description": {
+          "sunrise_schedulers": "Select the scheduler switch entities whose first timeslot will be adjusted at each new day.",
+          "sunrise_earliest": "The opening time will be the later of sunrise and this value."
+        }
       }
     }
   },
@@ -175,9 +239,6 @@
       }
     },
     "sensor": {
-      "next_scan": {
-        "name": "Next Scan"
-      },
       "next_mode": {
         "name": "Next Mode"
       },

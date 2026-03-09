@@ -8,6 +8,8 @@
           "calendars": "Calendriers et planification",
           "mapping": "Mapping des modes",
           "schedulers": "Schedulers",
+          "covers": "Contrôle des volets (chaleur)",
+          "sunrise_schedulers": "Ajustement des schedulers au lever du soleil",
           "finalize": "Enregistrer la configuration"
         }
       },
@@ -69,6 +71,36 @@
       "schedulers": {
         "title": "Schedulers",
         "description": "Assignez les schedulers à chaque mode jour."
+      },
+      "covers": {
+        "title": "Contrôle des volets (chaleur)",
+        "description": "Arrêter les volets automatiquement quand la température dépasse le seuil pendant la plage horaire configurée.",
+        "data": {
+          "cover_entities": "Entités volets",
+          "cover_temp_sensor": "Capteur de température",
+          "cover_temp_threshold": "Seuil de température (°C)",
+          "cover_time_start": "Début de la plage horaire",
+          "cover_time_end": "Fin de la plage horaire"
+        },
+        "data_description": {
+          "cover_entities": "Sélectionnez les entités volets à contrôler en cas de forte chaleur.",
+          "cover_temp_sensor": "Capteur fournissant la température extérieure.",
+          "cover_temp_threshold": "Température au-dessus de laquelle les volets sont fermés.",
+          "cover_time_start": "Heure de début de la plage d'activation.",
+          "cover_time_end": "Heure de fin de la plage d'activation."
+        }
+      },
+      "sunrise_schedulers": {
+        "title": "Ajustement des schedulers au lever du soleil",
+        "description": "Ajuster quotidiennement l'heure d'ouverture des schedulers en fonction du lever du soleil, en respectant une heure minimum configurable.",
+        "data": {
+          "sunrise_schedulers": "Schedulers à ajuster",
+          "sunrise_earliest": "Heure d'ouverture minimale"
+        },
+        "data_description": {
+          "sunrise_schedulers": "Sélectionnez les schedulers dont le premier créneau sera ajusté chaque jour.",
+          "sunrise_earliest": "L'heure d'ouverture sera la plus tardive entre le lever du soleil et cette valeur."
+        }
       }
     },
     "error": {
@@ -87,6 +119,8 @@
           "calendars": "Calendriers et planification",
           "mapping": "Mapping des modes",
           "schedulers": "Schedulers",
+          "covers": "Contrôle des volets (chaleur)",
+          "sunrise_schedulers": "Ajustement des schedulers au lever du soleil",
           "finalize": "Enregistrer la configuration"
         }
       },
@@ -154,6 +188,36 @@
           "schedulers_cooling": "Schedulers pour le mode 'Cooling' (Climatisation)",
           "schedulers_ventilation": "Schedulers pour le mode 'Ventilation'"
         }
+      },
+      "covers": {
+        "title": "Contrôle des volets (chaleur)",
+        "description": "Arrêter les volets automatiquement quand la température dépasse le seuil pendant la plage horaire configurée.",
+        "data": {
+          "cover_entities": "Entités volets",
+          "cover_temp_sensor": "Capteur de température",
+          "cover_temp_threshold": "Seuil de température (°C)",
+          "cover_time_start": "Début de la plage horaire",
+          "cover_time_end": "Fin de la plage horaire"
+        },
+        "data_description": {
+          "cover_entities": "Sélectionnez les entités volets à contrôler en cas de forte chaleur.",
+          "cover_temp_sensor": "Capteur fournissant la température extérieure.",
+          "cover_temp_threshold": "Température au-dessus de laquelle les volets sont fermés.",
+          "cover_time_start": "Heure de début de la plage d'activation.",
+          "cover_time_end": "Heure de fin de la plage d'activation."
+        }
+      },
+      "sunrise_schedulers": {
+        "title": "Ajustement des schedulers au lever du soleil",
+        "description": "Ajuster quotidiennement l'heure d'ouverture des schedulers en fonction du lever du soleil, en respectant une heure minimum configurable.",
+        "data": {
+          "sunrise_schedulers": "Schedulers à ajuster",
+          "sunrise_earliest": "Heure d'ouverture minimale"
+        },
+        "data_description": {
+          "sunrise_schedulers": "Sélectionnez les schedulers dont le premier créneau sera ajusté chaque jour.",
+          "sunrise_earliest": "L'heure d'ouverture sera la plus tardive entre le lever du soleil et cette valeur."
+        }
       }
     }
   },
@@ -175,9 +239,6 @@
       }
     },
     "sensor": {
-      "next_scan": {
-        "name": "Prochain scan"
-      },
       "next_mode": {
         "name": "Prochain mode"
       },

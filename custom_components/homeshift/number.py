@@ -10,7 +10,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
 
-from .const import DOMAIN, NUMBER_OVERRIDE_DURATION, NUMBER_EARLY_SWITCH, DEFAULT_OVERRIDE_DURATION
+from .const import DOMAIN, NUMBER_OVERRIDE_DURATION, NUMBER_EARLY_SWITCH
 from .coordinator import HomeShiftCoordinator
 
 _LOGGER = logging.getLogger(__name__)

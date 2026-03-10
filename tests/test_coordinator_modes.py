@@ -462,7 +462,7 @@ class TestHalfDayTransitionSequence:
     def test_full_day_sequence_afternoon_remote(self):
         """Full day sequence afternoon remote."""
         hass = make_mock_hass()
-        entry = make_mock_entry(scan_interval=60)
+        entry = make_mock_entry()
         coordinator = HomeShiftCoordinator(hass, entry)
         coordinator.day_mode = "Maison"
         loop = asyncio.get_event_loop()
@@ -501,7 +501,7 @@ class TestHalfDayTransitionSequence:
     def test_full_day_sequence_morning_remote(self):
         """Full day sequence morning remote."""
         hass = make_mock_hass()
-        entry = make_mock_entry(scan_interval=60)
+        entry = make_mock_entry()
         coordinator = HomeShiftCoordinator(hass, entry)
         coordinator.day_mode = "Maison"
         loop = asyncio.get_event_loop()
@@ -542,7 +542,7 @@ class TestTodayTypePersistence:
     def test_today_type_persists_after_morning_event_ends(self):
         """Today type persists after morning event ends."""
         hass = make_mock_hass()
-        entry = make_mock_entry(scan_interval=60)
+        entry = make_mock_entry()
         coordinator = HomeShiftCoordinator(hass, entry)
         loop = asyncio.get_event_loop()
 
@@ -564,7 +564,7 @@ class TestTodayTypePersistence:
     def test_today_type_persists_after_afternoon_event_ends(self):
         """Today type persists after afternoon event ends."""
         hass = make_mock_hass()
-        entry = make_mock_entry(scan_interval=60)
+        entry = make_mock_entry()
         coordinator = HomeShiftCoordinator(hass, entry)
         loop = asyncio.get_event_loop()
 
@@ -586,7 +586,7 @@ class TestTodayTypePersistence:
     def test_today_type_resets_at_midnight(self):
         """Today type resets at midnight."""
         hass = make_mock_hass()
-        entry = make_mock_entry(scan_interval=60)
+        entry = make_mock_entry()
         coordinator = HomeShiftCoordinator(hass, entry)
         loop = asyncio.get_event_loop()
 
@@ -608,7 +608,7 @@ class TestTodayTypePersistence:
     def test_no_event_day_stays_none(self):
         """No event day stays none."""
         hass = make_mock_hass()
-        entry = make_mock_entry(scan_interval=60)
+        entry = make_mock_entry()
         coordinator = HomeShiftCoordinator(hass, entry)
         loop = asyncio.get_event_loop()
 

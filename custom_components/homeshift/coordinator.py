@@ -19,7 +19,6 @@ from .const import (
     CONF_DAY_MODE_MAP,
     CONF_THERMOSTAT_MODE_MAP,
     CONF_SCHEDULERS_PER_MODE,
-    CONF_SCAN_INTERVAL,
     CONF_OVERRIDE_DURATION,
     CONF_EARLY_SWITCH_MINUTES,
     CONF_MODE_DEFAULT,
@@ -29,7 +28,7 @@ from .const import (
     CONF_MODE_ABSENCE,
     DEFAULT_DAY_MODE_MAP,
     DEFAULT_THERMOSTAT_MODE_MAP,
-    DEFAULT_SCAN_INTERVAL,
+    SCAN_INTERVAL_MINUTES,
     DEFAULT_OVERRIDE_DURATION,
     DEFAULT_EARLY_SWITCH_MINUTES,
     DEFAULT_MODE_DEFAULT,
@@ -84,18 +83,11 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
         # Localized defaults — used as fallback when a key is absent from the entry
         _loc = get_localized_defaults(hass)
 
-        # Get configurable scan interval (in minutes)
-        scan_interval = _config.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
-        try:
-            scan_interval = int(scan_interval)
-        except (ValueError, TypeError):
-            scan_interval = DEFAULT_SCAN_INTERVAL
-
         super().__init__(
             hass,
             _LOGGER,
             name=DOMAIN,
-            update_interval=timedelta(minutes=scan_interval),
+            update_interval=timedelta(minutes=SCAN_INTERVAL_MINUTES),
         )
         self.entry = entry
 
@@ -151,13 +143,13 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
 
         _LOGGER.info(
             "HomeShift coordinator initialized — "
-            "calendar=%s, holiday_calendar=%s, scan_interval=%s min | "
+            "calendar=%s, holiday_calendar=%s, scan_interval=%d min | "
             "day_mode_map=%s | "
             "mode_default=%s, mode_weekend=%s, mode_holiday=%s, mode_absence=%s | "
             "thermostat_modes=%s | event_mode_map=%s",
             _config.get(CONF_CALENDAR_ENTITY),
             _config.get(CONF_HOLIDAY_CALENDAR, "(missing)"),
-            scan_interval,
+            SCAN_INTERVAL_MINUTES,
             self._day_mode_map,
             self._mode_default,
             self._mode_weekend,
@@ -175,6 +167,7 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
 
         # One-shot timer scheduled to fire at _next_mode_at; None when no timer is pending
         self._cancel_next_mode_timer: Callable[[], None] | None = None
+
     @property
     def _config(self) -> dict:
         """Return merged config: entry.data overridden by entry.options."""

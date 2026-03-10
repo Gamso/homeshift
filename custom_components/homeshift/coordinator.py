@@ -226,7 +226,7 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
         Cancels any previously pending timer, then schedules a new one if
         _next_mode_at is set. When the timer fires, async_sync_calendar() is
         called so the mode change happens on time rather than waiting for the
-        next scan-interval wake-up.
+        next 5-minute poll.
         """
         # Cancel any in-flight timer from a previous update
         if self._cancel_next_mode_timer is not None:
@@ -540,7 +540,7 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
     async def _async_update_data(self) -> dict:
         """Fetch data from calendar and determine current mode.
 
-        This runs periodically based on scan_interval. It checks the current
+        This runs periodically every 5 minutes. It checks the current
         calendar state and auto-updates day_mode unless mode is absence.
         This handles half-day events naturally: a timed calendar event is only
         active during its time window.

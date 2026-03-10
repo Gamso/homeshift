@@ -5,7 +5,7 @@ import logging
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EVENT_HOMEASSISTANT_STARTED, Platform
-from homeassistant.core import CoreState, Event, HomeAssistant
+from homeassistant.core import CoreState, Event, HomeAssistant, callback
 from homeassistant.helpers import entity_registry as er
 
 from .const import DOMAIN, SENSOR_NEXT_SCAN, SERVICE_REFRESH_SCHEDULERS, SERVICE_SYNC_CALENDAR
@@ -52,6 +52,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Register services
     await async_setup_services(hass, coordinator)
 
+    # Cancel the next-mode timer when the entry is unloaded
+    entry.async_on_unload(coordinator.async_cancel_next_mode_timer)
+
     # React immediately when the temperature sensor changes (no need to wait for the poll)
     entry.async_on_unload(coordinator._cover_manager.async_setup_listeners())
 
@@ -65,12 +68,29 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass.async_create_task(coordinator.async_sync_calendar())
     else:
         # HA is still starting — schedule the sync for when all entities are ready.
-        async def _async_ha_started(_event: Event) -> None:
-            await coordinator.async_sync_calendar()
+        # Use a mutable container so the callback can clear the cancel reference
+        # synchronously when the event fires.  This prevents the async_on_unload
+        # guard from calling an already-removed one-shot listener and logging
+        # "Unable to remove unknown job listener" on the next reload.
+        _ha_started_cancel: list = [None]
 
-        entry.async_on_unload(
-            hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STARTED, _async_ha_started)
+        @callback
+        def _ha_started_cb(_event: Event) -> None:
+            _ha_started_cancel[0] = None  # fired — disable the cancel guard
+            hass.async_create_task(coordinator.async_sync_calendar())
+
+        _ha_started_cancel[0] = hass.bus.async_listen_once(
+            EVENT_HOMEASSISTANT_STARTED, _ha_started_cb
         )
+
+        @callback
+        def _cancel_ha_started() -> None:
+            """Cancel the start listener — safe to call after the event has fired."""
+            if _ha_started_cancel[0] is not None:
+                _ha_started_cancel[0]()
+                _ha_started_cancel[0] = None
+
+        entry.async_on_unload(_cancel_ha_started)
 
     _LOGGER.info("HomeShift integration loaded successfully (entry_id=%s)", entry.entry_id)
 

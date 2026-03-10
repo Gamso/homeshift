@@ -3,10 +3,11 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, date, timedelta
-from typing import Any
+from typing import Any, Callable
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.event import async_track_point_in_time
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.util import dt as dt_util
@@ -18,7 +19,6 @@ from .const import (
     CONF_DAY_MODE_MAP,
     CONF_THERMOSTAT_MODE_MAP,
     CONF_SCHEDULERS_PER_MODE,
-    CONF_SCAN_INTERVAL,
     CONF_OVERRIDE_DURATION,
     CONF_EARLY_SWITCH_MINUTES,
     CONF_MODE_DEFAULT,
@@ -28,7 +28,7 @@ from .const import (
     CONF_MODE_ABSENCE,
     DEFAULT_DAY_MODE_MAP,
     DEFAULT_THERMOSTAT_MODE_MAP,
-    DEFAULT_SCAN_INTERVAL,
+    SCAN_INTERVAL_MINUTES,
     DEFAULT_OVERRIDE_DURATION,
     DEFAULT_EARLY_SWITCH_MINUTES,
     DEFAULT_MODE_DEFAULT,
@@ -83,18 +83,11 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
         # Localized defaults — used as fallback when a key is absent from the entry
         _loc = get_localized_defaults(hass)
 
-        # Get configurable scan interval (in minutes)
-        scan_interval = _config.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
-        try:
-            scan_interval = int(scan_interval)
-        except (ValueError, TypeError):
-            scan_interval = DEFAULT_SCAN_INTERVAL
-
         super().__init__(
             hass,
             _LOGGER,
             name=DOMAIN,
-            update_interval=timedelta(minutes=scan_interval),
+            update_interval=timedelta(minutes=SCAN_INTERVAL_MINUTES),
         )
         self.entry = entry
 
@@ -150,13 +143,13 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
 
         _LOGGER.info(
             "HomeShift coordinator initialized — "
-            "calendar=%s, holiday_calendar=%s, scan_interval=%s min | "
+            "calendar=%s, holiday_calendar=%s, scan_interval=%d min | "
             "day_mode_map=%s | "
             "mode_default=%s, mode_weekend=%s, mode_holiday=%s, mode_absence=%s | "
             "thermostat_modes=%s | event_mode_map=%s",
             _config.get(CONF_CALENDAR_ENTITY),
             _config.get(CONF_HOLIDAY_CALENDAR, "(missing)"),
-            scan_interval,
+            SCAN_INTERVAL_MINUTES,
             self._day_mode_map,
             self._mode_default,
             self._mode_weekend,
@@ -171,6 +164,9 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
 
         # Cover heat-protection and sunrise scheduler adjustment
         self._cover_manager = CoverManager(hass, entry)
+
+        # One-shot timer scheduled to fire at _next_mode_at; None when no timer is pending
+        self._cancel_next_mode_timer: Callable[[], None] | None = None
 
     @property
     def _config(self) -> dict:
@@ -222,6 +218,47 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
             )
         except Exception as err:  # noqa: BLE001
             _LOGGER.warning("Could not persist coordinator state: %s", err)
+
+    @callback
+    def _schedule_next_mode_timer(self) -> None:
+        """Schedule (or reschedule) a one-shot timer to fire at _next_mode_at.
+
+        Cancels any previously pending timer, then schedules a new one if
+        _next_mode_at is set. When the timer fires, async_sync_calendar() is
+        called so the mode change happens on time rather than waiting for the
+        next 5-minute poll.
+        """
+        # Cancel any in-flight timer from a previous update
+        if self._cancel_next_mode_timer is not None:
+            self._cancel_next_mode_timer()
+            self._cancel_next_mode_timer = None
+
+        if self._next_mode_at is None:
+            return
+
+        # Snapshot the scheduled time — the callback uses this for logging because
+        # self._next_mode_at may be updated by a later coordinator run before the
+        # timer fires.
+        fire_at = self._next_mode_at
+
+        @callback
+        def _on_timer(_now: datetime) -> None:
+            self._cancel_next_mode_timer = None
+            _LOGGER.debug("Next-mode timer fired (scheduled for %s), triggering sync", fire_at)
+            self.hass.async_create_task(self.async_sync_calendar())
+
+        self._cancel_next_mode_timer = async_track_point_in_time(self.hass, _on_timer, fire_at)
+        _LOGGER.debug("Scheduled next-mode timer at %s (predicted mode: %s)", fire_at, self._next_mode)
+
+    @callback
+    def async_cancel_next_mode_timer(self) -> None:
+        """Cancel the pending next-mode timer, if any.
+
+        Called on integration unload to prevent stale timer callbacks.
+        """
+        if self._cancel_next_mode_timer is not None:
+            self._cancel_next_mode_timer()
+            self._cancel_next_mode_timer = None
 
     @staticmethod
     def parse_day_mode_map(raw: str) -> dict[str, str]:
@@ -503,7 +540,7 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
     async def _async_update_data(self) -> dict:
         """Fetch data from calendar and determine current mode.
 
-        This runs periodically based on scan_interval. It checks the current
+        This runs periodically every 5 minutes. It checks the current
         calendar state and auto-updates day_mode unless mode is absence.
         This handles half-day events naturally: a timed calendar event is only
         active during its time window.
@@ -637,6 +674,9 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
 
         # Compute when and to what mode the next automatic change is expected
         self._next_mode, self._next_mode_at = await self._compute_next_mode_change(calendar_state, now)
+
+        # Schedule a one-shot timer to fire exactly at the predicted change time
+        self._schedule_next_mode_timer()
 
         # Cover heat protection — close covers if temperature exceeds threshold in window
         await self._cover_manager.async_check_heat_protection(now)

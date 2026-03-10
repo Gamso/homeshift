@@ -1,9 +1,8 @@
-"""Tests for the HomeShiftCoordinator — static utilities and scan interval configuration.
+"""Tests for the HomeShiftCoordinator — static utilities.
 
 These tests cover:
 - parse_event_mode_map parses event-to-mode mappings
 - parse_thermostat_mode_map parses thermostat mode mappings
-- scan_interval configuration is respected
 
 Mode mapping, absence, half-day transitions and feature tests live in:
 - tests/test_coordinator_modes.py
@@ -12,7 +11,6 @@ Mode mapping, absence, half-day transitions and feature tests live in:
 
 from __future__ import annotations
 
-from datetime import timedelta
 from unittest.mock import MagicMock, patch
 
 from custom_components.homeshift.coordinator import HomeShiftCoordinator
@@ -21,7 +19,6 @@ from custom_components.homeshift.const import (
     CONF_HOLIDAY_CALENDAR,
     CONF_DAY_MODE_MAP,
     CONF_THERMOSTAT_MODE_MAP,
-    CONF_SCAN_INTERVAL,
     CONF_OVERRIDE_DURATION,
     CONF_SCHEDULERS_PER_MODE,
     CONF_MODE_DEFAULT,
@@ -29,9 +26,9 @@ from custom_components.homeshift.const import (
     CONF_MODE_HOLIDAY,
     CONF_EVENT_MODE_MAP,
     CONF_MODE_ABSENCE,
-    DEFAULT_SCAN_INTERVAL,
     DEFAULT_OVERRIDE_DURATION,
     LOCALIZED_DEFAULTS,
+    SCAN_INTERVAL_MINUTES,
 )
 
 # Use French locale defaults for all tests
@@ -200,7 +197,6 @@ class TestParseThermostatModeMap:
 def _make_mock_entry(
     calendar_entity: str = "calendar.teletravail",
     holiday_calendar: str = "calendar.jours_feries",
-    scan_interval: int = DEFAULT_SCAN_INTERVAL,
     override_duration: int = DEFAULT_OVERRIDE_DURATION,
     schedulers_per_mode: dict | None = None,
     mode_default: str | None = None,
@@ -218,7 +214,6 @@ def _make_mock_entry(
         CONF_HOLIDAY_CALENDAR: holiday_calendar,
         CONF_DAY_MODE_MAP: _FR[CONF_DAY_MODE_MAP],
         CONF_THERMOSTAT_MODE_MAP: thermostat_mode_map or DEFAULT_THERMOSTAT_MODE_MAP,
-        CONF_SCAN_INTERVAL: scan_interval,
         CONF_OVERRIDE_DURATION: override_duration,
         CONF_SCHEDULERS_PER_MODE: schedulers_per_mode or {},
         CONF_MODE_DEFAULT: mode_default if mode_default is not None else _FR[CONF_MODE_DEFAULT],
@@ -248,30 +243,16 @@ def _make_calendar_state(
 
 
 # ---------------------------------------------------------------------------
-# Scan interval configuration tests
+# Scan interval is hardcoded
 # ---------------------------------------------------------------------------
 
-class TestScanIntervalConfig:
-    """Tests for scan interval configuration on HomeShiftCoordinator."""
+class TestScanIntervalHardcoded:
+    """Scan interval is always SCAN_INTERVAL_MINUTES regardless of config."""
 
-    def test_default_scan_interval(self):
-        """Default scan interval."""
+    def test_scan_interval_is_hardcoded(self):
+        """Coordinator always uses the hardcoded scan interval."""
+        from datetime import timedelta
         hass = _make_mock_hass()
-        entry = _make_mock_entry(scan_interval=DEFAULT_SCAN_INTERVAL)
-        coordinator = HomeShiftCoordinator(hass, entry)
-        assert coordinator.update_interval == timedelta(minutes=DEFAULT_SCAN_INTERVAL)
-
-    def test_custom_scan_interval(self):
-        """Custom scan interval."""
-        hass = _make_mock_hass()
-        entry = _make_mock_entry(scan_interval=15)
-        coordinator = HomeShiftCoordinator(hass, entry)
-        assert coordinator.update_interval == timedelta(minutes=15)
-
-    def test_invalid_scan_interval_falls_back(self):
-        """Invalid scan interval falls back."""
-        hass = _make_mock_hass()
-        entry = _make_mock_entry()
-        entry.data[CONF_SCAN_INTERVAL] = "not_a_number"
-        coordinator = HomeShiftCoordinator(hass, entry)
-        assert coordinator.update_interval == timedelta(minutes=DEFAULT_SCAN_INTERVAL)
+        coordinator = HomeShiftCoordinator(hass, _make_mock_entry())
+        assert coordinator.update_interval == timedelta(minutes=SCAN_INTERVAL_MINUTES)
+        assert SCAN_INTERVAL_MINUTES == 5

@@ -629,7 +629,7 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
                 await self.async_refresh_schedulers()
                 await self._async_save_state()
             else:
-                _LOGGER.debug(
+                _LOGGER.info(
                     "Periodic check: day_mode unchanged ('%s') | event=%s",
                     self._day_mode,
                     self._current_event,
@@ -823,7 +823,10 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
             if mode_at != current_mode:
                 return mode_at, candidate
 
-        return None, None
+        # No mode change expected in the window — report the current mode
+        # so that the next_mode sensor shows the persisted mode rather than
+        # "unknown".  next_mode_at stays None (no specific change time).
+        return current_mode, None
 
     async def _determine_mode(self, today_type: str, at_time: datetime | None = None) -> str | None:
         """Determine the appropriate mode based on current state.

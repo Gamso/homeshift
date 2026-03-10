@@ -186,7 +186,7 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
         try:
             stored = await self._store.async_load()
         except Exception as err:  # noqa: BLE001
-            _LOGGER.debug("Could not load persisted state: %s", err)
+            _LOGGER.warning("Could not load persisted state: %s", err)
             return
 
         if not stored:
@@ -221,7 +221,7 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
                 }
             )
         except Exception as err:  # noqa: BLE001
-            _LOGGER.debug("Could not persist coordinator state: %s", err)
+            _LOGGER.warning("Could not persist coordinator state: %s", err)
 
     @staticmethod
     def parse_day_mode_map(raw: str) -> dict[str, str]:
@@ -545,7 +545,7 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
         # Reset day-level event type at midnight (new calendar day)
         today = now.date()
         if today != self._today_date:
-            _LOGGER.debug("New calendar day (%s), resetting today_type", today)
+            _LOGGER.info("New calendar day (%s), resetting today_type", today)
             self._today_type = EVENT_NONE
             self._today_date = today
             # Adjust sunrise-based schedulers for the new day
@@ -591,7 +591,7 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
                         today_type = kw
                         break
                 if today_type != EVENT_NONE:
-                    _LOGGER.debug(
+                    _LOGGER.info(
                         "Early switch: pre-activating event '%s' (starts within %d min)",
                         summary,
                         self._early_switch_minutes,
@@ -600,13 +600,13 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
 
         # Auto-update mode (skip if absence mode or manual override is active)
         if self._day_mode == self._mode_absence:
-            _LOGGER.debug(
+            _LOGGER.info(
                 "Periodic check: auto-update skipped, absence mode active ('%s')",
                 self._day_mode,
             )
         elif self._override_until is not None and now < self._override_until:
             remaining = int((self._override_until - now).total_seconds() / 60) + 1
-            _LOGGER.debug(
+            _LOGGER.info(
                 "Periodic check: auto-update skipped, manual override active for ~%d more min",
                 remaining,
             )
@@ -629,7 +629,7 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
                 await self.async_refresh_schedulers()
                 await self._async_save_state()
             else:
-                _LOGGER.debug(
+                _LOGGER.info(
                     "Periodic check: day_mode unchanged ('%s') | event=%s",
                     self._day_mode,
                     self._current_event,
@@ -680,8 +680,8 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
                 events = entity_data.get("events", [])
                 if isinstance(events, list):
                     return [e for e in events if isinstance(e, dict)]
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.debug("calendar.get_events failed for '%s': %s", calendar_entity, err)
         return []
 
     @staticmethod
@@ -823,7 +823,10 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
             if mode_at != current_mode:
                 return mode_at, candidate
 
-        return None, None
+        # No mode change expected in the window — report the current mode
+        # so that the next_mode sensor shows the persisted mode rather than
+        # "unknown".  next_mode_at stays None (no specific change time).
+        return current_mode, None
 
     async def _determine_mode(self, today_type: str, at_time: datetime | None = None) -> str | None:
         """Determine the appropriate mode based on current state.
@@ -934,7 +937,7 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
 
         # Turn off first so we don't have conflicting schedulers briefly active
         if to_disable:
-            _LOGGER.debug("Turning OFF schedulers: %s", sorted(to_disable))
+            _LOGGER.info("Turning OFF schedulers: %s", sorted(to_disable))
             await self.hass.services.async_call(
                 "switch",
                 "turn_off",
@@ -943,7 +946,7 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
             )
 
         if to_enable:
-            _LOGGER.debug("Turning ON schedulers: %s", sorted(to_enable))
+            _LOGGER.info("Turning ON schedulers: %s", sorted(to_enable))
             await self.hass.services.async_call(
                 "switch",
                 "turn_on",

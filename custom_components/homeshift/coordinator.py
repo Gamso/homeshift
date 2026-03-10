@@ -3,10 +3,11 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, date, timedelta
-from typing import Any
+from typing import Any, Callable
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.event import async_track_point_in_time
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.util import dt as dt_util
@@ -172,6 +173,8 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
         # Cover heat-protection and sunrise scheduler adjustment
         self._cover_manager = CoverManager(hass, entry)
 
+        # One-shot timer scheduled to fire at _next_mode_at; None when no timer is pending
+        self._cancel_next_mode_timer: Callable[[], None] | None = None
     @property
     def _config(self) -> dict:
         """Return merged config: entry.data overridden by entry.options."""
@@ -222,6 +225,47 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
             )
         except Exception as err:  # noqa: BLE001
             _LOGGER.warning("Could not persist coordinator state: %s", err)
+
+    @callback
+    def _schedule_next_mode_timer(self) -> None:
+        """Schedule (or reschedule) a one-shot timer to fire at _next_mode_at.
+
+        Cancels any previously pending timer, then schedules a new one if
+        _next_mode_at is set. When the timer fires, async_sync_calendar() is
+        called so the mode change happens on time rather than waiting for the
+        next scan-interval wake-up.
+        """
+        # Cancel any in-flight timer from a previous update
+        if self._cancel_next_mode_timer is not None:
+            self._cancel_next_mode_timer()
+            self._cancel_next_mode_timer = None
+
+        if self._next_mode_at is None:
+            return
+
+        # Snapshot the scheduled time — the callback uses this for logging because
+        # self._next_mode_at may be updated by a later coordinator run before the
+        # timer fires.
+        fire_at = self._next_mode_at
+
+        @callback
+        def _on_timer(_now: datetime) -> None:
+            self._cancel_next_mode_timer = None
+            _LOGGER.debug("Next-mode timer fired (scheduled for %s), triggering sync", fire_at)
+            self.hass.async_create_task(self.async_sync_calendar())
+
+        self._cancel_next_mode_timer = async_track_point_in_time(self.hass, _on_timer, fire_at)
+        _LOGGER.debug("Scheduled next-mode timer at %s (predicted mode: %s)", fire_at, self._next_mode)
+
+    @callback
+    def async_cancel_next_mode_timer(self) -> None:
+        """Cancel the pending next-mode timer, if any.
+
+        Called on integration unload to prevent stale timer callbacks.
+        """
+        if self._cancel_next_mode_timer is not None:
+            self._cancel_next_mode_timer()
+            self._cancel_next_mode_timer = None
 
     @staticmethod
     def parse_day_mode_map(raw: str) -> dict[str, str]:
@@ -637,6 +681,9 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
 
         # Compute when and to what mode the next automatic change is expected
         self._next_mode, self._next_mode_at = await self._compute_next_mode_change(calendar_state, now)
+
+        # Schedule a one-shot timer to fire exactly at the predicted change time
+        self._schedule_next_mode_timer()
 
         # Cover heat protection — close covers if temperature exceeds threshold in window
         await self._cover_manager.async_check_heat_protection(now)

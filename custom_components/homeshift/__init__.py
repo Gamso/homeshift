@@ -52,6 +52,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Register services
     await async_setup_services(hass, coordinator)
 
+    # Cancel the next-mode timer when the entry is unloaded
+    entry.async_on_unload(coordinator.async_cancel_next_mode_timer)
+
     # React immediately when the temperature sensor changes (no need to wait for the poll)
     entry.async_on_unload(coordinator._cover_manager.async_setup_listeners())
 

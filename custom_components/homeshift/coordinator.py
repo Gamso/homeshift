@@ -772,15 +772,16 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
         calendar_entity = self._config.get(CONF_CALENDAR_ENTITY, "")
         now_naive = self._to_naive(now)
 
-        # Fetch events for today + tomorrow (2-day window)
-        end_window = (now + timedelta(days=2)).replace(hour=0, minute=0, second=0, microsecond=0)
+        # Fetch events for the next 7 days so that early-week runs always
+        # find the upcoming weekend (worst case: Monday → Saturday = 5 days).
+        end_window = (now + timedelta(days=7)).replace(hour=0, minute=0, second=0, microsecond=0)
         upcoming = await self._async_get_upcoming_events(calendar_entity, now, end_window)
 
         # Collect candidate inflection points (all strictly after now)
         candidates: set[datetime] = set()
 
-        # Midnight boundaries: tonight and tomorrow night
-        for d in range(1, 3):
+        # Midnight boundaries for the next 7 days
+        for d in range(1, 8):
             midnight = (now + timedelta(days=d)).replace(hour=0, minute=0, second=0, microsecond=0)
             candidates.add(midnight)
 

@@ -48,6 +48,26 @@ class TestNextModeNoEvent:
         assert coordinator.next_mode_predicted is None
         assert coordinator.next_mode_at is None
 
+    def test_tuesday_evening_no_event_next_mode_is_weekend(self):
+        """Tuesday 18:15, no event: next mode change is Saturday midnight (weekend).
+
+        With a 7-day look-ahead window, Monday–Wednesday correctly surface the
+        upcoming weekend rather than returning None for next_mode_at.
+        """
+        hass = make_mock_hass()
+        entry = make_mock_entry()
+        hass.states.get.return_value = make_calendar_state(state="off")
+        coordinator = HomeShiftCoordinator(hass, entry)
+
+        # Tuesday March 10 18:15 — no events, but Saturday March 14 is in the
+        # 7-day window → next change is Saturday midnight (weekend mode).
+        with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
+            mock_dt.now.return_value = datetime(2026, 3, 10, 18, 15, 0)
+            asyncio.get_event_loop().run_until_complete(coordinator.async_update_data())
+
+        assert coordinator.next_mode_predicted == DEFAULT_MODE_WEEKEND
+        assert coordinator.next_mode_at == datetime(2026, 3, 14, 0, 0, 0)
+
     def test_weekday_no_event_next_mode_is_weekend(self):
         """Thursday, no event: first mode CHANGE in the 2-day window is Saturday (weekend)."""
         hass = make_mock_hass()

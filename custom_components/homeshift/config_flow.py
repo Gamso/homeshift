@@ -18,7 +18,6 @@ from .const import (
     CONF_DAY_MODE_MAP,
     CONF_THERMOSTAT_MODE_MAP,
     CONF_SCHEDULERS_PER_MODE,
-    CONF_SCAN_INTERVAL,
     CONF_MODE_DEFAULT,
     CONF_MODE_WEEKEND,
     CONF_MODE_HOLIDAY,
@@ -26,7 +25,6 @@ from .const import (
     CONF_MODE_ABSENCE,
     DEFAULT_DAY_MODE_MAP,
     DEFAULT_THERMOSTAT_MODE_MAP,
-    DEFAULT_SCAN_INTERVAL,
     DEFAULT_MODE_DEFAULT,
     DEFAULT_MODE_WEEKEND,
     DEFAULT_MODE_HOLIDAY,
@@ -74,18 +72,6 @@ def _calendars_schema(data: dict[str, Any]) -> vol.Schema:
                 default=data.get(CONF_HOLIDAY_CALENDAR, ""),
             ): selector.EntitySelector(
                 selector.EntitySelectorConfig(domain="calendar"),
-            ),
-            vol.Optional(
-                CONF_SCAN_INTERVAL,
-                default=data.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL),
-            ): selector.NumberSelector(
-                selector.NumberSelectorConfig(
-                    min=5,
-                    max=1440,
-                    step=5,
-                    unit_of_measurement="min",
-                    mode=selector.NumberSelectorMode.BOX,
-                ),
             ),
         }
     )

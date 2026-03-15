@@ -1,7 +1,7 @@
 {
   "domain": "homeshift",
   "name": "HomeShift",
-  "version": "1.3.1",
+  "version": "1.4.4",
   "documentation": "https://github.com/Gamso/day_mode",
   "requirements": [],
   "dependencies": [],
@@ -11,5 +11,4 @@
   "config_flow": true,
   "integration_type": "hub",
   "iot_class": "local_polling"
-
 }

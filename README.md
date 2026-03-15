@@ -133,7 +133,7 @@ The `sensor.next_mode_at` and `sensor.next_mode` sensors reflect this anticipate
 Shows the predicted next day mode that HomeShift will switch to.
 
 - **Type:** Sensor (text)
-- **Value:** Display name of the predicted mode (e.g. `Remote working`), or `unknown` if no change is expected in the next 2 days.
+- **Value:** Display name of the predicted next mode (e.g. `Remote working`). When no change is expected in the next 2 days, shows the current day mode.
 
 ### `sensor.next_mode_at`
 Shows when the next automatic mode change is expected to occur (taking early_switch into account for timed events).

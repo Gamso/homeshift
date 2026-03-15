@@ -97,11 +97,11 @@ class TestStartupCalendarSync:
         hass.async_create_task.assert_not_called()
 
     def test_listener_unsubscribe_registered_as_unload_hook(self):
-        """The EVENT_HOMEASSISTANT_STARTED listener unsubscribe is added to unload hooks."""
+        """The EVENT_HOMEASSISTANT_STARTED listener is cancelled on unload (if not yet fired)."""
         hass = _make_hass(state=CoreState.starting)
         entry = _make_entry_with_options()
-        unsub_sentinel = object()
-        hass.bus.async_listen_once = MagicMock(return_value=unsub_sentinel)
+        unsub_mock = MagicMock()
+        hass.bus.async_listen_once = MagicMock(return_value=unsub_mock)
 
         with (
             patch("custom_components.homeshift.HomeShiftCoordinator") as MockCoord,
@@ -116,12 +116,49 @@ class TestStartupCalendarSync:
                 async_setup_entry(hass, entry)
             )
 
-        # The unsubscribe callable should have been passed to entry.async_on_unload
-        unloaders = entry._unloaders
-        assert unsub_sentinel in unloaders
+        # Simulate unloading before the event fires — the guard should cancel the listener.
+        for fn in entry._unloaders:
+            fn()
+        unsub_mock.assert_called_once()
+
+    def test_unload_after_listener_fires_is_safe(self):
+        """Unloading after EVENT_HOMEASSISTANT_STARTED fired does NOT try to cancel again."""
+        hass = _make_hass(state=CoreState.starting)
+        entry = _make_entry_with_options()
+        registered_callback = None
+        unsub_mock = MagicMock()
+
+        def capture_listen_once(event_name, cb):
+            nonlocal registered_callback
+            registered_callback = cb
+            return unsub_mock
+
+        hass.bus.async_listen_once = MagicMock(side_effect=capture_listen_once)
+
+        with (
+            patch("custom_components.homeshift.HomeShiftCoordinator") as MockCoord,
+        ):
+            coord = MagicMock()
+            coord.async_restore_state = AsyncMock()
+            coord.async_config_entry_first_refresh = AsyncMock()
+            coord.async_sync_calendar = AsyncMock()
+            MockCoord.return_value = coord
+
+            asyncio.get_event_loop().run_until_complete(
+                async_setup_entry(hass, entry)
+            )
+
+        # Fire the event — the callback clears the cancel reference synchronously.
+        registered_callback(MagicMock())
+
+        # Simulate a later unload (e.g., options save) — must NOT call unsub_mock
+        # a second time (that would log "Unable to remove unknown job listener").
+        for fn in entry._unloaders:
+            fn()
+        unsub_mock.assert_not_called()
 
     def test_startup_callback_calls_sync_calendar(self):
-        """When EVENT_HOMEASSISTANT_STARTED fires, async_sync_calendar is awaited."""
+        """When EVENT_HOMEASSISTANT_STARTED fires, async_create_task runs sync_calendar."""
         hass = _make_hass(state=CoreState.starting)
         entry = _make_entry_with_options()
 
@@ -148,6 +185,8 @@ class TestStartupCalendarSync:
             )
 
         assert registered_callback is not None
-        # Simulate EVENT_HOMEASSISTANT_STARTED firing
-        asyncio.get_event_loop().run_until_complete(registered_callback(MagicMock()))
-        coord.async_sync_calendar.assert_awaited_once()
+        # Simulate EVENT_HOMEASSISTANT_STARTED firing — callback is now a sync @callback.
+        registered_callback(MagicMock())
+        # async_sync_calendar() was called to obtain the coroutine for async_create_task.
+        coord.async_sync_calendar.assert_called_once()
+        hass.async_create_task.assert_called()

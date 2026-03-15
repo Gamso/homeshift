@@ -15,11 +15,10 @@
       },
       "calendars": {
         "title": "Calendars & Schedule",
-        "description": "Configure the calendar entities and scan interval.",
+        "description": "Configure the calendar entities.",
         "data": {
           "calendar_entity": "Work Calendar Entity",
-          "holiday_calendar": "Holiday Calendar Entity",
-          "scan_interval": "Calendar Scan Interval (minutes)"
+          "holiday_calendar": "Holiday Calendar Entity"
         }
       },
       "mapping": {
@@ -126,11 +125,10 @@
       },
       "calendars": {
         "title": "Calendars & Schedule",
-        "description": "Configure the calendar entities and scan interval.",
+        "description": "Configure the calendar entities.",
         "data": {
           "calendar_entity": "Work Calendar Entity",
-          "holiday_calendar": "Holiday Calendar Entity",
-          "scan_interval": "Calendar Scan Interval (minutes)"
+          "holiday_calendar": "Holiday Calendar Entity"
         }
       },
       "mapping": {

@@ -3,10 +3,11 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, date, timedelta
-from typing import Any
+from typing import Any, Callable
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.event import async_track_point_in_time
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.util import dt as dt_util
@@ -18,7 +19,6 @@ from .const import (
     CONF_DAY_MODE_MAP,
     CONF_THERMOSTAT_MODE_MAP,
     CONF_SCHEDULERS_PER_MODE,
-    CONF_SCAN_INTERVAL,
     CONF_OVERRIDE_DURATION,
     CONF_EARLY_SWITCH_MINUTES,
     CONF_MODE_DEFAULT,
@@ -28,7 +28,7 @@ from .const import (
     CONF_MODE_ABSENCE,
     DEFAULT_DAY_MODE_MAP,
     DEFAULT_THERMOSTAT_MODE_MAP,
-    DEFAULT_SCAN_INTERVAL,
+    SCAN_INTERVAL_MINUTES,
     DEFAULT_OVERRIDE_DURATION,
     DEFAULT_EARLY_SWITCH_MINUTES,
     DEFAULT_MODE_DEFAULT,
@@ -83,18 +83,11 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
         # Localized defaults — used as fallback when a key is absent from the entry
         _loc = get_localized_defaults(hass)
 
-        # Get configurable scan interval (in minutes)
-        scan_interval = _config.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
-        try:
-            scan_interval = int(scan_interval)
-        except (ValueError, TypeError):
-            scan_interval = DEFAULT_SCAN_INTERVAL
-
         super().__init__(
             hass,
             _LOGGER,
             name=DOMAIN,
-            update_interval=timedelta(minutes=scan_interval),
+            update_interval=timedelta(minutes=SCAN_INTERVAL_MINUTES),
         )
         self.entry = entry
 
@@ -150,13 +143,13 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
 
         _LOGGER.info(
             "HomeShift coordinator initialized — "
-            "calendar=%s, holiday_calendar=%s, scan_interval=%s min | "
+            "calendar=%s, holiday_calendar=%s, scan_interval=%d min | "
             "day_mode_map=%s | "
             "mode_default=%s, mode_weekend=%s, mode_holiday=%s, mode_absence=%s | "
             "thermostat_modes=%s | event_mode_map=%s",
             _config.get(CONF_CALENDAR_ENTITY),
             _config.get(CONF_HOLIDAY_CALENDAR, "(missing)"),
-            scan_interval,
+            SCAN_INTERVAL_MINUTES,
             self._day_mode_map,
             self._mode_default,
             self._mode_weekend,
@@ -172,6 +165,9 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
         # Cover heat-protection and sunrise scheduler adjustment
         self._cover_manager = CoverManager(hass, entry)
 
+        # One-shot timer scheduled to fire at _next_mode_at; None when no timer is pending
+        self._cancel_next_mode_timer: Callable[[], None] | None = None
+
     @property
     def _config(self) -> dict:
         """Return merged config: entry.data overridden by entry.options."""
@@ -186,7 +182,7 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
         try:
             stored = await self._store.async_load()
         except Exception as err:  # noqa: BLE001
-            _LOGGER.debug("Could not load persisted state: %s", err)
+            _LOGGER.warning("Could not load persisted state: %s", err)
             return
 
         if not stored:
@@ -221,7 +217,48 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
                 }
             )
         except Exception as err:  # noqa: BLE001
-            _LOGGER.debug("Could not persist coordinator state: %s", err)
+            _LOGGER.warning("Could not persist coordinator state: %s", err)
+
+    @callback
+    def _schedule_next_mode_timer(self) -> None:
+        """Schedule (or reschedule) a one-shot timer to fire at _next_mode_at.
+
+        Cancels any previously pending timer, then schedules a new one if
+        _next_mode_at is set. When the timer fires, async_sync_calendar() is
+        called so the mode change happens on time rather than waiting for the
+        next 5-minute poll.
+        """
+        # Cancel any in-flight timer from a previous update
+        if self._cancel_next_mode_timer is not None:
+            self._cancel_next_mode_timer()
+            self._cancel_next_mode_timer = None
+
+        if self._next_mode_at is None:
+            return
+
+        # Snapshot the scheduled time — the callback uses this for logging because
+        # self._next_mode_at may be updated by a later coordinator run before the
+        # timer fires.
+        fire_at = self._next_mode_at
+
+        @callback
+        def _on_timer(_now: datetime) -> None:
+            self._cancel_next_mode_timer = None
+            _LOGGER.debug("Next-mode timer fired (scheduled for %s), triggering sync", fire_at)
+            self.hass.async_create_task(self.async_sync_calendar())
+
+        self._cancel_next_mode_timer = async_track_point_in_time(self.hass, _on_timer, fire_at)
+        _LOGGER.debug("Scheduled next-mode timer at %s (predicted mode: %s)", fire_at, self._next_mode)
+
+    @callback
+    def async_cancel_next_mode_timer(self) -> None:
+        """Cancel the pending next-mode timer, if any.
+
+        Called on integration unload to prevent stale timer callbacks.
+        """
+        if self._cancel_next_mode_timer is not None:
+            self._cancel_next_mode_timer()
+            self._cancel_next_mode_timer = None
 
     @staticmethod
     def parse_day_mode_map(raw: str) -> dict[str, str]:
@@ -503,7 +540,7 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
     async def _async_update_data(self) -> dict:
         """Fetch data from calendar and determine current mode.
 
-        This runs periodically based on scan_interval. It checks the current
+        This runs periodically every 5 minutes. It checks the current
         calendar state and auto-updates day_mode unless mode is absence.
         This handles half-day events naturally: a timed calendar event is only
         active during its time window.
@@ -545,7 +582,7 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
         # Reset day-level event type at midnight (new calendar day)
         today = now.date()
         if today != self._today_date:
-            _LOGGER.debug("New calendar day (%s), resetting today_type", today)
+            _LOGGER.info("New calendar day (%s), resetting today_type", today)
             self._today_type = EVENT_NONE
             self._today_date = today
             # Adjust sunrise-based schedulers for the new day
@@ -591,7 +628,7 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
                         today_type = kw
                         break
                 if today_type != EVENT_NONE:
-                    _LOGGER.debug(
+                    _LOGGER.info(
                         "Early switch: pre-activating event '%s' (starts within %d min)",
                         summary,
                         self._early_switch_minutes,
@@ -600,13 +637,13 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
 
         # Auto-update mode (skip if absence mode or manual override is active)
         if self._day_mode == self._mode_absence:
-            _LOGGER.debug(
+            _LOGGER.info(
                 "Periodic check: auto-update skipped, absence mode active ('%s')",
                 self._day_mode,
             )
         elif self._override_until is not None and now < self._override_until:
             remaining = int((self._override_until - now).total_seconds() / 60) + 1
-            _LOGGER.debug(
+            _LOGGER.info(
                 "Periodic check: auto-update skipped, manual override active for ~%d more min",
                 remaining,
             )
@@ -629,7 +666,7 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
                 await self.async_refresh_schedulers()
                 await self._async_save_state()
             else:
-                _LOGGER.debug(
+                _LOGGER.info(
                     "Periodic check: day_mode unchanged ('%s') | event=%s",
                     self._day_mode,
                     self._current_event,
@@ -637,6 +674,9 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
 
         # Compute when and to what mode the next automatic change is expected
         self._next_mode, self._next_mode_at = await self._compute_next_mode_change(calendar_state, now)
+
+        # Schedule a one-shot timer to fire exactly at the predicted change time
+        self._schedule_next_mode_timer()
 
         # Cover heat protection — close covers if temperature exceeds threshold in window
         await self._cover_manager.async_check_heat_protection(now)
@@ -680,8 +720,8 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
                 events = entity_data.get("events", [])
                 if isinstance(events, list):
                     return [e for e in events if isinstance(e, dict)]
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.debug("calendar.get_events failed for '%s': %s", calendar_entity, err)
         return []
 
     @staticmethod
@@ -772,15 +812,16 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
         calendar_entity = self._config.get(CONF_CALENDAR_ENTITY, "")
         now_naive = self._to_naive(now)
 
-        # Fetch events for today + tomorrow (2-day window)
-        end_window = (now + timedelta(days=2)).replace(hour=0, minute=0, second=0, microsecond=0)
+        # Fetch events for the next 7 days so that early-week runs always
+        # find the upcoming weekend (worst case: Monday → Saturday = 5 days).
+        end_window = (now + timedelta(days=7)).replace(hour=0, minute=0, second=0, microsecond=0)
         upcoming = await self._async_get_upcoming_events(calendar_entity, now, end_window)
 
         # Collect candidate inflection points (all strictly after now)
         candidates: set[datetime] = set()
 
-        # Midnight boundaries: tonight and tomorrow night
-        for d in range(1, 3):
+        # Midnight boundaries for the next 7 days
+        for d in range(1, 8):
             midnight = (now + timedelta(days=d)).replace(hour=0, minute=0, second=0, microsecond=0)
             candidates.add(midnight)
 
@@ -823,7 +864,10 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
             if mode_at != current_mode:
                 return mode_at, candidate
 
-        return None, None
+        # No mode change expected in the window — report the current mode
+        # so that the next_mode sensor shows the persisted mode rather than
+        # "unknown".  next_mode_at stays None (no specific change time).
+        return current_mode, None
 
     async def _determine_mode(self, today_type: str, at_time: datetime | None = None) -> str | None:
         """Determine the appropriate mode based on current state.
@@ -944,7 +988,7 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
 
         # Turn off first so we don't have conflicting schedulers briefly active
         if to_disable:
-            _LOGGER.debug("Turning OFF schedulers: %s", sorted(to_disable))
+            _LOGGER.info("Turning OFF schedulers: %s", sorted(to_disable))
             await self.hass.services.async_call(
                 "switch",
                 "turn_off",
@@ -953,7 +997,7 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
             )
 
         if to_enable:
-            _LOGGER.debug("Turning ON schedulers: %s", sorted(to_enable))
+            _LOGGER.info("Turning ON schedulers: %s", sorted(to_enable))
             await self.hass.services.async_call(
                 "switch",
                 "turn_on",

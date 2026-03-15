@@ -15,11 +15,10 @@
       },
       "calendars": {
         "title": "Calendriers et planification",
-        "description": "Configurez les entités calendrier et l'intervalle de vérification.",
+        "description": "Configurez les entités calendrier.",
         "data": {
           "calendar_entity": "Entité Calendrier Travail",
-          "holiday_calendar": "Entité Calendrier Jours Fériés",
-          "scan_interval": "Intervalle de vérification du calendrier (minutes)"
+          "holiday_calendar": "Entité Calendrier Jours Fériés"
         }
       },
       "mapping": {
@@ -126,11 +125,10 @@
       },
       "calendars": {
         "title": "Calendriers et planification",
-        "description": "Configurez les entités calendrier et l'intervalle de vérification.",
+        "description": "Configurez les entités calendrier.",
         "data": {
           "calendar_entity": "Entité Calendrier Travail",
-          "holiday_calendar": "Entité Calendrier Jours Fériés",
-          "scan_interval": "Intervalle de vérification du calendrier (minutes)"
+          "holiday_calendar": "Entité Calendrier Jours Fériés"
         }
       },
       "mapping": {

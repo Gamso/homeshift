@@ -1135,3 +1135,122 @@ class TestSunriseSchedulerAdjustment:
         action = call.args[2]["timeslots"][0]["actions"][0]
         assert action.get("entity_id") == "cover.volet_salon"
         assert action.get("service") == "cover.open_cover"
+
+
+# ---------------------------------------------------------------------------
+# Next-mode timer scheduling
+# ---------------------------------------------------------------------------
+
+class TestNextModeTimerScheduling:
+    """Verify that a one-shot timer is scheduled/cancelled at _next_mode_at."""
+
+    def test_timer_scheduled_when_next_mode_at_is_set(self):
+        """After async_update_data, a cancel function is stored when next_mode_at is set."""
+        hass = make_mock_hass()
+        hass.states.get.return_value = make_calendar_state(state="off")
+        coordinator = HomeShiftCoordinator(hass, make_mock_entry())
+
+        future_time = datetime(2026, 3, 11, 18, 0, 0)
+        cancel_mock = MagicMock()
+
+        with (
+            patch("custom_components.homeshift.coordinator.dt_util") as mock_dt,
+            patch(
+                "custom_components.homeshift.coordinator.async_track_point_in_time",
+                return_value=cancel_mock,
+            ) as mock_track,
+        ):
+            mock_dt.now.return_value = datetime(2026, 3, 11, 9, 0, 0)
+            coordinator._next_mode_at = future_time
+            coordinator._next_mode = "Maison"
+            coordinator._schedule_next_mode_timer()
+
+        mock_track.assert_called_once()
+        assert coordinator._cancel_next_mode_timer is cancel_mock
+
+    def test_previous_timer_cancelled_before_rescheduling(self):
+        """Calling _schedule_next_mode_timer twice cancels the first timer."""
+        hass = make_mock_hass()
+        coordinator = HomeShiftCoordinator(hass, make_mock_entry())
+
+        first_cancel = MagicMock()
+        second_cancel = MagicMock()
+
+        with patch(
+            "custom_components.homeshift.coordinator.async_track_point_in_time",
+            side_effect=[first_cancel, second_cancel],
+        ):
+            coordinator._next_mode_at = datetime(2026, 3, 11, 18, 0, 0)
+            coordinator._schedule_next_mode_timer()
+            assert coordinator._cancel_next_mode_timer is first_cancel
+
+            coordinator._next_mode_at = datetime(2026, 3, 11, 19, 0, 0)
+            coordinator._schedule_next_mode_timer()
+
+        first_cancel.assert_called_once()
+        assert coordinator._cancel_next_mode_timer is second_cancel
+
+    def test_no_timer_scheduled_when_next_mode_at_is_none(self):
+        """When _next_mode_at is None, _schedule_next_mode_timer does nothing."""
+        hass = make_mock_hass()
+        coordinator = HomeShiftCoordinator(hass, make_mock_entry())
+        coordinator._next_mode_at = None
+
+        with patch(
+            "custom_components.homeshift.coordinator.async_track_point_in_time"
+        ) as mock_track:
+            coordinator._schedule_next_mode_timer()
+
+        mock_track.assert_not_called()
+        assert coordinator._cancel_next_mode_timer is None
+
+    def test_cancel_clears_pending_timer(self):
+        """async_cancel_next_mode_timer calls the cancel function and clears it."""
+        hass = make_mock_hass()
+        coordinator = HomeShiftCoordinator(hass, make_mock_entry())
+
+        cancel_fn = MagicMock()
+        coordinator._cancel_next_mode_timer = cancel_fn
+
+        coordinator.async_cancel_next_mode_timer()
+
+        cancel_fn.assert_called_once()
+        assert coordinator._cancel_next_mode_timer is None
+
+    def test_cancel_is_no_op_when_no_timer(self):
+        """async_cancel_next_mode_timer is safe to call when no timer is pending."""
+        hass = make_mock_hass()
+        coordinator = HomeShiftCoordinator(hass, make_mock_entry())
+        assert coordinator._cancel_next_mode_timer is None
+        coordinator.async_cancel_next_mode_timer()  # must not raise
+        assert coordinator._cancel_next_mode_timer is None
+
+    def test_timer_fires_and_triggers_sync(self):
+        """When the timer callback fires, async_sync_calendar is scheduled."""
+        hass = make_mock_hass()
+        coordinator = HomeShiftCoordinator(hass, make_mock_entry())
+
+        captured_callbacks = []
+
+        def _fake_track(h, cb, fire_at):
+            captured_callbacks.append(cb)
+            return MagicMock()
+
+        coordinator._next_mode_at = datetime(2026, 3, 11, 18, 0, 0)
+        coordinator._next_mode = "Maison"
+
+        with patch(
+            "custom_components.homeshift.coordinator.async_track_point_in_time",
+            side_effect=_fake_track,
+        ):
+            coordinator._schedule_next_mode_timer()
+
+        assert len(captured_callbacks) == 1
+
+        # Simulate the timer firing
+        hass.async_create_task = MagicMock()
+        with patch.object(coordinator, "async_sync_calendar", new_callable=AsyncMock):
+            captured_callbacks[0](datetime(2026, 3, 11, 18, 0, 0))
+
+        hass.async_create_task.assert_called_once()
+        assert coordinator._cancel_next_mode_timer is None

@@ -34,9 +34,6 @@ def create_local_calendar(ha_url: str, token: str, name: str) -> bool:
         "Content-Type": "application/json",
     }
     
-    # Slugify le nom pour l'entity_id
-    slug = name.lower().replace(" ", "_").replace("é", "e").replace("è", "e").replace("ê", "e")
-    
     data = {
         "action": "create",
         "name": name,

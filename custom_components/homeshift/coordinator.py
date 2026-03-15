@@ -909,12 +909,14 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
                     if sw not in to_enable:  # never disable a shared switch
                         to_disable.add(sw)
 
-        # When thermostat mode is Off, force-disable every scheduler that carries
-        # a thermostat-mode tag (e.g. "Chauffage", "Climatisation", …).
+        # For every scheduler that carries a thermostat-mode tag (e.g. "Chauffage",
+        # "Climatisation", …), only allow it when its tag matches the CURRENT
+        # thermostat mode.  A scheduler tagged for a different thermostat mode is
+        # always force-disabled, regardless of day mode.
         # Schedulers without any thermostat tag are left untouched.
-        thermostat_key = self.thermostat_mode_key
-        if thermostat_key == THERMOSTAT_OFF_KEY and self._thermostat_mode_map:
+        if self._thermostat_mode_map:
             thermostat_tags: set[str] = set(self._thermostat_mode_map.values())
+            current_thermostat_display: str = self._thermostat_mode
             all_switches: set[str] = set()
             for swlist in schedulers_per_mode.values():
                 all_switches.update(swlist)
@@ -923,14 +925,22 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
                 if state is None:
                     continue
                 entity_tags: list = state.attributes.get("tags", []) or []
-                if set(entity_tags) & thermostat_tags:
-                    _LOGGER.debug(
-                        "Thermostat OFF: force-disabling scheduler '%s' (tags=%s)",
-                        entity_id,
-                        entity_tags,
-                    )
-                    to_disable.add(entity_id)
-                    to_enable.discard(entity_id)
+                entity_thermostat_tags = set(entity_tags) & thermostat_tags
+                if not entity_thermostat_tags:
+                    # No thermostat tag → follow day-mode rules only
+                    continue
+                if current_thermostat_display in entity_thermostat_tags:
+                    # Tag matches current thermostat mode → allowed
+                    continue
+                # Has thermostat tags but none match the active mode → force disable
+                _LOGGER.debug(
+                    "Thermostat '%s': force-disabling scheduler '%s' (tags=%s)",
+                    current_thermostat_display,
+                    entity_id,
+                    entity_tags,
+                )
+                to_disable.add(entity_id)
+                to_enable.discard(entity_id)
 
         # Turn off first so we don't have conflicting schedulers briefly active
         if to_disable:

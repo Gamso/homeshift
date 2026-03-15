@@ -457,6 +457,124 @@ class TestSchedulerRefresh:
             for c in on_calls
         )
 
+    def _make_tagged_state(self, tags: list[str]) -> MagicMock:
+        """Return a mock state with the given scheduler tags."""
+        state = MagicMock()
+        state.attributes = {"tags": tags}
+        return state
+
+    def test_thermostat_heating_disables_cooling_scheduler(self):
+        """When thermostat=Chauffage, scheduler tagged Climatisation is force-disabled
+        even if it belongs to the active day mode."""
+        # day_mode = Travail → all 3 schedulers are candidates for ON
+        # Only the one tagged Climatisation should be forced OFF.
+        schedulers = {
+            "Travail": [
+                "switch.sched_clim",  # tagged Climatisation
+                "switch.sched_chauffage",  # tagged Chauffage
+                "switch.sched_volet",  # tagged Travail only (no thermostat tag)
+            ],
+        }
+        hass = make_mock_hass()
+        hass.services.async_call = AsyncMock()
+
+        def _get_state(entity_id):
+            tags_map = {
+                "switch.sched_clim": ["Climatisation", "Travail"],
+                "switch.sched_chauffage": ["Chauffage", "Travail"],
+                "switch.sched_volet": ["Travail"],
+            }
+            return self._make_tagged_state(tags_map.get(entity_id, []))
+
+        hass.states.get.side_effect = _get_state
+
+        coordinator = HomeShiftCoordinator(hass, make_mock_entry(schedulers_per_mode=schedulers))
+        coordinator.day_mode = "Travail"
+        asyncio.get_event_loop().run_until_complete(coordinator.async_set_thermostat_mode("Chauffage"))
+        hass.services.async_call.reset_mock()
+
+        asyncio.get_event_loop().run_until_complete(coordinator.async_refresh_schedulers())
+
+        calls = hass.services.async_call.call_args_list
+        on_calls = [c for c in calls if c.args[1] == "turn_on"]
+        off_calls = [c for c in calls if c.args[1] == "turn_off"]
+
+        turned_on = set(on_calls[0].args[2]["entity_id"]) if on_calls else set()
+        turned_off = set(off_calls[0].args[2]["entity_id"]) if off_calls else set()
+
+        assert "switch.sched_clim" not in turned_on, "Climatisation scheduler must NOT be ON when thermostat=Chauffage"
+        assert "switch.sched_chauffage" in turned_on, "Chauffage scheduler must be ON"
+        assert "switch.sched_volet" in turned_on, "Non-thermostat scheduler must be ON (day mode)"
+        assert "switch.sched_clim" in turned_off, "Climatisation scheduler must be force-disabled"
+
+    def test_thermostat_off_disables_all_thermostat_tagged_schedulers(self):
+        """When thermostat=Eteint, all schedulers with any thermostat tag are disabled."""
+        schedulers = {
+            "Travail": [
+                "switch.sched_clim",
+                "switch.sched_chauffage",
+                "switch.sched_volet",
+            ],
+        }
+        hass = make_mock_hass()
+        hass.services.async_call = AsyncMock()
+
+        def _get_state(entity_id):
+            tags_map = {
+                "switch.sched_clim": ["Climatisation", "Travail"],
+                "switch.sched_chauffage": ["Chauffage", "Travail"],
+                "switch.sched_volet": ["Travail"],
+            }
+            return self._make_tagged_state(tags_map.get(entity_id, []))
+
+        hass.states.get.side_effect = _get_state
+
+        coordinator = HomeShiftCoordinator(hass, make_mock_entry(schedulers_per_mode=schedulers))
+        coordinator.day_mode = "Travail"
+        asyncio.get_event_loop().run_until_complete(coordinator.async_set_thermostat_mode("off"))
+        hass.services.async_call.reset_mock()
+
+        asyncio.get_event_loop().run_until_complete(coordinator.async_refresh_schedulers())
+
+        calls = hass.services.async_call.call_args_list
+        on_calls = [c for c in calls if c.args[1] == "turn_on"]
+        off_calls = [c for c in calls if c.args[1] == "turn_off"]
+
+        turned_on = set(on_calls[0].args[2]["entity_id"]) if on_calls else set()
+        turned_off = set(off_calls[0].args[2]["entity_id"]) if off_calls else set()
+
+        assert "switch.sched_clim" not in turned_on
+        assert "switch.sched_chauffage" not in turned_on
+        assert "switch.sched_volet" in turned_on, "Non-thermostat scheduler must stay ON"
+        assert "switch.sched_clim" in turned_off
+        assert "switch.sched_chauffage" in turned_off
+
+    def test_no_thermostat_tag_scheduler_follows_day_mode_only(self):
+        """A scheduler with no thermostat tag always follows day-mode rules regardless of
+        the active thermostat mode."""
+        schedulers = {
+            "Travail": ["switch.sched_presence"],
+            "Télétravail": ["switch.sched_teletravail"],
+        }
+        hass = make_mock_hass()
+        hass.services.async_call = AsyncMock()
+
+        # Both schedulers have no thermostat tags
+        hass.states.get.side_effect = lambda _: self._make_tagged_state([])
+
+        coordinator = HomeShiftCoordinator(hass, make_mock_entry(schedulers_per_mode=schedulers))
+        coordinator.day_mode = "Travail"
+        asyncio.get_event_loop().run_until_complete(coordinator.async_set_thermostat_mode("Chauffage"))
+        hass.services.async_call.reset_mock()
+
+        asyncio.get_event_loop().run_until_complete(coordinator.async_refresh_schedulers())
+
+        calls = hass.services.async_call.call_args_list
+        on_calls = [c for c in calls if c.args[1] == "turn_on"]
+        turned_on = set(on_calls[0].args[2]["entity_id"]) if on_calls else set()
+
+        assert "switch.sched_presence" in turned_on
+
 
 # ---------------------------------------------------------------------------
 # State persistence (async_restore_state / _async_save_state)

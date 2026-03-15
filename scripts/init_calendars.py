@@ -13,9 +13,7 @@ Exemple:
 """
 
 import argparse
-import json
 import sys
-from pathlib import Path
 
 import requests
 
@@ -35,9 +33,6 @@ def create_local_calendar(ha_url: str, token: str, name: str) -> bool:
         "Authorization": f"Bearer {token}",
         "Content-Type": "application/json",
     }
-    
-    # Slugify le nom pour l'entity_id
-    slug = name.lower().replace(" ", "_").replace("é", "e").replace("è", "e").replace("ê", "e")
     
     data = {
         "action": "create",

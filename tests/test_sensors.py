@@ -8,7 +8,9 @@ Covers:
 from __future__ import annotations
 
 import asyncio
+import logging
 from datetime import datetime
+from zoneinfo import ZoneInfo
 from unittest.mock import AsyncMock, patch
 
 from custom_components.homeshift.coordinator import HomeShiftCoordinator, MIDDAY_HOUR
@@ -19,6 +21,7 @@ from custom_components.homeshift.sensor import (
 
 from .conftest import (
     DEFAULT_MODE_DEFAULT,
+    DEFAULT_MODE_HOLIDAY,
     DEFAULT_MODE_WEEKEND,
     EVENT_REMOTE,
     make_mock_hass,
@@ -30,6 +33,16 @@ from .conftest import (
 def _mock_get_events(calendar_entity: str, events: list[dict]):
     """Return an AsyncMock for hass.services.async_call that returns `events` for `calendar_entity`."""
     return AsyncMock(return_value={calendar_entity: {"events": events}})
+
+
+def _mock_get_events_map(events_by_entity: dict[str, list[dict]]):
+    """Return an AsyncMock that serves calendar.get_events responses per entity."""
+
+    async def _side_effect(_domain, _service, data, **_kwargs):
+        entity_id = data["entity_id"]
+        return {entity_id: {"events": events_by_entity.get(entity_id, [])}}
+
+    return AsyncMock(side_effect=_side_effect)
 
 
 
@@ -110,6 +123,168 @@ class TestNextModeNoEvent:
             asyncio.get_event_loop().run_until_complete(coordinator.async_update_data())
 
         assert coordinator.next_mode_at == datetime(2026, 3, 7, 0, 0, 0)
+
+    def test_missing_calendar_state_falls_back_to_weekday_transition(self):
+        """If the calendar entity is missing at startup, fallback still predicts Monday midnight."""
+        hass = make_mock_hass()
+        entry = make_mock_entry()
+        hass.states.get.return_value = None
+        coordinator = HomeShiftCoordinator(hass, entry)
+
+        now = datetime(2026, 3, 29, 15, 12, 0)  # Sunday
+        with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
+            mock_dt.now.return_value = now
+            asyncio.get_event_loop().run_until_complete(coordinator.async_update_data())
+
+        assert coordinator.next_mode_predicted == DEFAULT_MODE_DEFAULT
+        assert coordinator.next_mode_at == datetime(2026, 3, 30, 0, 0, 0)
+
+    def test_missing_calendar_state_logs_fallback_prediction(self, caplog):
+        """Fallback next_mode prediction is logged at INFO when the calendar entity is missing."""
+        hass = make_mock_hass()
+        entry = make_mock_entry()
+        hass.states.get.return_value = None
+        coordinator = HomeShiftCoordinator(hass, entry)
+
+        now = datetime(2026, 3, 29, 15, 12, 0)  # Sunday
+        with (
+            patch("custom_components.homeshift.coordinator.dt_util") as mock_dt,
+            caplog.at_level(logging.INFO),
+        ):
+            mock_dt.now.return_value = now
+            asyncio.get_event_loop().run_until_complete(coordinator.async_update_data())
+
+        assert "Calendar entity 'calendar.teletravail' not found in Home Assistant states" in caplog.text
+        assert "Next-mode fallback: calendar entity unavailable" in caplog.text
+        assert "next_mode=Travail" in caplog.text
+        assert "next_mode_at=2026-03-30T00:00:00" in caplog.text
+
+    def test_current_holiday_only_today_predicts_work_tomorrow(self):
+        """A holiday active today only must not keep Monday predicted as holiday."""
+        hass = make_mock_hass()
+        entry = make_mock_entry(calendar_entity="calendar.travail", holiday_calendar="calendar.jours_feries")
+        work_state = make_calendar_state(
+            state="off",
+            message="Vacances",
+            start_time="2026-05-15 00:00:00",
+            end_time="2026-05-16 00:00:00",
+        )
+        holiday_state = make_calendar_state(
+            state="on",
+            message="Fete locale",
+            start_time="2026-03-29 00:00:00",
+            end_time="2026-03-30 00:00:00",
+        )
+        hass.states.get.side_effect = (
+            lambda eid: work_state if eid == "calendar.travail" else holiday_state
+        )
+        hass.services.async_call = _mock_get_events_map(
+            {
+                "calendar.travail": [],
+                "calendar.jours_feries": [],
+            }
+        )
+        coordinator = HomeShiftCoordinator(hass, entry)
+
+        now = datetime(2026, 3, 29, 15, 47, 3)  # Sunday
+        with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
+            mock_dt.now.return_value = now
+            asyncio.get_event_loop().run_until_complete(coordinator.async_update_data())
+
+        assert coordinator.day_mode == DEFAULT_MODE_HOLIDAY
+        assert coordinator.next_mode_predicted == DEFAULT_MODE_DEFAULT
+        assert coordinator.next_mode_at == datetime(2026, 3, 30, 0, 0, 0)
+
+    def test_future_holiday_is_predicted_from_holiday_calendar_events(self):
+        """A future all-day holiday must be surfaced as the next mode change."""
+        hass = make_mock_hass()
+        entry = make_mock_entry(calendar_entity="calendar.travail", holiday_calendar="calendar.jours_feries")
+        work_state = make_calendar_state(state="off")
+        holiday_state = make_calendar_state(state="off")
+
+        def _get_state(entity_id):
+            if entity_id == "calendar.travail":
+                return work_state
+            if entity_id == "calendar.jours_feries":
+                return holiday_state
+            return None
+
+        hass.states.get.side_effect = _get_state
+        hass.services.async_call = _mock_get_events_map(
+            {
+                "calendar.travail": [],
+                "calendar.jours_feries": [
+                    {
+                        "summary": "Fete du Travail",
+                        "start": "2026-05-01",
+                        "end": "2026-05-02",
+                    }
+                ],
+            }
+        )
+        coordinator = HomeShiftCoordinator(hass, entry)
+        coordinator.day_mode = DEFAULT_MODE_DEFAULT
+
+        now = datetime(2026, 4, 30, 12, 0, 0)  # Thursday
+        with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
+            mock_dt.now.return_value = now
+            asyncio.get_event_loop().run_until_complete(coordinator.async_update_data())
+
+        assert coordinator.next_mode_predicted == DEFAULT_MODE_HOLIDAY
+        assert coordinator.next_mode_at == datetime(2026, 5, 1, 0, 0, 0)
+
+    def test_dst_change_night_with_early_switch_still_predicts_work_at_midnight(self):
+        """After the Europe/Paris DST change, Sunday holiday still ends at Monday midnight."""
+        hass = make_mock_hass()
+        entry = make_mock_entry(
+            calendar_entity="calendar.travail",
+            holiday_calendar="calendar.jours_feries",
+            early_switch_minutes=120,
+        )
+        work_state = make_calendar_state(
+            state="off",
+            message="Vacances",
+            start_time="2026-05-15 00:00:00",
+            end_time="2026-05-16 00:00:00",
+        )
+        holiday_state = make_calendar_state(
+            state="on",
+            message="Fete locale",
+            start_time="2026-03-29 00:00:00",
+            end_time="2026-03-30 00:00:00",
+        )
+
+        def _get_state(entity_id):
+            if entity_id == "calendar.travail":
+                return work_state
+            if entity_id == "calendar.jours_feries":
+                return holiday_state
+            return None
+
+        hass.states.get.side_effect = _get_state
+        hass.services.async_call = _mock_get_events_map(
+            {
+                "calendar.travail": [],
+                "calendar.jours_feries": [],
+            }
+        )
+        coordinator = HomeShiftCoordinator(hass, entry)
+
+        now = datetime(2026, 3, 29, 15, 47, 3, tzinfo=ZoneInfo("Europe/Paris"))
+        with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
+            mock_dt.now.return_value = now
+            asyncio.get_event_loop().run_until_complete(coordinator.async_update_data())
+
+        assert coordinator.next_mode_predicted == DEFAULT_MODE_DEFAULT
+        assert coordinator.next_mode_at == datetime(
+            2026,
+            3,
+            30,
+            0,
+            0,
+            0,
+            tzinfo=ZoneInfo("Europe/Paris"),
+        )
 
 
 # ---------------------------------------------------------------------------

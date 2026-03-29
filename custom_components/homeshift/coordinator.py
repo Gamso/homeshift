@@ -260,6 +260,46 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
             self._cancel_next_mode_timer()
             self._cancel_next_mode_timer = None
 
+    def _log_next_mode_prediction(self, context: str) -> None:
+        """Log the currently computed next-mode prediction at INFO level."""
+        next_mode_at = self._next_mode_at.isoformat() if self._next_mode_at else None
+        _LOGGER.info(
+            "%s | next_mode=%s | next_mode_at=%s",
+            context,
+            self._next_mode,
+            next_mode_at,
+        )
+
+    async def _async_refresh_next_mode_prediction(
+        self,
+        calendar_state,
+        now: datetime,
+        *,
+        context: str,
+    ) -> None:
+        """Recompute next_mode/next_mode_at, then reschedule the timer and log it."""
+        self._next_mode, self._next_mode_at = await self._compute_next_mode_change(
+            calendar_state, now
+        )
+        self._schedule_next_mode_timer()
+        self._log_next_mode_prediction(context)
+
+    @staticmethod
+    def _summarize_events_for_log(events: list[dict], *, limit: int = 5) -> list[dict]:
+        """Return a compact, log-friendly view of calendar events."""
+        summarized: list[dict] = []
+        for event in events[:limit]:
+            summarized.append(
+                {
+                    "summary": event.get("summary", ""),
+                    "start": event.get("start", ""),
+                    "end": event.get("end", ""),
+                }
+            )
+        if len(events) > limit:
+            summarized.append({"more": len(events) - limit})
+        return summarized
+
     @staticmethod
     def parse_day_mode_map(raw: str) -> dict[str, str]:
         """Parse 'Key1:Display1, Key2:Display2' into an ordered dict.
@@ -557,13 +597,18 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
         if not calendar_entity:
             _LOGGER.warning("No calendar entity configured, skipping sync")
             self._next_mode, self._next_mode_at = None, None
+            self._schedule_next_mode_timer()
             return self._build_result()
 
         # Get calendar state
         calendar_state = self.hass.states.get(calendar_entity)
         if not calendar_state:
             _LOGGER.warning("Calendar entity '%s' not found in Home Assistant states", calendar_entity)
-            self._next_mode, self._next_mode_at = None, None
+            await self._async_refresh_next_mode_prediction(
+                None,
+                now,
+                context="Next-mode fallback: calendar entity unavailable",
+            )
             return self._build_result()
 
         _LOGGER.debug(
@@ -673,10 +718,11 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
                 )
 
         # Compute when and to what mode the next automatic change is expected
-        self._next_mode, self._next_mode_at = await self._compute_next_mode_change(calendar_state, now)
-
-        # Schedule a one-shot timer to fire exactly at the predicted change time
-        self._schedule_next_mode_timer()
+        await self._async_refresh_next_mode_prediction(
+            calendar_state,
+            now,
+            context="Next-mode prediction updated",
+        )
 
         # Cover heat protection — close covers if temperature exceeds threshold in window
         await self._cover_manager.async_check_heat_protection(now)
@@ -719,7 +765,16 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
             if isinstance(entity_data, dict):
                 events = entity_data.get("events", [])
                 if isinstance(events, list):
-                    return [e for e in events if isinstance(e, dict)]
+                    valid_events = [e for e in events if isinstance(e, dict)]
+                    _LOGGER.debug(
+                        "calendar.get_events returned %d event(s) for '%s' between %s and %s: %s",
+                        len(valid_events),
+                        calendar_entity,
+                        start.isoformat(),
+                        end.isoformat(),
+                        self._summarize_events_for_log(valid_events),
+                    )
+                    return valid_events
         except Exception as err:  # noqa: BLE001
             _LOGGER.debug("calendar.get_events failed for '%s': %s", calendar_entity, err)
         return []
@@ -742,6 +797,8 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
         at: datetime,
         upcoming_events: list[dict],
         active_calendar_state,
+        holiday_events: list[dict],
+        active_holiday_state,
         ref_tzinfo,
     ) -> str | None:
         """Determine what day mode would be active at `at`.
@@ -798,7 +855,50 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
                             return mode
 
         # 4. No active mapped event → weekend / holiday / default
-        return await self._determine_mode(EVENT_NONE, at_time=at)
+        is_holiday = self._is_calendar_active_at_time(
+            at,
+            holiday_events,
+            active_holiday_state,
+            ref_tzinfo,
+        )
+        return await self._determine_mode(EVENT_NONE, at_time=at, is_holiday=is_holiday)
+
+    def _is_calendar_active_at_time(
+        self,
+        at: datetime,
+        events: list[dict],
+        active_state,
+        ref_tzinfo,
+    ) -> bool:
+        """Return True when a calendar is active at `at`.
+
+        This is used for future-mode prediction. It combines the currently active
+        calendar entity state with future events fetched via calendar.get_events.
+        """
+        at_naive = self._to_naive(at)
+
+        # If the calendar entity is currently on, it may cover `at` even when the
+        # service response only includes events that start in the future.
+        if active_state is not None and active_state.state == "on":
+            start_str = active_state.attributes.get("start_time", "")
+            end_str = active_state.attributes.get("end_time", "")
+            try:
+                start_dt = datetime.strptime(start_str, "%Y-%m-%d %H:%M:%S")
+                end_dt = datetime.strptime(end_str, "%Y-%m-%d %H:%M:%S")
+                if start_dt <= at_naive < end_dt:
+                    return True
+            except (ValueError, TypeError):
+                pass
+
+        for event in events:
+            start_dt = _parse_event_dt(event.get("start", ""), ref_tzinfo)
+            end_dt = _parse_event_dt(event.get("end", ""), ref_tzinfo)
+            if start_dt is None or end_dt is None:
+                continue
+            if self._to_naive(start_dt) <= at_naive < self._to_naive(end_dt):
+                return True
+
+        return False
 
     async def _compute_next_mode_change(self, calendar_state, now: datetime) -> tuple[str | None, datetime | None]:
         """Estimate the next automatic day-mode change: (predicted_mode, when).
@@ -816,6 +916,32 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
         # find the upcoming weekend (worst case: Monday → Saturday = 5 days).
         end_window = (now + timedelta(days=7)).replace(hour=0, minute=0, second=0, microsecond=0)
         upcoming = await self._async_get_upcoming_events(calendar_entity, now, end_window)
+        holiday_calendar = self._config.get(CONF_HOLIDAY_CALENDAR, "")
+        holiday_state = self.hass.states.get(holiday_calendar) if holiday_calendar else None
+        holiday_upcoming = (
+            await self._async_get_upcoming_events(holiday_calendar, now, end_window)
+            if holiday_calendar
+            else []
+        )
+        _LOGGER.debug(
+            "Predicting next mode from now=%s | current_mode=%s | work_events=%d | holiday_calendar=%s | holiday_state=%s | holiday_events=%d | early_switch=%d",
+            now.isoformat(),
+            self._day_mode,
+            len(upcoming),
+            holiday_calendar or None,
+            holiday_state.state if holiday_state is not None else None,
+            len(holiday_upcoming),
+            self._early_switch_minutes,
+        )
+        if holiday_state is not None:
+            _LOGGER.debug(
+                "Holiday calendar '%s' -> state=%s | event='%s' | start=%s end=%s",
+                holiday_calendar,
+                holiday_state.state,
+                holiday_state.attributes.get("message", ""),
+                holiday_state.attributes.get("start_time", ""),
+                holiday_state.attributes.get("end_time", ""),
+            )
 
         # Collect candidate inflection points (all strictly after now)
         candidates: set[datetime] = set()
@@ -835,8 +961,23 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
             except (ValueError, TypeError):
                 pass
 
+        if holiday_state is not None and holiday_state.state == "on":
+            end_str = holiday_state.attributes.get("end_time", "")
+            try:
+                end_naive = datetime.strptime(end_str, "%Y-%m-%d %H:%M:%S")
+                if end_naive > now_naive:
+                    candidates.add(end_naive.replace(tzinfo=now.tzinfo))
+            except (ValueError, TypeError):
+                pass
+
         # Start and end of every upcoming event from get_events (ISO format)
         for event in upcoming:
+            for time_key in ("start", "end"):
+                dt = _parse_event_dt(event.get(time_key, ""), now.tzinfo)
+                if dt is not None and self._to_naive(dt) > now_naive:
+                    candidates.add(dt)
+
+        for event in holiday_upcoming:
             for time_key in ("start", "end"):
                 dt = _parse_event_dt(event.get(time_key, ""), now.tzinfo)
                 if dt is not None and self._to_naive(dt) > now_naive:
@@ -856,20 +997,52 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
 
         # Sort chronologically using naive times to avoid tz comparison errors
         sorted_candidates = sorted(candidates, key=self._to_naive)
+        _LOGGER.debug(
+            "Next-mode candidates (%d): %s",
+            len(sorted_candidates),
+            [candidate.isoformat() for candidate in sorted_candidates],
+        )
 
         # Walk candidates and return the first that produces a different mode
         current_mode = self._day_mode
         for candidate in sorted_candidates:
-            mode_at = await self._mode_at_time(candidate, upcoming, calendar_state, now.tzinfo)
+            mode_at = await self._mode_at_time(
+                candidate,
+                upcoming,
+                calendar_state,
+                holiday_upcoming,
+                holiday_state,
+                now.tzinfo,
+            )
+            _LOGGER.debug(
+                "Next-mode candidate %s -> mode=%s (current_mode=%s)",
+                candidate.isoformat(),
+                mode_at,
+                current_mode,
+            )
             if mode_at != current_mode:
+                _LOGGER.debug(
+                    "Next-mode first change found at %s -> %s",
+                    candidate.isoformat(),
+                    mode_at,
+                )
                 return mode_at, candidate
 
         # No mode change expected in the window — report the current mode
         # so that the next_mode sensor shows the persisted mode rather than
         # "unknown".  next_mode_at stays None (no specific change time).
+        _LOGGER.debug(
+            "Next-mode prediction found no change in window; keeping current_mode=%s",
+            current_mode,
+        )
         return current_mode, None
 
-    async def _determine_mode(self, today_type: str, at_time: datetime | None = None) -> str | None:
+    async def _determine_mode(
+        self,
+        today_type: str,
+        at_time: datetime | None = None,
+        is_holiday: bool | None = None,
+    ) -> str | None:
         """Determine the appropriate mode based on current state.
 
         Uses configurable mappings instead of hardcoded values.
@@ -880,17 +1053,18 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
         4. Default -> mode_default
 
         at_time: datetime to use for weekday check (defaults to now).
-        Note: holiday calendar check always uses the current HA calendar state.
+        is_holiday: explicit holiday status override used for future prediction.
         """
         now = at_time if at_time is not None else dt_util.now()
         is_weekend = now.weekday() in [5, 6]
 
         # Check holiday calendar
-        holiday_calendar = self._config.get(CONF_HOLIDAY_CALENDAR, "")
-        is_holiday = False
-        holiday_state = self.hass.states.get(holiday_calendar)
-        if holiday_state and holiday_state.state == "on":
-            is_holiday = True
+        if is_holiday is None:
+            holiday_calendar = self._config.get(CONF_HOLIDAY_CALENDAR, "")
+            is_holiday = False
+            holiday_state = self.hass.states.get(holiday_calendar)
+            if holiday_state and holiday_state.state == "on":
+                is_holiday = True
 
         # 1. Check event_mode_map for the current event keyword
         if today_type and today_type != EVENT_NONE:

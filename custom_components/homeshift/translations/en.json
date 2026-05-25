@@ -73,20 +73,24 @@
       },
       "covers": {
         "title": "Cover Heat Control",
-        "description": "Stop covers automatically when the temperature exceeds the threshold during the configured time window.",
+        "description": "Close covers automatically when the temperature exceeds the threshold during the configured time window.",
         "data": {
           "cover_entities": "Cover Entities",
           "cover_temp_sensor": "Temperature Sensor",
           "cover_temp_threshold": "Temperature Threshold (°C)",
           "cover_time_start": "Active Window Start",
-          "cover_time_end": "Active Window End"
+          "cover_time_end": "Active Window End",
+          "cover_action": "Cover Action",
+          "cover_my_button": "My position button"
         },
         "data_description": {
           "cover_entities": "Select the cover entities to control when it is too hot.",
           "cover_temp_sensor": "Sensor providing the outdoor temperature.",
-          "cover_temp_threshold": "Temperature above which covers are closed.",
+          "cover_temp_threshold": "Temperature above which the selected action is triggered.",
           "cover_time_start": "Earliest time of day the feature is active.",
-          "cover_time_end": "Latest time of day the feature is active."
+          "cover_time_end": "Latest time of day the feature is active.",
+          "cover_action": "'Close' sends the standard close_cover command. 'Stop' sends stop_cover, halting movement mid-travel — useful for Somfy RTS covers (the My/favorite position is a separate button entity).",
+          "cover_my_button": "Button entity to press to send covers to their favorite (My) position. Required when 'My position' is selected as the action."
         }
       },
       "sunrise_schedulers": {
@@ -189,20 +193,24 @@
       },
       "covers": {
         "title": "Cover Heat Control",
-        "description": "Stop covers automatically when the temperature exceeds the threshold during the configured time window.",
+        "description": "Close covers automatically when the temperature exceeds the threshold during the configured time window.",
         "data": {
           "cover_entities": "Cover Entities",
           "cover_temp_sensor": "Temperature Sensor",
           "cover_temp_threshold": "Temperature Threshold (°C)",
           "cover_time_start": "Active Window Start",
-          "cover_time_end": "Active Window End"
+          "cover_time_end": "Active Window End",
+          "cover_action": "Cover Action",
+          "cover_my_button": "My position button"
         },
         "data_description": {
           "cover_entities": "Select the cover entities to control when it is too hot.",
           "cover_temp_sensor": "Sensor providing the outdoor temperature.",
-          "cover_temp_threshold": "Temperature above which covers are closed.",
+          "cover_temp_threshold": "Temperature above which the selected action is triggered.",
           "cover_time_start": "Earliest time of day the feature is active.",
-          "cover_time_end": "Latest time of day the feature is active."
+          "cover_time_end": "Latest time of day the feature is active.",
+          "cover_action": "'Close' sends the standard close_cover command. 'Stop' sends stop_cover, halting movement mid-travel — useful for Somfy RTS covers (the My/favorite position is a separate button entity).",
+          "cover_my_button": "Button entity to press to send covers to their favorite (My) position. Required when 'My position' is selected as the action."
         }
       },
       "sunrise_schedulers": {
@@ -242,6 +250,11 @@
       },
       "next_mode_at": {
         "name": "Next Mode At"
+      }
+    },
+    "binary_sensor": {
+      "cover_heat_active": {
+        "name": "Cover Heat Active"
       }
     }
   },

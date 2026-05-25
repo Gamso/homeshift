@@ -35,9 +35,12 @@ from .const import (
     CONF_COVER_TEMP_THRESHOLD,
     CONF_COVER_TIME_START,
     CONF_COVER_TIME_END,
+    CONF_COVER_ACTION,
+    CONF_COVER_MY_BUTTON,
     DEFAULT_COVER_TEMP_THRESHOLD,
     DEFAULT_COVER_TIME_START,
     DEFAULT_COVER_TIME_END,
+    DEFAULT_COVER_ACTION,
     CONF_SUNRISE_SCHEDULERS,
     CONF_SUNRISE_EARLIEST,
     DEFAULT_SUNRISE_EARLIEST,
@@ -280,22 +283,23 @@ def _extract_schedulers(user_input: dict[str, Any], data: dict[str, Any]) -> dic
     return result
 
 
-def _covers_schema(data: dict[str, Any]) -> vol.Schema:
+def _covers_schema(hass, data: dict[str, Any]) -> vol.Schema:
     """Build the cover heat-control form schema."""
+    raw_lang = getattr(hass.config, "language", "en") if hasattr(hass, "config") else "en"
+    lang = raw_lang.split("-")[0].lower()
+    close_label = "Fermer les volets (close_cover)" if lang == "fr" else "Close Cover (close_cover)"
+    stop_label = "Arrêter le mouvement (stop_cover)" if lang == "fr" else "Stop movement (stop_cover)"
+    my_label = "Position favorite My (bouton)" if lang == "fr" else "My position (button entity)"
     return vol.Schema(
         {
             vol.Optional(
                 CONF_COVER_ENTITIES,
                 default=data.get(CONF_COVER_ENTITIES, []),
-            ): selector.EntitySelector(
-                selector.EntitySelectorConfig(domain="cover", multiple=True)
-            ),
+            ): selector.EntitySelector(selector.EntitySelectorConfig(domain="cover", multiple=True)),
             vol.Optional(
                 CONF_COVER_TEMP_SENSOR,
                 default=data.get(CONF_COVER_TEMP_SENSOR, ""),
-            ): selector.EntitySelector(
-                selector.EntitySelectorConfig(domain="sensor")
-            ),
+            ): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
             vol.Optional(
                 CONF_COVER_TEMP_THRESHOLD,
                 default=data.get(CONF_COVER_TEMP_THRESHOLD, DEFAULT_COVER_TEMP_THRESHOLD),
@@ -307,6 +311,23 @@ def _covers_schema(data: dict[str, Any]) -> vol.Schema:
                     mode=selector.NumberSelectorMode.BOX,
                 )
             ),
+            vol.Optional(
+                CONF_COVER_ACTION,
+                default=data.get(CONF_COVER_ACTION, DEFAULT_COVER_ACTION),
+            ): selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=[
+                        {"value": "close_cover", "label": close_label},
+                        {"value": "stop_cover", "label": stop_label},
+                        {"value": "my_position", "label": my_label},
+                    ],
+                    mode=selector.SelectSelectorMode.DROPDOWN,
+                )
+            ),
+            vol.Optional(
+                CONF_COVER_MY_BUTTON,
+                default=data.get(CONF_COVER_MY_BUTTON, ""),
+            ): selector.EntitySelector(selector.EntitySelectorConfig(domain="button")),
             vol.Optional(
                 CONF_COVER_TIME_START,
                 default=data.get(CONF_COVER_TIME_START, DEFAULT_COVER_TIME_START),
@@ -459,7 +480,7 @@ class HomeShiftConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         return self.async_show_form(
             step_id="covers",
-            data_schema=_covers_schema(self._effective_data()),
+            data_schema=_covers_schema(self.hass, self._effective_data()),
         )
 
     # -- sunrise schedulers ------------------------------------------------
@@ -622,7 +643,7 @@ class HomeShiftOptionsFlow(config_entries.OptionsFlow):
 
         return self.async_show_form(
             step_id="covers",
-            data_schema=_covers_schema(self._effective_data()),
+            data_schema=_covers_schema(self.hass, self._effective_data()),
         )
 
     # -- sunrise schedulers ------------------------------------------------

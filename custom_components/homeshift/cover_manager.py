@@ -107,30 +107,15 @@ class CoverManager:
         temp_state = self._hass.states.get(temp_sensor)
         temperature = float(temp_state.state) if temp_state else 0.0
         threshold = float(self._config.get(CONF_COVER_TEMP_THRESHOLD, DEFAULT_COVER_TEMP_THRESHOLD))
-        configured_cover_action = self._config.get(CONF_COVER_ACTION, DEFAULT_COVER_ACTION)
-        allowed_cover_actions = {"close_cover", "stop_cover", "my_position"}
-        cover_action = configured_cover_action if configured_cover_action in allowed_cover_actions else DEFAULT_COVER_ACTION
-        if configured_cover_action not in allowed_cover_actions:
-            _LOGGER.warning(
-                "Cover heat protection: invalid cover action '%s', falling back to '%s'",
-                configured_cover_action,
-                DEFAULT_COVER_ACTION,
-            )
+        my_button = self._config.get(CONF_COVER_MY_BUTTON, "")
 
-        _LOGGER.info(
-            "Cover heat protection: temperature=%.1f > threshold=%.1f, " "action=%s on covers %s",
-            temperature,
-            threshold,
-            cover_action,
-            cover_entities,
-        )
-        if cover_action == "my_position":
-            my_button = self._config.get(CONF_COVER_MY_BUTTON, "")
-            if not my_button:
-                _LOGGER.warning(
-                    "Cover heat protection: action 'my_position' selected but no button entity configured"
-                )
-                return
+        if my_button:
+            _LOGGER.info(
+                "Cover heat protection: temperature=%.1f > threshold=%.1f, pressing My button %s",
+                temperature,
+                threshold,
+                my_button,
+            )
             await self._hass.services.async_call(
                 "button",
                 "press",
@@ -138,6 +123,22 @@ class CoverManager:
                 blocking=False,
             )
         else:
+            configured_cover_action = self._config.get(CONF_COVER_ACTION, DEFAULT_COVER_ACTION)
+            allowed_cover_actions = {"close_cover", "stop_cover"}
+            cover_action = configured_cover_action if configured_cover_action in allowed_cover_actions else DEFAULT_COVER_ACTION
+            if configured_cover_action not in allowed_cover_actions:
+                _LOGGER.warning(
+                    "Cover heat protection: invalid cover action '%s', falling back to '%s'",
+                    configured_cover_action,
+                    DEFAULT_COVER_ACTION,
+                )
+            _LOGGER.info(
+                "Cover heat protection: temperature=%.1f > threshold=%.1f, action=%s on covers %s",
+                temperature,
+                threshold,
+                cover_action,
+                cover_entities,
+            )
             await self._hass.services.async_call(
                 "cover",
                 cover_action,

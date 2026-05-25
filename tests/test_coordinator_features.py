@@ -926,15 +926,15 @@ class TestCoverHeatControl:
         assert "cover.volet_salon" in call.args[2]["entity_id"]
 
     def test_my_position_button_pressed_when_configured_and_hot(self):
-        """button.press is called on the My button entity when action=my_position and hot."""
+        """button.press is called on the My button entity when it is configured and hot, regardless of cover_action."""
         hass = make_mock_hass()
         hass.services.async_call = AsyncMock()
         entry = self._make_entry(
             threshold=30.0,
             time_start="08:00:00",
             time_end="20:00:00",
-            cover_action="my_position",
             my_button="button.volet_salon_my_position",
+            # cover_action deliberately left as default close_cover — button takes priority
         )
 
         def _get_state(entity_id):
@@ -955,15 +955,16 @@ class TestCoverHeatControl:
         assert call.args[1] == "press"
         assert call.args[2]["entity_id"] == "button.volet_salon_my_position"
 
-    def test_my_position_no_call_when_button_not_configured(self):
-        """No service call when action=my_position but no button entity is set."""
+    def test_my_position_button_overrides_stop_cover_action(self):
+        """button.press is used even when cover_action=stop_cover if a My button is configured."""
         hass = make_mock_hass()
         hass.services.async_call = AsyncMock()
         entry = self._make_entry(
             threshold=30.0,
             time_start="08:00:00",
             time_end="20:00:00",
-            cover_action="my_position",  # no my_button
+            cover_action="stop_cover",
+            my_button="button.volet_salon_my_position",
         )
 
         def _get_state(entity_id):
@@ -978,7 +979,10 @@ class TestCoverHeatControl:
 
         asyncio.get_event_loop().run_until_complete(coordinator._cover_manager.async_check_heat_protection(now))
 
-        hass.services.async_call.assert_not_called()
+        hass.services.async_call.assert_called_once()
+        call = hass.services.async_call.call_args
+        assert call.args[0] == "button"
+        assert call.args[1] == "press"
 
     def test_no_call_when_below_threshold(self):
         """cover.stop_cover is NOT called when temperature is below threshold."""

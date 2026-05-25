@@ -90,7 +90,7 @@
           "cover_time_start": "Heure de début de la plage d'activation.",
           "cover_time_end": "Heure de fin de la plage d'activation.",
           "cover_action": "'Fermer' envoie close_cover (volets standard). 'Arrêter' envoie stop_cover, qui interrompt le mouvement en cours — utile pour les volets Somfy RTS (la position favorite My est un bouton séparé).",
-          "cover_my_button": "Entité bouton à appuyer pour envoyer les volets en position favorite (My). Requis si 'Position favorite My' est sélectionné comme action."
+          "cover_my_button": "Bouton à appuyer pour envoyer les volets en position favorite (My). Si renseigné, ce bouton est utilisé à la place de l'action ci-dessous."
         }
       },
       "sunrise_schedulers": {
@@ -210,7 +210,7 @@
           "cover_time_start": "Heure de début de la plage d'activation.",
           "cover_time_end": "Heure de fin de la plage d'activation.",
           "cover_action": "'Fermer' envoie close_cover (volets standard). 'Arrêter' envoie stop_cover, qui interrompt le mouvement en cours — utile pour les volets Somfy RTS (la position favorite My est un bouton séparé).",
-          "cover_my_button": "Entité bouton à appuyer pour envoyer les volets en position favorite (My). Requis si 'Position favorite My' est sélectionné comme action."
+          "cover_my_button": "Bouton à appuyer pour envoyer les volets en position favorite (My). Si renseigné, ce bouton est utilisé à la place de l'action ci-dessous."
         }
       },
       "sunrise_schedulers": {

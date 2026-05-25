@@ -289,7 +289,6 @@ def _covers_schema(hass, data: dict[str, Any]) -> vol.Schema:
     lang = raw_lang.split("-")[0].lower()
     close_label = "Fermer les volets (close_cover)" if lang == "fr" else "Close Cover (close_cover)"
     stop_label = "Arrêter le mouvement (stop_cover)" if lang == "fr" else "Stop movement (stop_cover)"
-    my_label = "Position favorite My (bouton)" if lang == "fr" else "My position (button entity)"
     return vol.Schema(
         {
             vol.Optional(
@@ -312,6 +311,10 @@ def _covers_schema(hass, data: dict[str, Any]) -> vol.Schema:
                 )
             ),
             vol.Optional(
+                CONF_COVER_MY_BUTTON,
+                default=data.get(CONF_COVER_MY_BUTTON, ""),
+            ): selector.EntitySelector(selector.EntitySelectorConfig(domain="button")),
+            vol.Optional(
                 CONF_COVER_ACTION,
                 default=data.get(CONF_COVER_ACTION, DEFAULT_COVER_ACTION),
             ): selector.SelectSelector(
@@ -319,15 +322,10 @@ def _covers_schema(hass, data: dict[str, Any]) -> vol.Schema:
                     options=[
                         {"value": "close_cover", "label": close_label},
                         {"value": "stop_cover", "label": stop_label},
-                        {"value": "my_position", "label": my_label},
                     ],
                     mode=selector.SelectSelectorMode.DROPDOWN,
                 )
             ),
-            vol.Optional(
-                CONF_COVER_MY_BUTTON,
-                default=data.get(CONF_COVER_MY_BUTTON, ""),
-            ): selector.EntitySelector(selector.EntitySelectorConfig(domain="button")),
             vol.Optional(
                 CONF_COVER_TIME_START,
                 default=data.get(CONF_COVER_TIME_START, DEFAULT_COVER_TIME_START),

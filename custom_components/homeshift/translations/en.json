@@ -90,7 +90,7 @@
           "cover_time_start": "Earliest time of day the feature is active.",
           "cover_time_end": "Latest time of day the feature is active.",
           "cover_action": "'Close' sends the standard close_cover command. 'Stop' sends stop_cover, halting movement mid-travel — useful for Somfy RTS covers (the My/favorite position is a separate button entity).",
-          "cover_my_button": "Button entity to press to send covers to their favorite (My) position. Required when 'My position' is selected as the action."
+          "cover_my_button": "Button to press to send covers to their favorite (My) position. If set, this button is used instead of the action below."
         }
       },
       "sunrise_schedulers": {
@@ -210,7 +210,7 @@
           "cover_time_start": "Earliest time of day the feature is active.",
           "cover_time_end": "Latest time of day the feature is active.",
           "cover_action": "'Close' sends the standard close_cover command. 'Stop' sends stop_cover, halting movement mid-travel — useful for Somfy RTS covers (the My/favorite position is a separate button entity).",
-          "cover_my_button": "Button entity to press to send covers to their favorite (My) position. Required when 'My position' is selected as the action."
+          "cover_my_button": "Button to press to send covers to their favorite (My) position. If set, this button is used instead of the action below."
         }
       },
       "sunrise_schedulers": {

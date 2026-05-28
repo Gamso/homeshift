@@ -843,12 +843,17 @@ class TestEarlySwitch:
 class TestCoverHeatControl:
     """Verify CoverManager.async_check_heat_protection closes covers when conditions are met."""
 
-    def _make_entry(self, cover_entities=None, temp_sensor="sensor.temp",
-                    threshold=30.0, time_start="08:00:00", time_end="20:00:00"):
+    def _make_entry(self, cover_entities=None, temp_sensor="sensor.temp", threshold=30.0, time_start="08:00:00", time_end="20:00:00", cover_action=None, my_button=None):
         from custom_components.homeshift.const import (
-            CONF_COVER_ENTITIES, CONF_COVER_TEMP_SENSOR, CONF_COVER_TEMP_THRESHOLD,
-            CONF_COVER_TIME_START, CONF_COVER_TIME_END,
+            CONF_COVER_ENTITIES,
+            CONF_COVER_TEMP_SENSOR,
+            CONF_COVER_TEMP_THRESHOLD,
+            CONF_COVER_TIME_START,
+            CONF_COVER_TIME_END,
+            CONF_COVER_ACTION,
+            CONF_COVER_MY_BUTTON,
         )
+
         entry = make_mock_entry()
         entry.options = {
             CONF_COVER_ENTITIES: cover_entities or ["cover.volet_salon"],
@@ -857,6 +862,10 @@ class TestCoverHeatControl:
             CONF_COVER_TIME_START: time_start,
             CONF_COVER_TIME_END: time_end,
         }
+        if cover_action is not None:
+            entry.options[CONF_COVER_ACTION] = cover_action
+        if my_button is not None:
+            entry.options[CONF_COVER_MY_BUTTON] = my_button
         return entry
 
     def _temp_state(self, temperature: float):
@@ -864,8 +873,8 @@ class TestCoverHeatControl:
         state.state = str(temperature)
         return state
 
-    def test_stop_cover_called_when_hot_and_in_window(self):
-        """cover.stop_cover is called when temperature > threshold inside the window."""
+    def test_close_cover_called_when_hot_and_in_window(self):
+        """cover.close_cover is called by default when temperature > threshold inside the window."""
         hass = make_mock_hass()
         hass.services.async_call = AsyncMock()
         entry = self._make_entry(threshold=30.0, time_start="08:00:00", time_end="20:00:00")
@@ -887,8 +896,93 @@ class TestCoverHeatControl:
         hass.services.async_call.assert_called_once()
         call = hass.services.async_call.call_args
         assert call.args[0] == "cover"
+        assert call.args[1] == "close_cover"
+        assert "cover.volet_salon" in call.args[2]["entity_id"]
+
+    def test_stop_cover_called_when_configured_and_hot(self):
+        """cover.stop_cover is called when configured explicitly and temperature > threshold."""
+        hass = make_mock_hass()
+        hass.services.async_call = AsyncMock()
+        entry = self._make_entry(threshold=30.0, time_start="08:00:00", time_end="20:00:00", cover_action="stop_cover")
+
+        def _get_state(entity_id):
+            if entity_id == "sensor.temp":
+                return self._temp_state(35.0)
+            return make_calendar_state(state="off")
+
+        hass.states.get.side_effect = _get_state
+
+        coordinator = HomeShiftCoordinator(hass, entry)
+        now = datetime(2026, 7, 1, 14, 0, 0)
+
+        asyncio.get_event_loop().run_until_complete(
+            coordinator._cover_manager.async_check_heat_protection(now)
+        )
+
+        hass.services.async_call.assert_called_once()
+        call = hass.services.async_call.call_args
+        assert call.args[0] == "cover"
         assert call.args[1] == "stop_cover"
         assert "cover.volet_salon" in call.args[2]["entity_id"]
+
+    def test_my_position_button_pressed_when_configured_and_hot(self):
+        """button.press is called on the My button entity when it is configured and hot, regardless of cover_action."""
+        hass = make_mock_hass()
+        hass.services.async_call = AsyncMock()
+        entry = self._make_entry(
+            threshold=30.0,
+            time_start="08:00:00",
+            time_end="20:00:00",
+            my_button="button.volet_salon_my_position",
+            # cover_action deliberately left as default close_cover — button takes priority
+        )
+
+        def _get_state(entity_id):
+            if entity_id == "sensor.temp":
+                return self._temp_state(35.0)
+            return make_calendar_state(state="off")
+
+        hass.states.get.side_effect = _get_state
+
+        coordinator = HomeShiftCoordinator(hass, entry)
+        now = datetime(2026, 7, 1, 14, 0, 0)
+
+        asyncio.get_event_loop().run_until_complete(coordinator._cover_manager.async_check_heat_protection(now))
+
+        hass.services.async_call.assert_called_once()
+        call = hass.services.async_call.call_args
+        assert call.args[0] == "button"
+        assert call.args[1] == "press"
+        assert call.args[2]["entity_id"] == "button.volet_salon_my_position"
+
+    def test_my_position_button_overrides_stop_cover_action(self):
+        """button.press is used even when cover_action=stop_cover if a My button is configured."""
+        hass = make_mock_hass()
+        hass.services.async_call = AsyncMock()
+        entry = self._make_entry(
+            threshold=30.0,
+            time_start="08:00:00",
+            time_end="20:00:00",
+            cover_action="stop_cover",
+            my_button="button.volet_salon_my_position",
+        )
+
+        def _get_state(entity_id):
+            if entity_id == "sensor.temp":
+                return self._temp_state(35.0)
+            return make_calendar_state(state="off")
+
+        hass.states.get.side_effect = _get_state
+
+        coordinator = HomeShiftCoordinator(hass, entry)
+        now = datetime(2026, 7, 1, 14, 0, 0)
+
+        asyncio.get_event_loop().run_until_complete(coordinator._cover_manager.async_check_heat_protection(now))
+
+        hass.services.async_call.assert_called_once()
+        call = hass.services.async_call.call_args
+        assert call.args[0] == "button"
+        assert call.args[1] == "press"
 
     def test_no_call_when_below_threshold(self):
         """cover.stop_cover is NOT called when temperature is below threshold."""
@@ -969,6 +1063,106 @@ class TestCoverHeatControl:
         )
 
         hass.services.async_call.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# is_heat_protection_active (binary sensor logic)
+# ---------------------------------------------------------------------------
+
+class TestIsHeatProtectionActive:
+    """Verify CoverManager.is_heat_protection_active returns correct bool/None values."""
+
+    def _make_entry(self, threshold=30.0, time_start="08:00:00", time_end="20:00:00"):
+        from custom_components.homeshift.const import (
+            CONF_COVER_ENTITIES, CONF_COVER_TEMP_SENSOR, CONF_COVER_TEMP_THRESHOLD,
+            CONF_COVER_TIME_START, CONF_COVER_TIME_END,
+        )
+        entry = make_mock_entry()
+        entry.options = {
+            CONF_COVER_ENTITIES: ["cover.volet_salon"],
+            CONF_COVER_TEMP_SENSOR: "sensor.temp",
+            CONF_COVER_TEMP_THRESHOLD: threshold,
+            CONF_COVER_TIME_START: time_start,
+            CONF_COVER_TIME_END: time_end,
+        }
+        return entry
+
+    def _temp_state(self, temperature: float):
+        state = MagicMock()
+        state.state = str(temperature)
+        return state
+
+    def test_returns_true_when_hot_and_in_window(self):
+        """Returns True when temperature > threshold inside the window."""
+        hass = make_mock_hass()
+        hass.states.get.side_effect = lambda eid: self._temp_state(35.0) if eid == "sensor.temp" else make_calendar_state(state="off")
+        coordinator = HomeShiftCoordinator(hass, self._make_entry())
+
+        result = coordinator._cover_manager.is_heat_protection_active(datetime(2026, 7, 1, 14, 0, 0))
+
+        assert result is True
+
+    def test_returns_false_when_cool_and_in_window(self):
+        """Returns False when temperature <= threshold (within window)."""
+        hass = make_mock_hass()
+        hass.states.get.side_effect = lambda eid: self._temp_state(25.0) if eid == "sensor.temp" else make_calendar_state(state="off")
+        coordinator = HomeShiftCoordinator(hass, self._make_entry())
+
+        result = coordinator._cover_manager.is_heat_protection_active(datetime(2026, 7, 1, 14, 0, 0))
+
+        assert result is False
+
+    def test_returns_false_when_outside_window(self):
+        """Returns False when current time is outside the active window."""
+        hass = make_mock_hass()
+        hass.states.get.side_effect = lambda eid: self._temp_state(40.0) if eid == "sensor.temp" else make_calendar_state(state="off")
+        coordinator = HomeShiftCoordinator(hass, self._make_entry(time_start="08:00:00", time_end="18:00:00"))
+
+        result = coordinator._cover_manager.is_heat_protection_active(datetime(2026, 7, 1, 19, 0, 0))
+
+        assert result is False
+
+    def test_returns_none_when_not_configured(self):
+        """Returns None when no cover entities or temp sensor configured."""
+        hass = make_mock_hass()
+        hass.states.get.return_value = make_calendar_state(state="off")
+        coordinator = HomeShiftCoordinator(hass, make_mock_entry())
+
+        result = coordinator._cover_manager.is_heat_protection_active(datetime(2026, 7, 1, 14, 0, 0))
+
+        assert result is None
+
+    def test_returns_none_when_sensor_unavailable(self):
+        """Returns None when the temperature sensor is not found in HA state."""
+        hass = make_mock_hass()
+        hass.states.get.return_value = None
+        coordinator = HomeShiftCoordinator(hass, self._make_entry())
+
+        result = coordinator._cover_manager.is_heat_protection_active(datetime(2026, 7, 1, 14, 0, 0))
+
+        assert result is None
+
+    def test_returns_none_when_sensor_has_invalid_state(self):
+        """Returns None when temperature sensor state is not a number."""
+        hass = make_mock_hass()
+        bad_state = MagicMock()
+        bad_state.state = "unavailable"
+        hass.states.get.side_effect = lambda eid: bad_state if eid == "sensor.temp" else make_calendar_state(state="off")
+        coordinator = HomeShiftCoordinator(hass, self._make_entry())
+
+        result = coordinator._cover_manager.is_heat_protection_active(datetime(2026, 7, 1, 14, 0, 0))
+
+        assert result is None
+
+    def test_exactly_at_threshold_returns_false(self):
+        """Returns False when temperature == threshold (not strictly above)."""
+        hass = make_mock_hass()
+        hass.states.get.side_effect = lambda eid: self._temp_state(30.0) if eid == "sensor.temp" else make_calendar_state(state="off")
+        coordinator = HomeShiftCoordinator(hass, self._make_entry(threshold=30.0))
+
+        result = coordinator._cover_manager.is_heat_protection_active(datetime(2026, 7, 1, 14, 0, 0))
+
+        assert result is False
 
 
 # ---------------------------------------------------------------------------

@@ -39,10 +39,13 @@ CONF_COVER_TEMP_SENSOR = "cover_temp_sensor"
 CONF_COVER_TEMP_THRESHOLD = "cover_temp_threshold"
 CONF_COVER_TIME_START = "cover_time_start"
 CONF_COVER_TIME_END = "cover_time_end"
+CONF_COVER_ACTION = "cover_action"
+CONF_COVER_MY_BUTTON = "cover_my_button"
 
 DEFAULT_COVER_TEMP_THRESHOLD = 30.0
 DEFAULT_COVER_TIME_START = "08:35:00"
 DEFAULT_COVER_TIME_END = "18:00:00"
+DEFAULT_COVER_ACTION = "close_cover"
 
 # Sunrise-based scheduler adjustment
 CONF_SUNRISE_SCHEDULERS = "sunrise_schedulers"
@@ -59,6 +62,7 @@ SENSOR_NEXT_SCAN = "next_scan"
 SENSOR_NEXT_MODE = "next_mode"
 SENSOR_NEXT_MODE_AT = "next_mode_at"
 SENSOR_COVER_OPEN_TIME = "cover_open_time"
+BINARY_SENSOR_COVER_HEAT_ACTIVE = "cover_heat_active"
 
 # Sentinel value used as today_type when no calendar event is active
 EVENT_NONE = "None"

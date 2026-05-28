@@ -438,6 +438,13 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
         """Today's computed cover opening time (HH:MM), or None if sunrise adjustment is not configured."""
         return self._cover_manager.cover_open_time
 
+    def is_heat_protection_active(self, now: datetime) -> bool | None:
+        """Return whether cover heat protection conditions are currently met.
+
+        Delegates to CoverManager. Returns None when not configured or sensor unavailable.
+        """
+        return self._cover_manager.is_heat_protection_active(now)
+
     def set_override_duration_minutes(self, minutes: int) -> None:
         """Update the override duration (called by the number entity)."""
         self._override_duration_minutes = max(0, int(minutes))

@@ -20,9 +20,12 @@ from .const import (
     CONF_COVER_TEMP_THRESHOLD,
     CONF_COVER_TIME_START,
     CONF_COVER_TIME_END,
+    CONF_COVER_ACTION,
+    CONF_COVER_MY_BUTTON,
     DEFAULT_COVER_TEMP_THRESHOLD,
     DEFAULT_COVER_TIME_START,
     DEFAULT_COVER_TIME_END,
+    DEFAULT_COVER_ACTION,
     CONF_SUNRISE_SCHEDULERS,
     CONF_SUNRISE_EARLIEST,
     DEFAULT_SUNRISE_EARLIEST,
@@ -81,19 +84,80 @@ class CoverManager:
         return async_track_state_change_event(self._hass, [temp_sensor], _on_temp_change)
 
     async def async_check_heat_protection(self, now: datetime) -> None:
-        """Close covers when temperature exceeds the threshold during the configured window.
+        """Run the configured cover action when temperature exceeds the threshold in the window.
 
         Reads CONF_COVER_ENTITIES, CONF_COVER_TEMP_SENSOR, CONF_COVER_TEMP_THRESHOLD,
-        CONF_COVER_TIME_START, and CONF_COVER_TIME_END from the config entry.
+        CONF_COVER_TIME_START, CONF_COVER_TIME_END, and CONF_COVER_ACTION from the
+        config entry.
         When the current time falls inside the window and the temperature is above
-        the threshold, it calls cover.stop_cover on all configured cover entities,
-        which closes Somfy covers to their pre-recorded favourite position.
+        the threshold, it calls the configured cover service (default: close_cover)
+        on all configured cover entities.
         """
+
         cover_entities = self._config.get(CONF_COVER_ENTITIES, [])
         temp_sensor = self._config.get(CONF_COVER_TEMP_SENSOR, "")
 
         if not cover_entities or not temp_sensor:
             return
+
+        active = self.is_heat_protection_active(now)
+        if not active:
+            return
+
+        temp_state = self._hass.states.get(temp_sensor)
+        temperature = float(temp_state.state) if temp_state else 0.0
+        threshold = float(self._config.get(CONF_COVER_TEMP_THRESHOLD, DEFAULT_COVER_TEMP_THRESHOLD))
+        my_button = self._config.get(CONF_COVER_MY_BUTTON, "")
+
+        if my_button:
+            _LOGGER.info(
+                "Cover heat protection: temperature=%.1f > threshold=%.1f, pressing My button %s",
+                temperature,
+                threshold,
+                my_button,
+            )
+            await self._hass.services.async_call(
+                "button",
+                "press",
+                {"entity_id": my_button},
+                blocking=False,
+            )
+        else:
+            configured_cover_action = self._config.get(CONF_COVER_ACTION, DEFAULT_COVER_ACTION)
+            allowed_cover_actions = {"close_cover", "stop_cover"}
+            cover_action = configured_cover_action if configured_cover_action in allowed_cover_actions else DEFAULT_COVER_ACTION
+            if configured_cover_action not in allowed_cover_actions:
+                _LOGGER.warning(
+                    "Cover heat protection: invalid cover action '%s', falling back to '%s'",
+                    configured_cover_action,
+                    DEFAULT_COVER_ACTION,
+                )
+            _LOGGER.info(
+                "Cover heat protection: temperature=%.1f > threshold=%.1f, action=%s on covers %s",
+                temperature,
+                threshold,
+                cover_action,
+                cover_entities,
+            )
+            await self._hass.services.async_call(
+                "cover",
+                cover_action,
+                {"entity_id": cover_entities},
+                blocking=False,
+            )
+
+    def is_heat_protection_active(self, now: datetime) -> bool | None:
+        """Return whether heat protection conditions are currently met.
+
+        Returns True  when: within time window AND temperature > threshold.
+        Returns False when: outside time window, or within window but temp <= threshold.
+        Returns None  when: not configured, sensor unavailable, or unparseable values.
+        """
+        cover_entities = self._config.get(CONF_COVER_ENTITIES, [])
+        temp_sensor = self._config.get(CONF_COVER_TEMP_SENSOR, "")
+
+        if not cover_entities or not temp_sensor:
+            return None
 
         time_start_str = self._config.get(CONF_COVER_TIME_START, DEFAULT_COVER_TIME_START)
         time_end_str = self._config.get(CONF_COVER_TIME_END, DEFAULT_COVER_TIME_END)
@@ -101,48 +165,23 @@ class CoverManager:
         time_end = _parse_time_str(time_end_str)
 
         if time_start is None or time_end is None:
-            _LOGGER.warning(
-                "Cover heat protection: invalid time window '%s' – '%s'",
-                time_start_str,
-                time_end_str,
-            )
-            return
+            return None
 
         now_time = now.time()
         if not time_start <= now_time <= time_end:
-            return
+            return False
 
         temp_state = self._hass.states.get(temp_sensor)
         if temp_state is None:
-            _LOGGER.debug("Cover heat protection: sensor '%s' not found", temp_sensor)
-            return
+            return None
 
         try:
             temperature = float(temp_state.state)
         except (ValueError, TypeError):
-            _LOGGER.debug(
-                "Cover heat protection: cannot read temperature from '%s' (state=%s)",
-                temp_sensor,
-                temp_state.state,
-            )
-            return
+            return None
 
         threshold = float(self._config.get(CONF_COVER_TEMP_THRESHOLD, DEFAULT_COVER_TEMP_THRESHOLD))
-
-        if temperature > threshold:
-            _LOGGER.info(
-                "Cover heat protection: temperature=%.1f > threshold=%.1f, "
-                "closing covers %s",
-                temperature,
-                threshold,
-                cover_entities,
-            )
-            await self._hass.services.async_call(
-                "cover",
-                "stop_cover",
-                {"entity_id": cover_entities},
-                blocking=False,
-            )
+        return temperature > threshold
 
     async def async_adjust_sunrise_schedulers(self) -> None:
         """Adjust scheduler timeslots based on today's sunrise time.

@@ -60,11 +60,26 @@ CONF_COVER_EVENING_REOPEN_TEMP = "cover_evening_reopen_temp"
 
 DEFAULT_COVER_EVENING_REOPEN_TEMP = 26.0
 
-# Sunrise-based scheduler adjustment
-CONF_SUNRISE_SCHEDULERS = "sunrise_schedulers"
+# Earliest sunrise-based opening time — used by the Daily Cover Schedule's
+# 'sunrise' open-time value (floors sunrise so covers never open too early).
 CONF_SUNRISE_EARLIEST = "sunrise_earliest"
 
 DEFAULT_SUNRISE_EARLIEST = "07:00:00"
+
+# Daily cover schedule — native open/close of a cover group (e.g. a whole-house
+# volet group), replacing a pair of external Scheduler-integration entities.
+# Kept separate from CONF_COVER_ENTITIES (heat protection), which targets a
+# single cover — the daily schedule is meant for a group entity instead.
+CONF_DAILY_COVER_ENTITIES = "daily_cover_entities"
+# CONF_DAILY_COVER_OPEN_TIME_MAP format: "ModeKey:Value, ..." — Value is either
+# 'sunrise' (floored at CONF_SUNRISE_EARLIEST), 'skip' (never opens
+# automatically that day), or a fixed 'HH:MM' time. A mode key missing from
+# the map falls back to DEFAULT_DAILY_COVER_OPEN_TIME.
+CONF_DAILY_COVER_OPEN_TIME_MAP = "daily_cover_open_time_map"
+CONF_DAILY_COVER_CLOSE_OFFSET_MINUTES = "daily_cover_close_offset_minutes"
+
+DEFAULT_DAILY_COVER_OPEN_TIME = "08:30"
+DEFAULT_DAILY_COVER_CLOSE_OFFSET_MINUTES = 10
 
 # Entity IDs
 SELECT_DAY_MODE = "day_mode"
@@ -75,6 +90,7 @@ SENSOR_NEXT_SCAN = "next_scan"
 SENSOR_NEXT_MODE = "next_mode"
 SENSOR_NEXT_MODE_AT = "next_mode_at"
 SENSOR_COVER_OPEN_TIME = "cover_open_time"
+SENSOR_COVER_CLOSE_TIME = "cover_close_time"
 BINARY_SENSOR_COVER_HEAT_ACTIVE = "cover_heat_active"
 
 # Sentinel value used as today_type when no calendar event is active

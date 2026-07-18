@@ -24,6 +24,7 @@ Automatic day-mode and thermostat-mode management for Home Assistant, driven by 
     - [`sensor.next_mode`](#sensornext_mode)
     - [`sensor.next_mode_at`](#sensornext_mode_at)
     - [`sensor.cover_open_time`](#sensorcover_open_time)
+    - [`sensor.cover_close_time`](#sensorcover_close_time)
   - [🛠️ Services](#️-services)
     - [`homeshift.refresh_schedulers`](#homeshiftrefresh_schedulers)
     - [`homeshift.sync_calendar`](#homeshiftsync_calendar)
@@ -33,7 +34,7 @@ Automatic day-mode and thermostat-mode management for Home Assistant, driven by 
     - [Early Switch](#early-switch)
   - [🗓️ Scheduler Integration](#️-scheduler-integration)
     - [Thermostat Tags](#thermostat-tags)
-  - [🌅 Sunrise Scheduler Adjustment](#-sunrise-scheduler-adjustment)
+  - [🗓️ Daily Cover Schedule](#️-daily-cover-schedule)
   - [☀️ Cover Heat Protection](#️-cover-heat-protection)
     - [Reactive Close](#reactive-close)
     - [Proactive Forecast-Based Close](#proactive-forecast-based-close)
@@ -147,11 +148,18 @@ Shows when the next automatic mode change is expected to occur (taking early_swi
 - **Unit:** ISO 8601 datetime
 
 ### `sensor.cover_open_time`
-Shows the cover opening time computed for today by the Sunrise Scheduler Adjustment feature.
+Shows the cover opening time computed for today by the Daily Cover Schedule feature.
 
 - **Type:** Sensor (text)
-- **Value:** `HH:MM` string (e.g. `07:45`), or `unknown` if the feature is not configured or has not run yet.
-- **Only registered** when at least one scheduler entity is listed in **Sunrise Schedulers**.
+- **Value:** `HH:MM` string (e.g. `07:45`), or `unknown` if not configured or has not run yet.
+- **Only registered** when **Daily Cover Entities** is configured.
+
+### `sensor.cover_close_time`
+Shows the daily cover closing time computed for today (today's sunset + offset) by the Daily Cover Schedule feature.
+
+- **Type:** Sensor (text)
+- **Value:** `HH:MM` string (e.g. `21:40`), or `unknown` if not configured or not yet computed.
+- **Only registered** when **Daily Cover Entities** is configured.
 
 ---
 
@@ -193,8 +201,10 @@ All parameters can be changed at any time via **Settings → Devices & Services 
 | **Weather Entity**        | —                               | Weather entity with daily forecasts, used for the proactive close (optional) |
 | **Forecast Threshold**    | `28 °C`                         | Forecast daily high above which covers close proactively      |
 | **Evening Reopen Temperature** | `26 °C`                     | Once closed by this automation, covers reopen after Heat Window End when the sensor drops to/below this value |
-| **Sunrise Schedulers**    | —                               | Scheduler switch entities whose opening time tracks sunrise   |
-| **Earliest Open Time**    | `07:10`                         | Minimum opening time even when sunrise is earlier             |
+| **Daily Cover Entities**  | —                               | Cover entity/group opened and closed daily (optional, separate from Cover Entities above) |
+| **Open Time — *(per day mode)*** | `08:30`                  | One field per day mode: `sunrise`, `skip`, or a custom `HH:MM` value |
+| **Earliest Open Time**    | `07:00`                         | Floor time used when a day mode's Open Time is `sunrise`      |
+| **Close Offset After Sunset** | `10 min`                    | Covers close this many minutes after sunset, every day, for every mode |
 
 ---
 
@@ -267,21 +277,24 @@ When `thermostat_mode` is set to **Off**, HomeShift will force-disable all switc
 
 ---
 
-## 🌅 Sunrise Scheduler Adjustment
+## 🗓️ Daily Cover Schedule
 
-HomeShift can adjust the opening time of scheduler switches every morning based on today's actual sunrise time.
+HomeShift can natively open and close a cover (typically a cover group) every day, without depending on any Scheduler-integration entity. This is independent from Cover Heat Protection below (which targets a single, unitary cover) — **Daily Cover Entities** is its own entity list, so a whole-house cover group can follow the daily open/close schedule while a single south-facing cover stays under heat-protection's control.
 
-Each day shortly after midnight, HomeShift computes:
-```
-target_time = max(sunrise_local, earliest_open_time)
-```
-and calls `scheduler.edit` on each configured scheduler entity to update its first timeslot start time.
+Once per day, shortly after midnight, HomeShift computes:
+- **Open time** — resolved per day mode. Each configured day mode has its own **Open Time** field, set to one of:
+  - `sunrise` — sunrise, floored at **Earliest Open Time** (e.g. never before `07:00`)
+  - `skip` — no automatic opening for that mode (covers stay as they are)
+  - a custom `HH:MM` value — a fixed clock time
+  
+  Day modes sharing the same value effectively form a batch (e.g. both `Work` and `Remote` set to `sunrise`). A day mode with no value configured falls back to `08:30`. There's no separate "skip modes" list — set a mode's Open Time to `skip` directly.
+- **Close time** — today's sunset plus **Close Offset After Sunset**, always, for every day mode (closing is not mode-dependent)
 
-**Configuration:**
-- **Sunrise Schedulers** — list of `switch.schedule_*` entities to update
-- **Earliest Open Time** — floor time so covers never open before a fixed hour (e.g. `07:10`)
+Then, on every coordinator poll, it opens the covers once now reaches the open time, and closes them once now reaches the close time — each action firing at most once per calendar day. Timing resolution matches the poll interval (5 minutes by default), not the exact minute.
 
-**`sensor.cover_open_time`** reflects the time that was applied this morning, so you can display it on your dashboard.
+**`sensor.cover_open_time`** and **`sensor.cover_close_time`** reflect today's computed times, so you can display them on your dashboard.
+
+> **Migrating from Scheduler-integration volet entities:** if you previously used two Scheduler entities (a fixed/sunrise-based "open" and a sunset-offset "close") purely to drive covers, you can disable/delete them once Daily Cover Schedule is configured with the same times — HomeShift no longer needs the Scheduler integration for covers at all.
 
 ---
 
@@ -315,7 +328,7 @@ The reopen only ever applies to a cover this automation itself closed that day; 
 
 ### State Persistence
 
-Which covers were closed today, when the forecast was last checked, and whether the evening reopen already ran are all persisted to storage, so a Home Assistant restart mid-day doesn't lose track of the day's state (e.g. it won't skip the evening reopen just because HA restarted in the afternoon).
+Which covers were closed today, when the forecast was last checked, and whether the evening reopen already ran are all persisted to storage, so a Home Assistant restart mid-day doesn't lose track of the day's state (e.g. it won't skip the evening reopen just because HA restarted in the afternoon). The same storage also tracks whether today's Daily Cover Schedule open/close actions have already run, for the same reason.
 
 ---
 
@@ -328,7 +341,8 @@ Which covers were closed today, when the forecast was last checked, and whether 
 | Half-day event support                      |   ✅   | See [Half-Day Events](#half-day-events)                            |
 | Early switch (pre-activation)               |   ✅   | See [Early Switch](#early-switch)                                  |
 | Manual override with timeout                |   ✅   | `number.override_duration`                                         |
-| Sunrise-based scheduler opening time         |   ✅   | See [Sunrise Scheduler Adjustment](#-sunrise-scheduler-adjustment)  |
+| Native daily cover open/close (no Scheduler entity needed) | ✅ | See [Daily Cover Schedule](#️-daily-cover-schedule)                |
+| Daily cover schedule state survives HA restart |  ✅  | Persisted alongside the heat-protection cover state                |
 | Cover reactive heat close                   |   ✅   | See [Reactive Close](#reactive-close)                              |
 | Cover proactive forecast-based close        |   ✅   | See [Proactive Forecast-Based Close](#proactive-forecast-based-close) |
 | Cover automatic evening reopen              |   ✅   | See [Automatic Evening Reopen](#automatic-evening-reopen)          |

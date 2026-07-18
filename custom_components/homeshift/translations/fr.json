@@ -9,7 +9,7 @@
           "mapping": "Mapping des modes",
           "schedulers": "Schedulers",
           "covers": "Contrôle des volets (chaleur)",
-          "sunrise_schedulers": "Ajustement des schedulers au lever du soleil",
+          "daily_cover_schedule": "Planning quotidien des volets",
           "finalize": "Enregistrer la configuration"
         }
       },
@@ -99,16 +99,26 @@
           "cover_evening_reopen_temp": "Une fois les volets fermés par cette automatisation, ils se rouvrent automatiquement après la fin de la plage horaire dès que le capteur extérieur redescend à cette température ou en dessous."
         }
       },
-      "sunrise_schedulers": {
-        "title": "Ajustement des schedulers au lever du soleil",
-        "description": "Ajuster quotidiennement l'heure d'ouverture des schedulers en fonction du lever du soleil, en respectant une heure minimum configurable.",
+      "daily_cover_schedule": {
+        "title": "Planning quotidien des volets",
+        "description": "Ouvre et ferme un groupe de volets tous les jours nativement, sans passer par une entité Scheduler séparée. Reste indépendant du Contrôle des volets (chaleur), qui cible un volet unitaire. Pour chaque mode de journée ci-dessous, définissez 'sunrise', 'skip', ou une heure personnalisée 'HH:MM' — les modes partageant la même valeur forment un lot. La fermeture a toujours lieu une fois par jour, pour tous les modes, au coucher du soleil + le décalage ci-dessous.",
         "data": {
-          "sunrise_schedulers": "Schedulers à ajuster",
-          "sunrise_earliest": "Heure d'ouverture minimale"
+          "daily_cover_entities": "Entités volets (planning quotidien)",
+          "sunrise_earliest": "Heure d'ouverture minimale",
+          "daily_cover_close_offset_minutes": "Décalage de fermeture après le coucher du soleil (minutes)",
+          "daily_open_time_home": "Heure d'ouverture — Maison",
+          "daily_open_time_work": "Heure d'ouverture — Travail",
+          "daily_open_time_remote": "Heure d'ouverture — Télétravail",
+          "daily_open_time_away": "Heure d'ouverture — Absence"
         },
         "data_description": {
-          "sunrise_schedulers": "Sélectionnez les schedulers dont le premier créneau sera ajusté chaque jour.",
-          "sunrise_earliest": "L'heure d'ouverture sera la plus tardive entre le lever du soleil et cette valeur."
+          "daily_cover_entities": "Entités volets (par exemple un groupe) à ouvrir et fermer selon le planning ci-dessous.",
+          "sunrise_earliest": "L'heure d'ouverture au lever du soleil sera la plus tardive entre le lever réel et cette valeur.",
+          "daily_cover_close_offset_minutes": "Les volets se ferment ce nombre de minutes après le coucher du soleil, tous les jours, quel que soit le mode.",
+          "daily_open_time_home": "Heure d'ouverture pour le mode Maison : 'sunrise', 'skip', ou une valeur personnalisée 'HH:MM'.",
+          "daily_open_time_work": "Heure d'ouverture pour le mode Travail : 'sunrise', 'skip', ou une valeur personnalisée 'HH:MM'.",
+          "daily_open_time_remote": "Heure d'ouverture pour le mode Télétravail : 'sunrise', 'skip', ou une valeur personnalisée 'HH:MM'.",
+          "daily_open_time_away": "Heure d'ouverture pour le mode Absence : 'sunrise', 'skip', ou une valeur personnalisée 'HH:MM'."
         }
       }
     },
@@ -129,7 +139,7 @@
           "mapping": "Mapping des modes",
           "schedulers": "Schedulers",
           "covers": "Contrôle des volets (chaleur)",
-          "sunrise_schedulers": "Ajustement des schedulers au lever du soleil",
+          "daily_cover_schedule": "Planning quotidien des volets",
           "finalize": "Enregistrer la configuration"
         }
       },
@@ -225,16 +235,26 @@
           "cover_evening_reopen_temp": "Une fois les volets fermés par cette automatisation, ils se rouvrent automatiquement après la fin de la plage horaire dès que le capteur extérieur redescend à cette température ou en dessous."
         }
       },
-      "sunrise_schedulers": {
-        "title": "Ajustement des schedulers au lever du soleil",
-        "description": "Ajuster quotidiennement l'heure d'ouverture des schedulers en fonction du lever du soleil, en respectant une heure minimum configurable.",
+      "daily_cover_schedule": {
+        "title": "Planning quotidien des volets",
+        "description": "Ouvre et ferme un groupe de volets tous les jours nativement, sans passer par une entité Scheduler séparée. Reste indépendant du Contrôle des volets (chaleur), qui cible un volet unitaire. Pour chaque mode de journée ci-dessous, définissez 'sunrise', 'skip', ou une heure personnalisée 'HH:MM' — les modes partageant la même valeur forment un lot. La fermeture a toujours lieu une fois par jour, pour tous les modes, au coucher du soleil + le décalage ci-dessous.",
         "data": {
-          "sunrise_schedulers": "Schedulers à ajuster",
-          "sunrise_earliest": "Heure d'ouverture minimale"
+          "daily_cover_entities": "Entités volets (planning quotidien)",
+          "sunrise_earliest": "Heure d'ouverture minimale",
+          "daily_cover_close_offset_minutes": "Décalage de fermeture après le coucher du soleil (minutes)",
+          "daily_open_time_home": "Heure d'ouverture — Maison",
+          "daily_open_time_work": "Heure d'ouverture — Travail",
+          "daily_open_time_remote": "Heure d'ouverture — Télétravail",
+          "daily_open_time_away": "Heure d'ouverture — Absence"
         },
         "data_description": {
-          "sunrise_schedulers": "Sélectionnez les schedulers dont le premier créneau sera ajusté chaque jour.",
-          "sunrise_earliest": "L'heure d'ouverture sera la plus tardive entre le lever du soleil et cette valeur."
+          "daily_cover_entities": "Entités volets (par exemple un groupe) à ouvrir et fermer selon le planning ci-dessous.",
+          "sunrise_earliest": "L'heure d'ouverture au lever du soleil sera la plus tardive entre le lever réel et cette valeur.",
+          "daily_cover_close_offset_minutes": "Les volets se ferment ce nombre de minutes après le coucher du soleil, tous les jours, quel que soit le mode.",
+          "daily_open_time_home": "Heure d'ouverture pour le mode Maison : 'sunrise', 'skip', ou une valeur personnalisée 'HH:MM'.",
+          "daily_open_time_work": "Heure d'ouverture pour le mode Travail : 'sunrise', 'skip', ou une valeur personnalisée 'HH:MM'.",
+          "daily_open_time_remote": "Heure d'ouverture pour le mode Télétravail : 'sunrise', 'skip', ou une valeur personnalisée 'HH:MM'.",
+          "daily_open_time_away": "Heure d'ouverture pour le mode Absence : 'sunrise', 'skip', ou une valeur personnalisée 'HH:MM'."
         }
       }
     }
@@ -262,6 +282,9 @@
       },
       "next_mode_at": {
         "name": "Prochain changement à"
+      },
+      "cover_close_time": {
+        "name": "Heure de fermeture des volets"
       }
     },
     "binary_sensor": {

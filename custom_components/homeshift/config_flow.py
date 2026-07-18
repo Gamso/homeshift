@@ -46,7 +46,11 @@ from .const import (
     DEFAULT_COVER_FORECAST_THRESHOLD,
     CONF_COVER_EVENING_REOPEN_TEMP,
     DEFAULT_COVER_EVENING_REOPEN_TEMP,
-    CONF_SUNRISE_SCHEDULERS,
+    CONF_DAILY_COVER_ENTITIES,
+    CONF_DAILY_COVER_OPEN_TIME_MAP,
+    CONF_DAILY_COVER_CLOSE_OFFSET_MINUTES,
+    DEFAULT_DAILY_COVER_OPEN_TIME,
+    DEFAULT_DAILY_COVER_CLOSE_OFFSET_MINUTES,
     CONF_SUNRISE_EARLIEST,
     DEFAULT_SUNRISE_EARLIEST,
     LOCALIZED_DEFAULTS,
@@ -369,21 +373,74 @@ def _covers_schema(hass, data: dict[str, Any]) -> vol.Schema:
     )
 
 
-def _sunrise_schedulers_schema(hass, data: dict[str, Any]) -> vol.Schema:
-    """Build the sunrise-scheduler adjustment form schema."""
-    sel = _scheduler_selector(hass)
-    return vol.Schema(
-        {
-            vol.Optional(
-                CONF_SUNRISE_SCHEDULERS,
-                default=data.get(CONF_SUNRISE_SCHEDULERS, []),
-            ): sel,
-            vol.Optional(
-                CONF_SUNRISE_EARLIEST,
-                default=data.get(CONF_SUNRISE_EARLIEST, DEFAULT_SUNRISE_EARLIEST),
-            ): selector.TimeSelector(),
-        }
+def _daily_open_time_fields(data: dict[str, Any]) -> dict:
+    """Return one open-time field per day mode key (key = label).
+
+    Each field accepts 'sunrise', 'skip', or a custom 'HH:MM' value — letting
+    every day mode be assigned its own opening behavior independently, so
+    modes that should share a time are simply set to the same value.
+    """
+    day_mode_map = _parse_day_mode_map(data.get(CONF_DAY_MODE_MAP, DEFAULT_DAY_MODE_MAP))
+    current_map = _parse_day_mode_map(data.get(CONF_DAILY_COVER_OPEN_TIME_MAP, ""))
+    time_or_special_selector = selector.SelectSelector(
+        selector.SelectSelectorConfig(
+            options=[
+                {"value": "sunrise", "label": "Sunrise (floored at Earliest Open Time)"},
+                {"value": "skip", "label": "Skip (do not open automatically)"},
+            ],
+            custom_value=True,
+            mode=selector.SelectSelectorMode.DROPDOWN,
+        )
     )
+    fields: dict = {}
+    for key in day_mode_map:
+        field_name = f"daily_open_time_{key}"
+        fields[
+            vol.Optional(
+                field_name,
+                default=current_map.get(key, DEFAULT_DAILY_COVER_OPEN_TIME),
+            )
+        ] = time_or_special_selector
+    return fields
+
+
+def _rebuild_daily_open_time_map(user_input: dict[str, Any], data: dict[str, Any]) -> str:
+    """Reconstruct CONF_DAILY_COVER_OPEN_TIME_MAP from individual per-mode fields."""
+    day_mode_map = _parse_day_mode_map(data.get(CONF_DAY_MODE_MAP, DEFAULT_DAY_MODE_MAP))
+    current_map = _parse_day_mode_map(data.get(CONF_DAILY_COVER_OPEN_TIME_MAP, ""))
+    pairs: list[str] = []
+    for key in day_mode_map:
+        field_name = f"daily_open_time_{key}"
+        value = user_input.pop(field_name, current_map.get(key, DEFAULT_DAILY_COVER_OPEN_TIME))
+        pairs.append(f"{key}:{value}")
+    return ", ".join(pairs)
+
+
+def _daily_cover_schema(hass, data: dict[str, Any]) -> vol.Schema:
+    """Build the native daily cover open/close schedule form schema."""
+    schema_dict: dict = {
+        vol.Optional(
+            CONF_DAILY_COVER_ENTITIES,
+            default=data.get(CONF_DAILY_COVER_ENTITIES, []),
+        ): selector.EntitySelector(selector.EntitySelectorConfig(domain="cover", multiple=True)),
+        vol.Optional(
+            CONF_SUNRISE_EARLIEST,
+            default=data.get(CONF_SUNRISE_EARLIEST, DEFAULT_SUNRISE_EARLIEST),
+        ): selector.TimeSelector(),
+        vol.Optional(
+            CONF_DAILY_COVER_CLOSE_OFFSET_MINUTES,
+            default=data.get(CONF_DAILY_COVER_CLOSE_OFFSET_MINUTES, DEFAULT_DAILY_COVER_CLOSE_OFFSET_MINUTES),
+        ): selector.NumberSelector(
+            selector.NumberSelectorConfig(
+                min=0,
+                max=120,
+                step=1,
+                mode=selector.NumberSelectorMode.BOX,
+            )
+        ),
+    }
+    schema_dict.update(_daily_open_time_fields(data))
+    return vol.Schema(schema_dict)
 
 
 # ---------------------------------------------------------------------------
@@ -430,7 +487,7 @@ class HomeShiftConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         _user_input: dict[str, Any] | None = None,
     ) -> config_entries.ConfigFlowResult:
         """Show the configuration menu."""
-        menu_options = ["calendars", "mapping", "schedulers", "covers", "sunrise_schedulers"]
+        menu_options = ["calendars", "mapping", "schedulers", "covers", "daily_cover_schedule"]
         if self._is_config_complete():
             menu_options.append("finalize")
         return self.async_show_menu(step_id="menu", menu_options=menu_options)
@@ -512,26 +569,23 @@ class HomeShiftConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             data_schema=_covers_schema(self.hass, self._effective_data()),
         )
 
-    # -- sunrise schedulers ------------------------------------------------
+    # -- daily cover schedule ------------------------------------------------
 
-    async def async_step_sunrise_schedulers(
+    async def async_step_daily_cover_schedule(
         self,
         user_input: dict[str, Any] | None = None,
     ) -> config_entries.ConfigFlowResult:
-        """Configure sunrise-based scheduler adjustment."""
+        """Configure the native daily cover open/close schedule."""
         if user_input is not None:
-            value = user_input.get(CONF_SUNRISE_SCHEDULERS, [])
-            if isinstance(value, str):
-                value = [value] if value else []
-            self._data[CONF_SUNRISE_SCHEDULERS] = value
-            self._data[CONF_SUNRISE_EARLIEST] = user_input.get(
-                CONF_SUNRISE_EARLIEST, DEFAULT_SUNRISE_EARLIEST
+            user_input[CONF_DAILY_COVER_OPEN_TIME_MAP] = _rebuild_daily_open_time_map(
+                user_input, self._effective_data()
             )
+            self._data.update(user_input)
             return await self.async_step_menu()
 
         return self.async_show_form(
-            step_id="sunrise_schedulers",
-            data_schema=_sunrise_schedulers_schema(self.hass, self._effective_data()),
+            step_id="daily_cover_schedule",
+            data_schema=_daily_cover_schema(self.hass, self._effective_data()),
         )
 
     # -- finalize ----------------------------------------------------------
@@ -593,7 +647,7 @@ class HomeShiftOptionsFlow(config_entries.OptionsFlow):
         _user_input: dict[str, Any] | None = None,
     ) -> config_entries.ConfigFlowResult:
         """Show the options menu."""
-        menu_options = ["calendars", "mapping", "schedulers", "covers", "sunrise_schedulers"]
+        menu_options = ["calendars", "mapping", "schedulers", "covers", "daily_cover_schedule"]
         if self._is_config_complete():
             menu_options.append("finalize")
         return self.async_show_menu(step_id="menu", menu_options=menu_options)
@@ -675,26 +729,23 @@ class HomeShiftOptionsFlow(config_entries.OptionsFlow):
             data_schema=_covers_schema(self.hass, self._effective_data()),
         )
 
-    # -- sunrise schedulers ------------------------------------------------
+    # -- daily cover schedule ------------------------------------------------
 
-    async def async_step_sunrise_schedulers(
+    async def async_step_daily_cover_schedule(
         self,
         user_input: dict[str, Any] | None = None,
     ) -> config_entries.ConfigFlowResult:
-        """Configure sunrise-based scheduler adjustment."""
+        """Configure the native daily cover open/close schedule."""
         if user_input is not None:
-            value = user_input.get(CONF_SUNRISE_SCHEDULERS, [])
-            if isinstance(value, str):
-                value = [value] if value else []
-            self._data[CONF_SUNRISE_SCHEDULERS] = value
-            self._data[CONF_SUNRISE_EARLIEST] = user_input.get(
-                CONF_SUNRISE_EARLIEST, DEFAULT_SUNRISE_EARLIEST
+            user_input[CONF_DAILY_COVER_OPEN_TIME_MAP] = _rebuild_daily_open_time_map(
+                user_input, self._effective_data()
             )
+            self._data.update(user_input)
             return await self.async_step_menu()
 
         return self.async_show_form(
-            step_id="sunrise_schedulers",
-            data_schema=_sunrise_schedulers_schema(self.hass, self._effective_data()),
+            step_id="daily_cover_schedule",
+            data_schema=_daily_cover_schema(self.hass, self._effective_data()),
         )
 
     # -- finalize ----------------------------------------------------------

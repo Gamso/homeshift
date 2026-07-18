@@ -162,7 +162,7 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
         # Persistent storage — used to restore modes after HA restart
         self._store: Store = Store(hass, STORAGE_VERSION, f"{STORAGE_KEY}.{entry.entry_id}")
 
-        # Cover heat-protection and sunrise scheduler adjustment
+        # Cover heat-protection and native daily cover open/close schedule
         self._cover_manager = CoverManager(hass, entry)
 
         # One-shot timer scheduled to fire at _next_mode_at; None when no timer is pending
@@ -435,8 +435,13 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
 
     @property
     def cover_open_time(self) -> str | None:
-        """Today's computed cover opening time (HH:MM), or None if sunrise adjustment is not configured."""
+        """Today's computed cover opening time (HH:MM), or None if not configured."""
         return self._cover_manager.cover_open_time
+
+    @property
+    def cover_close_time(self) -> str | None:
+        """Today's computed daily cover closing time (HH:MM), or None if not configured."""
+        return self._cover_manager.daily_close_time
 
     def is_heat_protection_active(self, now: datetime) -> bool | None:
         """Return whether cover heat protection conditions are currently met.
@@ -637,8 +642,8 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
             _LOGGER.info("New calendar day (%s), resetting today_type", today)
             self._today_type = EVENT_NONE
             self._today_date = today
-            # Adjust sunrise-based schedulers for the new day
-            await self._cover_manager.async_adjust_sunrise_schedulers()
+            # Compute today's native daily cover open/close times
+            await self._cover_manager.async_compute_daily_schedule(now, self.day_mode_key)
 
         if calendar_state.state == "on":
             event_message = calendar_state.attributes.get("message", "")
@@ -733,6 +738,9 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
 
         # Cover heat protection — close covers if temperature exceeds threshold in window
         await self._cover_manager.async_check_heat_protection(now)
+
+        # Native daily cover open/close schedule
+        await self._cover_manager.async_check_daily_schedule(now)
 
         return self._build_result()
 

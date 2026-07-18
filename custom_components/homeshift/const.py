@@ -33,18 +33,17 @@ DEFAULT_MODE_HOLIDAY = "home"
 DEFAULT_EVENT_MODE_MAP = "Vacation:home, Remote:remote"
 DEFAULT_MODE_ABSENCE = "away"
 
-# Cover heat control
+# Cover heat control — the active window is no longer independently
+# configured: it's fully derived from the Daily Cover Schedule feature
+# (below), i.e. between cover_open_time and daily_close_time. Heat protection
+# is therefore inert until Daily Cover Schedule is configured.
 CONF_COVER_ENTITIES = "cover_entities"
 CONF_COVER_TEMP_SENSOR = "cover_temp_sensor"
 CONF_COVER_TEMP_THRESHOLD = "cover_temp_threshold"
-CONF_COVER_TIME_START = "cover_time_start"
-CONF_COVER_TIME_END = "cover_time_end"
 CONF_COVER_ACTION = "cover_action"
 CONF_COVER_MY_BUTTON = "cover_my_button"
 
 DEFAULT_COVER_TEMP_THRESHOLD = 30.0
-DEFAULT_COVER_TIME_START = "08:35:00"
-DEFAULT_COVER_TIME_END = "18:00:00"
 DEFAULT_COVER_ACTION = "close_cover"
 
 # Proactive (forecast-based) closing — closes ahead of the reactive threshold
@@ -53,12 +52,6 @@ CONF_COVER_WEATHER_ENTITY = "cover_weather_entity"
 CONF_COVER_FORECAST_THRESHOLD = "cover_forecast_threshold"
 
 DEFAULT_COVER_FORECAST_THRESHOLD = 28.0
-
-# Automatic evening reopening — reopens covers the heat-protection automation
-# closed, once it has cooled back down after the active window.
-CONF_COVER_EVENING_REOPEN_TEMP = "cover_evening_reopen_temp"
-
-DEFAULT_COVER_EVENING_REOPEN_TEMP = 26.0
 
 # Earliest sunrise-based opening time — used by the Daily Cover Schedule's
 # 'sunrise' open-time value (floors sunrise so covers never open too early).

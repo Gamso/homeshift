@@ -44,8 +44,9 @@ def _device_info(entry: ConfigEntry) -> dict:
 class HomeShiftCoverHeatActiveSensor(CoordinatorEntity[HomeShiftCoordinator], BinarySensorEntity):
     """Binary sensor: True when cover heat protection conditions are currently met.
 
-    Active (on) when the current time is within the configured window AND the
-    outdoor temperature exceeds the configured threshold.
+    Active (on) when the current time is within the daily cover open/close
+    window (from Daily Cover Schedule) AND the outdoor temperature exceeds
+    the configured threshold.
     Updates every coordinator poll cycle and also immediately whenever the
     temperature sensor value changes.
     """

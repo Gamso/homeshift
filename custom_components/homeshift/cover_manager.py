@@ -1,7 +1,9 @@
 """Cover manager for HomeShift integration.
 
 Handles cover heat-protection (closing covers when it gets too hot) and
-the native daily open/close schedule for a cover group.
+the native daily open/close schedule for a cover group. Heat protection's
+active window is fully derived from the daily schedule's computed open/close
+times, so it is inert until the daily schedule is configured.
 """
 from __future__ import annotations
 
@@ -19,19 +21,13 @@ from .const import (
     CONF_COVER_ENTITIES,
     CONF_COVER_TEMP_SENSOR,
     CONF_COVER_TEMP_THRESHOLD,
-    CONF_COVER_TIME_START,
-    CONF_COVER_TIME_END,
     CONF_COVER_ACTION,
     CONF_COVER_MY_BUTTON,
     DEFAULT_COVER_TEMP_THRESHOLD,
-    DEFAULT_COVER_TIME_START,
-    DEFAULT_COVER_TIME_END,
     DEFAULT_COVER_ACTION,
     CONF_COVER_WEATHER_ENTITY,
     CONF_COVER_FORECAST_THRESHOLD,
     DEFAULT_COVER_FORECAST_THRESHOLD,
-    CONF_COVER_EVENING_REOPEN_TEMP,
-    DEFAULT_COVER_EVENING_REOPEN_TEMP,
     CONF_DAILY_COVER_ENTITIES,
     CONF_DAILY_COVER_OPEN_TIME_MAP,
     CONF_DAILY_COVER_CLOSE_OFFSET_MINUTES,
@@ -96,12 +92,16 @@ class CoverManager:
         self._entry = entry
         self.cover_open_time: str | None = None
         self.daily_close_time: str | None = None
-        # Tracks which day each once-per-day action last ran on, so proactive
-        # closing and evening reopening each fire at most once per calendar day.
+        # Heat protection state — whether the heat-protected cover has been
+        # closed by this automation today (proactively or reactively). Once
+        # closed, it stays closed for the rest of the day: heat protection
+        # never reopens it — only the next day's normal open (which resets
+        # this flag) or the daily schedule's own unconditional evening close
+        # touch the cover again.
+        self._heat_closed: bool = False
         self._proactive_checked_date: date | None = None
-        self._closed_date: date | None = None
-        self._reopened_date: date | None = None
-        # Same, for the native daily open/close schedule (separate cover group).
+        # Once-per-day tracking for the native daily open/close schedule
+        # (separate cover group from heat protection).
         self._daily_opened_date: date | None = None
         self._daily_closed_date: date | None = None
         self._store: Store = Store(hass, STORAGE_VERSION, f"{STORAGE_KEY}.{entry.entry_id}")
@@ -112,11 +112,12 @@ class CoverManager:
         return {**self._entry.data, **self._entry.options}
 
     async def async_restore_state(self) -> None:
-        """Restore the once-per-day action dates from storage.
+        """Restore persisted cover-automation state from storage.
 
         Called once during setup, before the first check, so a HA restart
-        between the proactive close and the evening reopen doesn't silently
-        disable the reopen for the rest of that day.
+        mid-day doesn't lose track of the day's state (e.g. whether the
+        heat-protected cover is currently closed, or whether today's daily
+        open/close already ran).
         """
         try:
             stored = await self._store.async_load()
@@ -127,20 +128,18 @@ class CoverManager:
         if not stored:
             return
 
+        self._heat_closed = bool(stored.get("heat_closed", False))
         self._proactive_checked_date = _parse_stored_date(stored.get("proactive_checked_date"))
-        self._closed_date = _parse_stored_date(stored.get("closed_date"))
-        self._reopened_date = _parse_stored_date(stored.get("reopened_date"))
         self._daily_opened_date = _parse_stored_date(stored.get("daily_opened_date"))
         self._daily_closed_date = _parse_stored_date(stored.get("daily_closed_date"))
 
     async def _async_save_state(self) -> None:
-        """Persist the once-per-day action dates to storage."""
+        """Persist cover-automation state to storage."""
         try:
             await self._store.async_save(
                 {
+                    "heat_closed": self._heat_closed,
                     "proactive_checked_date": self._proactive_checked_date.isoformat() if self._proactive_checked_date else None,
-                    "closed_date": self._closed_date.isoformat() if self._closed_date else None,
-                    "reopened_date": self._reopened_date.isoformat() if self._reopened_date else None,
                     "daily_opened_date": self._daily_opened_date.isoformat() if self._daily_opened_date else None,
                     "daily_closed_date": self._daily_closed_date.isoformat() if self._daily_closed_date else None,
                 }
@@ -166,47 +165,44 @@ class CoverManager:
         _LOGGER.debug("Cover heat protection: listening for changes on '%s'", temp_sensor)
         return async_track_state_change_event(self._hass, [temp_sensor], _on_temp_change)
 
+    def _is_within_daily_window(self, now: datetime) -> bool:
+        """Return True when now falls between cover_open_time and daily_close_time."""
+        if self.cover_open_time is None or self.daily_close_time is None:
+            return False
+        open_time = _parse_time_str(self.cover_open_time)
+        close_time = _parse_time_str(self.daily_close_time)
+        if open_time is None or close_time is None:
+            return False
+        return open_time <= now.time() <= close_time
+
     async def async_check_heat_protection(self, now: datetime) -> None:
-        """Run the configured cover action when temperature exceeds the threshold in the window.
+        """Run proactive and reactive heat protection for the configured cover.
 
-        Reads CONF_COVER_ENTITIES, CONF_COVER_TEMP_SENSOR, CONF_COVER_TEMP_THRESHOLD,
-        CONF_COVER_TIME_START, CONF_COVER_TIME_END, and CONF_COVER_ACTION from the
-        config entry.
-        When the current time falls inside the window and the temperature is above
-        the threshold, it calls the configured cover service (default: close_cover)
-        on all configured cover entities.
-
-        Also runs the proactive forecast-based close and the automatic evening
-        reopen, since both are cheap no-ops once already handled for the day and
-        this method is already called on every sensor change and coordinator poll.
+        The active window is derived entirely from the Daily Cover Schedule's
+        computed cover_open_time/daily_close_time — heat protection does
+        nothing until that feature is configured and has computed today's
+        times. Within the window, the cover closes when the temperature
+        exceeds the threshold (or, once per day at cover_open_time, when
+        today's forecast high does). It never reopens itself once closed —
+        it stays closed for the rest of the day; only the next day's normal
+        open (or the daily schedule's own unconditional evening close)
+        touches it again.
         """
-
         cover_entities = self._config.get(CONF_COVER_ENTITIES, [])
         temp_sensor = self._config.get(CONF_COVER_TEMP_SENSOR, "")
 
         if not cover_entities or not temp_sensor:
             return
 
-        await self._async_check_proactive_close(now, cover_entities)
-        await self._async_check_evening_reopen(now, cover_entities)
-
-        active = self.is_heat_protection_active(now)
-        if not active:
+        if self.cover_open_time is None or self.daily_close_time is None:
+            _LOGGER.debug(
+                "Cover heat protection: waiting on Daily Cover Schedule's computed "
+                "open/close times (not configured yet, or not computed today)"
+            )
             return
 
-        temp_state = self._hass.states.get(temp_sensor)
-        temperature = float(temp_state.state) if temp_state else 0.0
-        threshold = float(self._config.get(CONF_COVER_TEMP_THRESHOLD, DEFAULT_COVER_TEMP_THRESHOLD))
-
-        _LOGGER.info(
-            "Cover heat protection: temperature=%.1f > threshold=%.1f, reacting on covers %s",
-            temperature,
-            threshold,
-            cover_entities,
-        )
-        await self._async_apply_cover_action(cover_entities)
-        self._closed_date = now.date()
-        await self._async_save_state()
+        await self._async_check_proactive_close(now, cover_entities)
+        await self._async_check_reactive_close(now, cover_entities, temp_sensor)
 
     async def _async_apply_cover_action(self, cover_entities: list[str]) -> None:
         """Press the configured My button, or call the configured cover service."""
@@ -238,13 +234,14 @@ class CoverManager:
         )
 
     async def _async_check_proactive_close(self, now: datetime, cover_entities: list[str]) -> None:
-        """Close covers ahead of time when today's forecast high is hot enough.
+        """Close the cover ahead of time when today's forecast high is hot enough.
 
         Reactive closing (temperature > threshold) only fires once the outdoor
         air is already hot — by then a south-facing room has often already
         absorbed hours of solar/conductive gain that a later closure can't
-        undo. Checking the day's forecast once, at CONF_COVER_TIME_START,
-        lets the cover close before that gain happens.
+        undo. Checking the day's forecast once, at cover_open_time, lets the
+        cover close before that gain happens (or skip the open->close flicker
+        entirely if it's already known to be a hot day).
         Runs at most once per calendar day; a failed forecast lookup is
         retried on the next call instead of being marked done.
         """
@@ -256,8 +253,8 @@ class CoverManager:
         if self._proactive_checked_date == today:
             return
 
-        time_start = _parse_time_str(self._config.get(CONF_COVER_TIME_START, DEFAULT_COVER_TIME_START))
-        if time_start is None or now.time() < time_start:
+        open_time = _parse_time_str(self.cover_open_time)
+        if open_time is None or now.time() < open_time:
             return
 
         forecast_high = await self._async_get_forecast_high(weather_entity)
@@ -278,7 +275,7 @@ class CoverManager:
             cover_entities,
         )
         await self._async_apply_cover_action(cover_entities)
-        self._closed_date = today
+        self._heat_closed = True
         await self._async_save_state()
 
     async def _async_get_forecast_high(self, weather_entity: str) -> float | None:
@@ -304,22 +301,19 @@ class CoverManager:
         except (TypeError, ValueError):
             return None
 
-    async def _async_check_evening_reopen(self, now: datetime, cover_entities: list[str]) -> None:
-        """Reopen covers the heat-protection automation closed, once it has cooled down.
+    async def _async_check_reactive_close(self, now: datetime, cover_entities: list[str], temp_sensor: str) -> None:
+        """Close the cover when the outdoor temperature exceeds the threshold.
 
-        Only reopens covers that this automation itself closed today (proactively
-        or reactively), only after CONF_COVER_TIME_END, and only once per day —
-        it never touches a cover the user closed manually for other reasons.
+        Only acts within the active window, and only once per day — once
+        closed by this automation, it's left alone for the rest of the day
+        (see async_check_heat_protection).
         """
-        today = now.date()
-        if self._closed_date != today or self._reopened_date == today:
+        if self._heat_closed:
             return
 
-        time_end = _parse_time_str(self._config.get(CONF_COVER_TIME_END, DEFAULT_COVER_TIME_END))
-        if time_end is None or now.time() < time_end:
+        if not self._is_within_daily_window(now):
             return
 
-        temp_sensor = self._config.get(CONF_COVER_TEMP_SENSOR, "")
         temp_state = self._hass.states.get(temp_sensor)
         if temp_state is None:
             return
@@ -329,31 +323,27 @@ class CoverManager:
         except (ValueError, TypeError):
             return
 
-        reopen_temp = float(self._config.get(CONF_COVER_EVENING_REOPEN_TEMP, DEFAULT_COVER_EVENING_REOPEN_TEMP))
-        if temperature > reopen_temp:
+        threshold = float(self._config.get(CONF_COVER_TEMP_THRESHOLD, DEFAULT_COVER_TEMP_THRESHOLD))
+        if temperature <= threshold:
             return
 
         _LOGGER.info(
-            "Cover evening reopen: temperature=%.1f <= %.1f, opening covers %s",
+            "Cover heat protection: temperature=%.1f > threshold=%.1f, closing covers %s",
             temperature,
-            reopen_temp,
+            threshold,
             cover_entities,
         )
-        await self._hass.services.async_call(
-            "cover",
-            "open_cover",
-            {"entity_id": cover_entities},
-            blocking=False,
-        )
-        self._reopened_date = today
+        await self._async_apply_cover_action(cover_entities)
+        self._heat_closed = True
         await self._async_save_state()
 
     def is_heat_protection_active(self, now: datetime) -> bool | None:
         """Return whether heat protection conditions are currently met.
 
-        Returns True  when: within time window AND temperature > threshold.
-        Returns False when: outside time window, or within window but temp <= threshold.
-        Returns None  when: not configured, sensor unavailable, or unparseable values.
+        Returns True  when: within the daily open/close window AND temperature > threshold.
+        Returns False when: outside the window, or within it but temp <= threshold.
+        Returns None  when: not configured, Daily Cover Schedule hasn't computed
+                             today's times yet, sensor unavailable, or unparseable values.
         """
         cover_entities = self._config.get(CONF_COVER_ENTITIES, [])
         temp_sensor = self._config.get(CONF_COVER_TEMP_SENSOR, "")
@@ -361,16 +351,10 @@ class CoverManager:
         if not cover_entities or not temp_sensor:
             return None
 
-        time_start_str = self._config.get(CONF_COVER_TIME_START, DEFAULT_COVER_TIME_START)
-        time_end_str = self._config.get(CONF_COVER_TIME_END, DEFAULT_COVER_TIME_END)
-        time_start = _parse_time_str(time_start_str)
-        time_end = _parse_time_str(time_end_str)
-
-        if time_start is None or time_end is None:
+        if self.cover_open_time is None or self.daily_close_time is None:
             return None
 
-        now_time = now.time()
-        if not time_start <= now_time <= time_end:
+        if not self._is_within_daily_window(now):
             return False
 
         temp_state = self._hass.states.get(temp_sensor)
@@ -414,8 +398,10 @@ class CoverManager:
         — unlike opening, closing is not mode-dependent.
         Called once when a new calendar day is detected. Computed once per
         day — a day-mode change later that same day does not recompute the
-        open time.
+        open time. Also resets heat protection's closed state for the new day.
         """
+        self._heat_closed = False
+
         if not self._config.get(CONF_DAILY_COVER_ENTITIES, []):
             return
 

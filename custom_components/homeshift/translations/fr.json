@@ -73,30 +73,24 @@
       },
       "covers": {
         "title": "Contrôle des volets (chaleur)",
-        "description": "Fermer les volets automatiquement quand la température dépasse le seuil pendant la plage horaire configurée.",
+        "description": "Fermer un volet automatiquement en cas de forte chaleur. Une fois fermé, il reste fermé pour le reste de la journée — seule l'ouverture normale du lendemain, ou la fermeture du soir du planning quotidien, le touchent à nouveau. La plage active est entièrement dérivée des heures d'ouverture/fermeture calculées par le Planning quotidien des volets — configurez-le d'abord.",
         "data": {
           "cover_entities": "Entités volets",
           "cover_temp_sensor": "Capteur de température",
           "cover_temp_threshold": "Seuil de température (°C)",
-          "cover_time_start": "Début de la plage horaire",
-          "cover_time_end": "Fin de la plage horaire",
           "cover_action": "Action sur les volets",
           "cover_my_button": "Bouton position favorite (My)",
           "cover_weather_entity": "Entité météo (fermeture proactive)",
-          "cover_forecast_threshold": "Seuil de prévision (°C)",
-          "cover_evening_reopen_temp": "Température de réouverture du soir (°C)"
+          "cover_forecast_threshold": "Seuil de prévision (°C)"
         },
         "data_description": {
           "cover_entities": "Sélectionnez les entités volets à contrôler en cas de forte chaleur.",
           "cover_temp_sensor": "Capteur fournissant la température extérieure.",
           "cover_temp_threshold": "Température au-dessus de laquelle l'action sélectionnée est déclenchée.",
-          "cover_time_start": "Heure de début de la plage d'activation. C'est aussi l'heure à laquelle la prévision est vérifiée pour la fermeture proactive.",
-          "cover_time_end": "Heure de fin de la plage d'activation. C'est aussi l'heure la plus tôt à laquelle la réouverture du soir peut se déclencher.",
           "cover_action": "'Fermer' envoie close_cover (volets standard). 'Arrêter' envoie stop_cover, qui interrompt le mouvement en cours — utile pour les volets Somfy RTS (la position favorite My est un bouton séparé).",
           "cover_my_button": "Bouton à appuyer pour envoyer les volets en position favorite (My). Si renseigné, ce bouton est utilisé à la place de l'action ci-dessous.",
-          "cover_weather_entity": "Entité météo optionnelle avec prévisions journalières. Si renseignée, les volets se ferment de manière proactive à l'heure de début de plage si la prévision du jour dépasse le seuil de prévision, sans attendre que le capteur extérieur le dépasse réellement.",
-          "cover_forecast_threshold": "Température maximale prévue au-delà de laquelle la fermeture proactive se déclenche.",
-          "cover_evening_reopen_temp": "Une fois les volets fermés par cette automatisation, ils se rouvrent automatiquement après la fin de la plage horaire dès que le capteur extérieur redescend à cette température ou en dessous."
+          "cover_weather_entity": "Entité météo optionnelle avec prévisions journalières. Si renseignée, le volet se ferme de manière proactive à l'heure d'ouverture du jour si la prévision du jour dépasse le seuil de prévision, sans attendre que le capteur extérieur le dépasse réellement.",
+          "cover_forecast_threshold": "Température maximale prévue au-delà de laquelle la fermeture proactive se déclenche."
         }
       },
       "daily_cover_schedule": {
@@ -209,30 +203,24 @@
       },
       "covers": {
         "title": "Contrôle des volets (chaleur)",
-        "description": "Fermer les volets automatiquement quand la température dépasse le seuil pendant la plage horaire configurée.",
+        "description": "Fermer un volet automatiquement en cas de forte chaleur. Une fois fermé, il reste fermé pour le reste de la journée — seule l'ouverture normale du lendemain, ou la fermeture du soir du planning quotidien, le touchent à nouveau. La plage active est entièrement dérivée des heures d'ouverture/fermeture calculées par le Planning quotidien des volets — configurez-le d'abord.",
         "data": {
           "cover_entities": "Entités volets",
           "cover_temp_sensor": "Capteur de température",
           "cover_temp_threshold": "Seuil de température (°C)",
-          "cover_time_start": "Début de la plage horaire",
-          "cover_time_end": "Fin de la plage horaire",
           "cover_action": "Action sur les volets",
           "cover_my_button": "Bouton position favorite (My)",
           "cover_weather_entity": "Entité météo (fermeture proactive)",
-          "cover_forecast_threshold": "Seuil de prévision (°C)",
-          "cover_evening_reopen_temp": "Température de réouverture du soir (°C)"
+          "cover_forecast_threshold": "Seuil de prévision (°C)"
         },
         "data_description": {
           "cover_entities": "Sélectionnez les entités volets à contrôler en cas de forte chaleur.",
           "cover_temp_sensor": "Capteur fournissant la température extérieure.",
           "cover_temp_threshold": "Température au-dessus de laquelle l'action sélectionnée est déclenchée.",
-          "cover_time_start": "Heure de début de la plage d'activation. C'est aussi l'heure à laquelle la prévision est vérifiée pour la fermeture proactive.",
-          "cover_time_end": "Heure de fin de la plage d'activation. C'est aussi l'heure la plus tôt à laquelle la réouverture du soir peut se déclencher.",
           "cover_action": "'Fermer' envoie close_cover (volets standard). 'Arrêter' envoie stop_cover, qui interrompt le mouvement en cours — utile pour les volets Somfy RTS (la position favorite My est un bouton séparé).",
           "cover_my_button": "Bouton à appuyer pour envoyer les volets en position favorite (My). Si renseigné, ce bouton est utilisé à la place de l'action ci-dessous.",
-          "cover_weather_entity": "Entité météo optionnelle avec prévisions journalières. Si renseignée, les volets se ferment de manière proactive à l'heure de début de plage si la prévision du jour dépasse le seuil de prévision, sans attendre que le capteur extérieur le dépasse réellement.",
-          "cover_forecast_threshold": "Température maximale prévue au-delà de laquelle la fermeture proactive se déclenche.",
-          "cover_evening_reopen_temp": "Une fois les volets fermés par cette automatisation, ils se rouvrent automatiquement après la fin de la plage horaire dès que le capteur extérieur redescend à cette température ou en dessous."
+          "cover_weather_entity": "Entité météo optionnelle avec prévisions journalières. Si renseignée, le volet se ferme de manière proactive à l'heure d'ouverture du jour si la prévision du jour dépasse le seuil de prévision, sans attendre que le capteur extérieur le dépasse réellement.",
+          "cover_forecast_threshold": "Température maximale prévue au-delà de laquelle la fermeture proactive se déclenche."
         }
       },
       "daily_cover_schedule": {

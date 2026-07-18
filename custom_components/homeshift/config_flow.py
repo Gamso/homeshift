@@ -407,7 +407,7 @@ def _daily_cover_schema(hass, data: dict[str, Any]) -> vol.Schema:
             default=data.get(CONF_DAILY_COVER_CLOSE_OFFSET_MINUTES, DEFAULT_DAILY_COVER_CLOSE_OFFSET_MINUTES),
         ): selector.NumberSelector(
             selector.NumberSelectorConfig(
-                min=0,
+                min=-120,
                 max=120,
                 step=1,
                 mode=selector.NumberSelectorMode.BOX,

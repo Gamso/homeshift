@@ -213,7 +213,7 @@ class CoverManager:
                 "button",
                 "press",
                 {"entity_id": my_button},
-                blocking=False,
+                blocking=True,
             )
             return
 
@@ -230,7 +230,7 @@ class CoverManager:
             "cover",
             cover_action,
             {"entity_id": cover_entities},
-            blocking=False,
+            blocking=True,
         )
 
     async def _async_check_proactive_close(self, now: datetime, cover_entities: list[str]) -> None:
@@ -445,6 +445,29 @@ class CoverManager:
             day_mode_key,
         )
 
+    def open_datetime(self, now: datetime) -> datetime | None:
+        """Return today's computed cover_open_time combined with now's date/tz.
+
+        Lets the coordinator schedule a precise one-shot timer instead of
+        relying solely on the periodic poll. Returns None when not
+        configured (or today's mode resolved to 'skip').
+        """
+        open_time = _parse_time_str(self.cover_open_time) if self.cover_open_time else None
+        if open_time is None:
+            return None
+        return now.replace(hour=open_time.hour, minute=open_time.minute, second=0, microsecond=0)
+
+    def close_datetime(self, now: datetime) -> datetime | None:
+        """Return today's computed daily_close_time combined with now's date/tz.
+
+        Lets the coordinator schedule a precise one-shot timer instead of
+        relying solely on the periodic poll. Returns None when not configured.
+        """
+        close_time = _parse_time_str(self.daily_close_time) if self.daily_close_time else None
+        if close_time is None:
+            return None
+        return now.replace(hour=close_time.hour, minute=close_time.minute, second=0, microsecond=0)
+
     async def async_check_daily_schedule(self, now: datetime) -> None:
         """Open covers at today's computed open time, close them at the computed close time.
 
@@ -473,7 +496,7 @@ class CoverManager:
                     self.cover_open_time,
                 )
                 await self._hass.services.async_call(
-                    "cover", "open_cover", {"entity_id": daily_entities}, blocking=False
+                    "cover", "open_cover", {"entity_id": daily_entities}, blocking=True
                 )
                 self._daily_opened_date = today
                 await self._async_save_state()
@@ -487,7 +510,7 @@ class CoverManager:
                     self.daily_close_time,
                 )
                 await self._hass.services.async_call(
-                    "cover", "close_cover", {"entity_id": daily_entities}, blocking=False
+                    "cover", "close_cover", {"entity_id": daily_entities}, blocking=True
                 )
                 self._daily_closed_date = today
                 await self._async_save_state()

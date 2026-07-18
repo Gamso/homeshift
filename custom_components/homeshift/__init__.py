@@ -56,6 +56,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Cancel the next-mode timer when the entry is unloaded
     entry.async_on_unload(coordinator.async_cancel_next_mode_timer)
 
+    # Cancel the cover open/close timers when the entry is unloaded
+    entry.async_on_unload(coordinator.async_cancel_cover_timers)
+
     # React immediately when the temperature sensor changes (no need to wait for the poll)
     entry.async_on_unload(coordinator._cover_manager.async_setup_listeners())
 

@@ -99,7 +99,7 @@
         "data": {
           "daily_cover_entities": "Daily Cover Entities",
           "sunrise_earliest": "Earliest Allowed Opening Time",
-          "daily_cover_close_offset_minutes": "Close Offset After Sunset (minutes)",
+          "daily_cover_close_offset_minutes": "Close Offset From Sunset (minutes)",
           "daily_open_time_home": "Open Time — Home",
           "daily_open_time_work": "Open Time — Work",
           "daily_open_time_remote": "Open Time — Remote",
@@ -108,7 +108,7 @@
         "data_description": {
           "daily_cover_entities": "Cover entities (e.g. a cover group) to open and close on the daily schedule below.",
           "sunrise_earliest": "The sunrise-based opening time will be the later of actual sunrise and this value.",
-          "daily_cover_close_offset_minutes": "Covers close this many minutes after sunset, every day, regardless of day mode.",
+          "daily_cover_close_offset_minutes": "Covers close this many minutes relative to sunset, every day, regardless of day mode. Positive closes after sunset, negative closes before (e.g. -10 = 10 min before sunset).",
           "daily_open_time_home": "Opening time for the Home day mode: 'sunrise', 'skip', or a custom 'HH:MM' value.",
           "daily_open_time_work": "Opening time for the Work day mode: 'sunrise', 'skip', or a custom 'HH:MM' value.",
           "daily_open_time_remote": "Opening time for the Remote day mode: 'sunrise', 'skip', or a custom 'HH:MM' value.",
@@ -229,7 +229,7 @@
         "data": {
           "daily_cover_entities": "Daily Cover Entities",
           "sunrise_earliest": "Earliest Allowed Opening Time",
-          "daily_cover_close_offset_minutes": "Close Offset After Sunset (minutes)",
+          "daily_cover_close_offset_minutes": "Close Offset From Sunset (minutes)",
           "daily_open_time_home": "Open Time — Home",
           "daily_open_time_work": "Open Time — Work",
           "daily_open_time_remote": "Open Time — Remote",
@@ -238,7 +238,7 @@
         "data_description": {
           "daily_cover_entities": "Cover entities (e.g. a cover group) to open and close on the daily schedule below.",
           "sunrise_earliest": "The sunrise-based opening time will be the later of actual sunrise and this value.",
-          "daily_cover_close_offset_minutes": "Covers close this many minutes after sunset, every day, regardless of day mode.",
+          "daily_cover_close_offset_minutes": "Covers close this many minutes relative to sunset, every day, regardless of day mode. Positive closes after sunset, negative closes before (e.g. -10 = 10 min before sunset).",
           "daily_open_time_home": "Opening time for the Home day mode: 'sunrise', 'skip', or a custom 'HH:MM' value.",
           "daily_open_time_work": "Opening time for the Work day mode: 'sunrise', 'skip', or a custom 'HH:MM' value.",
           "daily_open_time_remote": "Opening time for the Remote day mode: 'sunrise', 'skip', or a custom 'HH:MM' value.",

@@ -69,6 +69,7 @@ CONF_DAILY_COVER_ENTITIES = "daily_cover_entities"
 # automatically that day), or a fixed 'HH:MM' time. A mode key missing from
 # the map falls back to DEFAULT_DAILY_COVER_OPEN_TIME.
 CONF_DAILY_COVER_OPEN_TIME_MAP = "daily_cover_open_time_map"
+# Minutes relative to sunset — negative closes before sunset, positive after.
 CONF_DAILY_COVER_CLOSE_OFFSET_MINUTES = "daily_cover_close_offset_minutes"
 
 DEFAULT_DAILY_COVER_OPEN_TIME = "08:30"

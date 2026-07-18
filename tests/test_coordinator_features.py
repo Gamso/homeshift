@@ -1586,6 +1586,17 @@ class TestDailyCoverScheduleCompute:
 
         assert coordinator._cover_manager.daily_close_time == "21:40"
 
+    def test_close_time_supports_negative_offset_before_sunset(self):
+        """A negative offset closes covers before sunset instead of after."""
+        hass = make_mock_hass()
+        # sunset at 21:30 local (19:30 UTC + 2h)
+        hass.states.get.side_effect = lambda eid: self._sun_state(next_setting_iso="2026-07-01T19:30:00+00:00") if eid == "sun.sun" else None
+        entry = self._make_entry(open_time_map="away:skip", close_offset=-10)
+
+        coordinator = self._run_compute(hass, entry, datetime(2026, 7, 1, 0, 5, 0), day_mode_key="away")
+
+        assert coordinator._cover_manager.daily_close_time == "21:20"
+
     def test_noop_when_no_daily_cover_entities_configured(self):
         """Does nothing when CONF_DAILY_COVER_ENTITIES is empty."""
         hass = make_mock_hass()
@@ -1836,3 +1847,238 @@ class TestNextModeTimerScheduling:
 
         hass.async_create_task.assert_called_once()
         assert coordinator._cancel_next_mode_timer is None
+
+
+# ---------------------------------------------------------------------------
+# Cover open/close datetime helpers
+# ---------------------------------------------------------------------------
+
+class TestCoverOpenCloseDatetime:
+    """Verify CoverManager.open_datetime()/close_datetime() combine today's HH:MM with now's date/tz."""
+
+    def test_open_datetime_combines_time_with_now(self):
+        hass = make_mock_hass()
+        coordinator = HomeShiftCoordinator(hass, make_mock_entry())
+        coordinator._cover_manager.cover_open_time = "08:30"
+
+        result = coordinator._cover_manager.open_datetime(datetime(2026, 7, 1, 0, 5, 0))
+
+        assert result == datetime(2026, 7, 1, 8, 30, 0)
+
+    def test_close_datetime_combines_time_with_now(self):
+        hass = make_mock_hass()
+        coordinator = HomeShiftCoordinator(hass, make_mock_entry())
+        coordinator._cover_manager.daily_close_time = "21:26"
+
+        result = coordinator._cover_manager.close_datetime(datetime(2026, 7, 1, 0, 5, 0))
+
+        assert result == datetime(2026, 7, 1, 21, 26, 0)
+
+    def test_open_datetime_none_when_not_configured(self):
+        hass = make_mock_hass()
+        coordinator = HomeShiftCoordinator(hass, make_mock_entry())
+        coordinator._cover_manager.cover_open_time = None
+
+        assert coordinator._cover_manager.open_datetime(datetime(2026, 7, 1, 0, 5, 0)) is None
+
+    def test_close_datetime_none_when_not_configured(self):
+        hass = make_mock_hass()
+        coordinator = HomeShiftCoordinator(hass, make_mock_entry())
+        coordinator._cover_manager.daily_close_time = None
+
+        assert coordinator._cover_manager.close_datetime(datetime(2026, 7, 1, 0, 5, 0)) is None
+
+    def test_open_datetime_preserves_tzinfo(self):
+        from datetime import timezone, timedelta as tdelta
+
+        hass = make_mock_hass()
+        coordinator = HomeShiftCoordinator(hass, make_mock_entry())
+        coordinator._cover_manager.cover_open_time = "08:30"
+        now = datetime(2026, 7, 1, 0, 5, 0, tzinfo=timezone(tdelta(hours=2)))
+
+        result = coordinator._cover_manager.open_datetime(now)
+
+        assert result.tzinfo == now.tzinfo
+
+
+# ---------------------------------------------------------------------------
+# Cover open/close timer scheduling
+# ---------------------------------------------------------------------------
+
+class TestCoverTimerScheduling:
+    """Verify precise one-shot timers fire cover open/close exactly on time (see _schedule_cover_timers).
+
+    Without these, actions would wait for the next ~5-minute poll cycle.
+    """
+
+    def test_timers_scheduled_when_open_and_close_times_are_set(self):
+        """Both open and close timers are scheduled when both times are configured."""
+        hass = make_mock_hass()
+        coordinator = HomeShiftCoordinator(hass, make_mock_entry())
+        coordinator._cover_manager.cover_open_time = "08:30"
+        coordinator._cover_manager.daily_close_time = "21:26"
+
+        open_cancel = MagicMock()
+        close_cancel = MagicMock()
+
+        with (
+            patch("custom_components.homeshift.coordinator.dt_util") as mock_dt,
+            patch(
+                "custom_components.homeshift.coordinator.async_track_point_in_time",
+                side_effect=[open_cancel, close_cancel],
+            ) as mock_track,
+        ):
+            mock_dt.now.return_value = datetime(2026, 7, 1, 0, 5, 0)
+            coordinator._schedule_cover_timers()
+
+        assert mock_track.call_count == 2
+        assert coordinator._cancel_cover_open_timer is open_cancel
+        assert coordinator._cancel_cover_close_timer is close_cancel
+
+    def test_no_timer_scheduled_when_time_is_none(self):
+        """A None open/close time (e.g. mode resolved to 'skip') schedules no timer for it."""
+        hass = make_mock_hass()
+        coordinator = HomeShiftCoordinator(hass, make_mock_entry())
+        coordinator._cover_manager.cover_open_time = None
+        coordinator._cover_manager.daily_close_time = "21:26"
+
+        with (
+            patch("custom_components.homeshift.coordinator.dt_util") as mock_dt,
+            patch(
+                "custom_components.homeshift.coordinator.async_track_point_in_time",
+                return_value=MagicMock(),
+            ) as mock_track,
+        ):
+            mock_dt.now.return_value = datetime(2026, 7, 1, 0, 5, 0)
+            coordinator._schedule_cover_timers()
+
+        assert mock_track.call_count == 1
+        assert coordinator._cancel_cover_open_timer is None
+        assert coordinator._cancel_cover_close_timer is not None
+
+    def test_previous_timers_cancelled_before_rescheduling(self):
+        """A second call cancels the previously scheduled timers first."""
+        hass = make_mock_hass()
+        coordinator = HomeShiftCoordinator(hass, make_mock_entry())
+        coordinator._cover_manager.cover_open_time = "08:30"
+        coordinator._cover_manager.daily_close_time = "21:26"
+
+        first_open, first_close = MagicMock(), MagicMock()
+        second_open, second_close = MagicMock(), MagicMock()
+
+        with (
+            patch("custom_components.homeshift.coordinator.dt_util") as mock_dt,
+            patch(
+                "custom_components.homeshift.coordinator.async_track_point_in_time",
+                side_effect=[first_open, first_close, second_open, second_close],
+            ),
+        ):
+            mock_dt.now.return_value = datetime(2026, 7, 1, 0, 5, 0)
+            coordinator._schedule_cover_timers()
+            coordinator._schedule_cover_timers()
+
+        first_open.assert_called_once()
+        first_close.assert_called_once()
+        assert coordinator._cancel_cover_open_timer is second_open
+        assert coordinator._cancel_cover_close_timer is second_close
+
+    def test_cancel_clears_both_pending_timers(self):
+        """async_cancel_cover_timers calls both cancel functions and clears them."""
+        hass = make_mock_hass()
+        coordinator = HomeShiftCoordinator(hass, make_mock_entry())
+        open_cancel, close_cancel = MagicMock(), MagicMock()
+        coordinator._cancel_cover_open_timer = open_cancel
+        coordinator._cancel_cover_close_timer = close_cancel
+
+        coordinator.async_cancel_cover_timers()
+
+        open_cancel.assert_called_once()
+        close_cancel.assert_called_once()
+        assert coordinator._cancel_cover_open_timer is None
+        assert coordinator._cancel_cover_close_timer is None
+
+    def test_cancel_is_no_op_when_no_timers(self):
+        """async_cancel_cover_timers is safe to call when no timer is pending."""
+        hass = make_mock_hass()
+        coordinator = HomeShiftCoordinator(hass, make_mock_entry())
+        coordinator.async_cancel_cover_timers()  # must not raise
+        assert coordinator._cancel_cover_open_timer is None
+        assert coordinator._cancel_cover_close_timer is None
+
+    def test_timer_fires_and_schedules_cover_checks(self):
+        """When a cover timer fires, _async_run_cover_checks is scheduled as a task."""
+        hass = make_mock_hass()
+        coordinator = HomeShiftCoordinator(hass, make_mock_entry())
+        coordinator._cover_manager.cover_open_time = "08:30"
+
+        captured_callbacks = []
+
+        def _fake_track(h, cb, fire_at):
+            captured_callbacks.append(cb)
+            return MagicMock()
+
+        with (
+            patch("custom_components.homeshift.coordinator.dt_util") as mock_dt,
+            patch(
+                "custom_components.homeshift.coordinator.async_track_point_in_time",
+                side_effect=_fake_track,
+            ),
+        ):
+            mock_dt.now.return_value = datetime(2026, 7, 1, 0, 5, 0)
+            coordinator._schedule_cover_timers()
+
+        assert len(captured_callbacks) == 1
+
+        hass.async_create_task = MagicMock()
+        captured_callbacks[0](datetime(2026, 7, 1, 8, 30, 0))
+
+        hass.async_create_task.assert_called_once()
+
+
+class TestAsyncRunCoverChecks:
+    """Verify _async_run_cover_checks() runs the daily schedule before heat protection.
+
+    Order matters: it prevents a proactive heat-protection close (which fires
+    at the same open_time) from being immediately undone by the daily
+    schedule's own group-open action firing right after in the same cycle.
+    """
+
+    def test_daily_schedule_runs_before_heat_protection(self):
+        hass = make_mock_hass()
+        coordinator = HomeShiftCoordinator(hass, make_mock_entry())
+
+        call_order = []
+        coordinator._cover_manager.async_check_daily_schedule = AsyncMock(
+            side_effect=lambda now: call_order.append("daily_schedule")
+        )
+        coordinator._cover_manager.async_check_heat_protection = AsyncMock(
+            side_effect=lambda now: call_order.append("heat_protection")
+        )
+
+        asyncio.get_event_loop().run_until_complete(coordinator._async_run_cover_checks())
+
+        assert call_order == ["daily_schedule", "heat_protection"]
+
+
+class TestCoverCheckOrderInPeriodicPoll:
+    """Verify the periodic poll (_async_update_data) also checks the daily schedule before heat protection."""
+
+    def test_daily_schedule_runs_before_heat_protection_in_periodic_poll(self):
+        hass = make_mock_hass()
+        hass.states.get.return_value = make_calendar_state(state="off")
+        hass.services.async_call = AsyncMock(return_value={})
+        coordinator = HomeShiftCoordinator(hass, make_mock_entry())
+
+        call_order = []
+        coordinator._cover_manager.async_check_daily_schedule = AsyncMock(
+            side_effect=lambda now: call_order.append("daily_schedule")
+        )
+        coordinator._cover_manager.async_check_heat_protection = AsyncMock(
+            side_effect=lambda now: call_order.append("heat_protection")
+        )
+
+        with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
+            mock_dt.now.return_value = datetime(2026, 3, 11, 12, 0, 0)
+            asyncio.get_event_loop().run_until_complete(coordinator.async_update_data())
+
+        assert call_order == ["daily_schedule", "heat_protection"]

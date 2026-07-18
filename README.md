@@ -200,7 +200,7 @@ All parameters can be changed at any time via **Settings → Devices & Services 
 | **Daily Cover Entities**  | —                               | Cover entity/group opened and closed daily (optional, separate from Cover Entities above); Cover Heat Protection's active window is derived from this |
 | **Open Time — *(per day mode)*** | `08:30`                  | One field per day mode: `sunrise`, `skip`, or a custom `HH:MM` value |
 | **Earliest Open Time**    | `07:00`                         | Floor time used when a day mode's Open Time is `sunrise`      |
-| **Close Offset After Sunset** | `10 min`                    | Covers close this many minutes after sunset, every day, for every mode |
+| **Close Offset From Sunset** | `10 min`                     | Covers close this many minutes relative to sunset, every day, for every mode. Positive = after sunset, negative = before (e.g. `-10` = 10 min before sunset) |
 
 ---
 
@@ -284,9 +284,9 @@ Once per day, shortly after midnight, HomeShift computes:
   - a custom `HH:MM` value — a fixed clock time
   
   Day modes sharing the same value effectively form a batch (e.g. both `Work` and `Remote` set to `sunrise`). A day mode with no value configured falls back to `08:30`. There's no separate "skip modes" list — set a mode's Open Time to `skip` directly.
-- **Close time** — today's sunset plus **Close Offset After Sunset**, always, for every day mode (closing is not mode-dependent)
+- **Close time** — today's sunset plus/minus **Close Offset From Sunset**, always, for every day mode (closing is not mode-dependent)
 
-Then, on every coordinator poll, it opens the covers once now reaches the open time, and closes them once now reaches the close time — each action firing at most once per calendar day. Timing resolution matches the poll interval (5 minutes by default), not the exact minute.
+A one-shot timer fires the open/close action at the exact scheduled minute; the periodic coordinator poll (5 minutes by default) acts as a fallback in case the timer is missed (e.g. a HA restart). Each action fires at most once per calendar day.
 
 **`sensor.cover_open_time`** and **`sensor.cover_close_time`** reflect today's computed times, so you can display them on your dashboard.
 

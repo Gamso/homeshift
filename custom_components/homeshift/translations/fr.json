@@ -99,7 +99,7 @@
         "data": {
           "daily_cover_entities": "Entités volets (planning quotidien)",
           "sunrise_earliest": "Heure d'ouverture minimale",
-          "daily_cover_close_offset_minutes": "Décalage de fermeture après le coucher du soleil (minutes)",
+          "daily_cover_close_offset_minutes": "Décalage de fermeture par rapport au coucher du soleil (minutes)",
           "daily_open_time_home": "Heure d'ouverture — Maison",
           "daily_open_time_work": "Heure d'ouverture — Travail",
           "daily_open_time_remote": "Heure d'ouverture — Télétravail",
@@ -108,7 +108,7 @@
         "data_description": {
           "daily_cover_entities": "Entités volets (par exemple un groupe) à ouvrir et fermer selon le planning ci-dessous.",
           "sunrise_earliest": "L'heure d'ouverture au lever du soleil sera la plus tardive entre le lever réel et cette valeur.",
-          "daily_cover_close_offset_minutes": "Les volets se ferment ce nombre de minutes après le coucher du soleil, tous les jours, quel que soit le mode.",
+          "daily_cover_close_offset_minutes": "Les volets se ferment ce nombre de minutes par rapport au coucher du soleil, tous les jours, quel que soit le mode. Positif = après le coucher, négatif = avant (ex: -10 = 10 min avant le coucher du soleil).",
           "daily_open_time_home": "Heure d'ouverture pour le mode Maison : 'sunrise', 'skip', ou une valeur personnalisée 'HH:MM'.",
           "daily_open_time_work": "Heure d'ouverture pour le mode Travail : 'sunrise', 'skip', ou une valeur personnalisée 'HH:MM'.",
           "daily_open_time_remote": "Heure d'ouverture pour le mode Télétravail : 'sunrise', 'skip', ou une valeur personnalisée 'HH:MM'.",
@@ -229,7 +229,7 @@
         "data": {
           "daily_cover_entities": "Entités volets (planning quotidien)",
           "sunrise_earliest": "Heure d'ouverture minimale",
-          "daily_cover_close_offset_minutes": "Décalage de fermeture après le coucher du soleil (minutes)",
+          "daily_cover_close_offset_minutes": "Décalage de fermeture par rapport au coucher du soleil (minutes)",
           "daily_open_time_home": "Heure d'ouverture — Maison",
           "daily_open_time_work": "Heure d'ouverture — Travail",
           "daily_open_time_remote": "Heure d'ouverture — Télétravail",
@@ -238,7 +238,7 @@
         "data_description": {
           "daily_cover_entities": "Entités volets (par exemple un groupe) à ouvrir et fermer selon le planning ci-dessous.",
           "sunrise_earliest": "L'heure d'ouverture au lever du soleil sera la plus tardive entre le lever réel et cette valeur.",
-          "daily_cover_close_offset_minutes": "Les volets se ferment ce nombre de minutes après le coucher du soleil, tous les jours, quel que soit le mode.",
+          "daily_cover_close_offset_minutes": "Les volets se ferment ce nombre de minutes par rapport au coucher du soleil, tous les jours, quel que soit le mode. Positif = après le coucher, négatif = avant (ex: -10 = 10 min avant le coucher du soleil).",
           "daily_open_time_home": "Heure d'ouverture pour le mode Maison : 'sunrise', 'skip', ou une valeur personnalisée 'HH:MM'.",
           "daily_open_time_work": "Heure d'ouverture pour le mode Travail : 'sunrise', 'skip', ou une valeur personnalisée 'HH:MM'.",
           "daily_open_time_remote": "Heure d'ouverture pour le mode Télétravail : 'sunrise', 'skip', ou une valeur personnalisée 'HH:MM'.",

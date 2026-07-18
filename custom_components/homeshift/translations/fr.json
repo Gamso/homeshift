@@ -81,16 +81,22 @@
           "cover_time_start": "Début de la plage horaire",
           "cover_time_end": "Fin de la plage horaire",
           "cover_action": "Action sur les volets",
-          "cover_my_button": "Bouton position favorite (My)"
+          "cover_my_button": "Bouton position favorite (My)",
+          "cover_weather_entity": "Entité météo (fermeture proactive)",
+          "cover_forecast_threshold": "Seuil de prévision (°C)",
+          "cover_evening_reopen_temp": "Température de réouverture du soir (°C)"
         },
         "data_description": {
           "cover_entities": "Sélectionnez les entités volets à contrôler en cas de forte chaleur.",
           "cover_temp_sensor": "Capteur fournissant la température extérieure.",
           "cover_temp_threshold": "Température au-dessus de laquelle l'action sélectionnée est déclenchée.",
-          "cover_time_start": "Heure de début de la plage d'activation.",
-          "cover_time_end": "Heure de fin de la plage d'activation.",
+          "cover_time_start": "Heure de début de la plage d'activation. C'est aussi l'heure à laquelle la prévision est vérifiée pour la fermeture proactive.",
+          "cover_time_end": "Heure de fin de la plage d'activation. C'est aussi l'heure la plus tôt à laquelle la réouverture du soir peut se déclencher.",
           "cover_action": "'Fermer' envoie close_cover (volets standard). 'Arrêter' envoie stop_cover, qui interrompt le mouvement en cours — utile pour les volets Somfy RTS (la position favorite My est un bouton séparé).",
-          "cover_my_button": "Bouton à appuyer pour envoyer les volets en position favorite (My). Si renseigné, ce bouton est utilisé à la place de l'action ci-dessous."
+          "cover_my_button": "Bouton à appuyer pour envoyer les volets en position favorite (My). Si renseigné, ce bouton est utilisé à la place de l'action ci-dessous.",
+          "cover_weather_entity": "Entité météo optionnelle avec prévisions journalières. Si renseignée, les volets se ferment de manière proactive à l'heure de début de plage si la prévision du jour dépasse le seuil de prévision, sans attendre que le capteur extérieur le dépasse réellement.",
+          "cover_forecast_threshold": "Température maximale prévue au-delà de laquelle la fermeture proactive se déclenche.",
+          "cover_evening_reopen_temp": "Une fois les volets fermés par cette automatisation, ils se rouvrent automatiquement après la fin de la plage horaire dès que le capteur extérieur redescend à cette température ou en dessous."
         }
       },
       "sunrise_schedulers": {
@@ -201,16 +207,22 @@
           "cover_time_start": "Début de la plage horaire",
           "cover_time_end": "Fin de la plage horaire",
           "cover_action": "Action sur les volets",
-          "cover_my_button": "Bouton position favorite (My)"
+          "cover_my_button": "Bouton position favorite (My)",
+          "cover_weather_entity": "Entité météo (fermeture proactive)",
+          "cover_forecast_threshold": "Seuil de prévision (°C)",
+          "cover_evening_reopen_temp": "Température de réouverture du soir (°C)"
         },
         "data_description": {
           "cover_entities": "Sélectionnez les entités volets à contrôler en cas de forte chaleur.",
           "cover_temp_sensor": "Capteur fournissant la température extérieure.",
           "cover_temp_threshold": "Température au-dessus de laquelle l'action sélectionnée est déclenchée.",
-          "cover_time_start": "Heure de début de la plage d'activation.",
-          "cover_time_end": "Heure de fin de la plage d'activation.",
+          "cover_time_start": "Heure de début de la plage d'activation. C'est aussi l'heure à laquelle la prévision est vérifiée pour la fermeture proactive.",
+          "cover_time_end": "Heure de fin de la plage d'activation. C'est aussi l'heure la plus tôt à laquelle la réouverture du soir peut se déclencher.",
           "cover_action": "'Fermer' envoie close_cover (volets standard). 'Arrêter' envoie stop_cover, qui interrompt le mouvement en cours — utile pour les volets Somfy RTS (la position favorite My est un bouton séparé).",
-          "cover_my_button": "Bouton à appuyer pour envoyer les volets en position favorite (My). Si renseigné, ce bouton est utilisé à la place de l'action ci-dessous."
+          "cover_my_button": "Bouton à appuyer pour envoyer les volets en position favorite (My). Si renseigné, ce bouton est utilisé à la place de l'action ci-dessous.",
+          "cover_weather_entity": "Entité météo optionnelle avec prévisions journalières. Si renseignée, les volets se ferment de manière proactive à l'heure de début de plage si la prévision du jour dépasse le seuil de prévision, sans attendre que le capteur extérieur le dépasse réellement.",
+          "cover_forecast_threshold": "Température maximale prévue au-delà de laquelle la fermeture proactive se déclenche.",
+          "cover_evening_reopen_temp": "Une fois les volets fermés par cette automatisation, ils se rouvrent automatiquement après la fin de la plage horaire dès que le capteur extérieur redescend à cette température ou en dessous."
         }
       },
       "sunrise_schedulers": {

@@ -47,6 +47,19 @@ DEFAULT_COVER_TIME_START = "08:35:00"
 DEFAULT_COVER_TIME_END = "18:00:00"
 DEFAULT_COVER_ACTION = "close_cover"
 
+# Proactive (forecast-based) closing — closes ahead of the reactive threshold
+# so covers shade the room before, not after, the heat has already built up.
+CONF_COVER_WEATHER_ENTITY = "cover_weather_entity"
+CONF_COVER_FORECAST_THRESHOLD = "cover_forecast_threshold"
+
+DEFAULT_COVER_FORECAST_THRESHOLD = 28.0
+
+# Automatic evening reopening — reopens covers the heat-protection automation
+# closed, once it has cooled back down after the active window.
+CONF_COVER_EVENING_REOPEN_TEMP = "cover_evening_reopen_temp"
+
+DEFAULT_COVER_EVENING_REOPEN_TEMP = 26.0
+
 # Sunrise-based scheduler adjustment
 CONF_SUNRISE_SCHEDULERS = "sunrise_schedulers"
 CONF_SUNRISE_EARLIEST = "sunrise_earliest"

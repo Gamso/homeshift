@@ -6,12 +6,13 @@ sunrise-based scheduler adjustment.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, time as dt_time
+from datetime import date, datetime, time as dt_time
 from typing import TYPE_CHECKING, Callable
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.event import EventStateChangedData, async_track_state_change_event
+from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
 from .const import (
@@ -26,6 +27,11 @@ from .const import (
     DEFAULT_COVER_TIME_START,
     DEFAULT_COVER_TIME_END,
     DEFAULT_COVER_ACTION,
+    CONF_COVER_WEATHER_ENTITY,
+    CONF_COVER_FORECAST_THRESHOLD,
+    DEFAULT_COVER_FORECAST_THRESHOLD,
+    CONF_COVER_EVENING_REOPEN_TEMP,
+    DEFAULT_COVER_EVENING_REOPEN_TEMP,
     CONF_SUNRISE_SCHEDULERS,
     CONF_SUNRISE_EARLIEST,
     DEFAULT_SUNRISE_EARLIEST,
@@ -35,6 +41,11 @@ if TYPE_CHECKING:
     from homeassistant.core import Event
 
 _LOGGER = logging.getLogger(__name__)
+
+# Persistent storage — survives HA restarts so a mid-day reboot doesn't lose
+# track of which covers this automation already closed today.
+STORAGE_VERSION = 1
+STORAGE_KEY = f"{__name__}.state"
 
 
 def _parse_time_str(time_str: str) -> dt_time | None:
@@ -52,6 +63,16 @@ def _parse_time_str(time_str: str) -> dt_time | None:
     return None
 
 
+def _parse_stored_date(value: str | None) -> date | None:
+    """Parse an ISO 'YYYY-MM-DD' string into a date. Returns None if unparseable."""
+    if not value:
+        return None
+    try:
+        return date.fromisoformat(value)
+    except ValueError:
+        return None
+
+
 class CoverManager:
     """Manages cover heat-protection and sunrise-based scheduler adjustment."""
 
@@ -59,11 +80,50 @@ class CoverManager:
         self._hass = hass
         self._entry = entry
         self.cover_open_time: str | None = None
+        # Tracks which day each once-per-day action last ran on, so proactive
+        # closing and evening reopening each fire at most once per calendar day.
+        self._proactive_checked_date: date | None = None
+        self._closed_date: date | None = None
+        self._reopened_date: date | None = None
+        self._store: Store = Store(hass, STORAGE_VERSION, f"{STORAGE_KEY}.{entry.entry_id}")
 
     @property
     def _config(self) -> dict:
         """Return merged config: entry.data overridden by entry.options."""
         return {**self._entry.data, **self._entry.options}
+
+    async def async_restore_state(self) -> None:
+        """Restore the once-per-day action dates from storage.
+
+        Called once during setup, before the first check, so a HA restart
+        between the proactive close and the evening reopen doesn't silently
+        disable the reopen for the rest of that day.
+        """
+        try:
+            stored = await self._store.async_load()
+        except Exception as err:  # noqa: BLE001 - defensive around storage I/O
+            _LOGGER.warning("Cover manager: could not load persisted state: %s", err)
+            return
+
+        if not stored:
+            return
+
+        self._proactive_checked_date = _parse_stored_date(stored.get("proactive_checked_date"))
+        self._closed_date = _parse_stored_date(stored.get("closed_date"))
+        self._reopened_date = _parse_stored_date(stored.get("reopened_date"))
+
+    async def _async_save_state(self) -> None:
+        """Persist the once-per-day action dates to storage."""
+        try:
+            await self._store.async_save(
+                {
+                    "proactive_checked_date": self._proactive_checked_date.isoformat() if self._proactive_checked_date else None,
+                    "closed_date": self._closed_date.isoformat() if self._closed_date else None,
+                    "reopened_date": self._reopened_date.isoformat() if self._reopened_date else None,
+                }
+            )
+        except Exception as err:  # noqa: BLE001 - defensive around storage I/O
+            _LOGGER.warning("Cover manager: could not persist state: %s", err)
 
     def async_setup_listeners(self) -> Callable[[], None]:
         """Register a state-change listener on the temperature sensor.
@@ -92,6 +152,10 @@ class CoverManager:
         When the current time falls inside the window and the temperature is above
         the threshold, it calls the configured cover service (default: close_cover)
         on all configured cover entities.
+
+        Also runs the proactive forecast-based close and the automatic evening
+        reopen, since both are cheap no-ops once already handled for the day and
+        this method is already called on every sensor change and coordinator poll.
         """
 
         cover_entities = self._config.get(CONF_COVER_ENTITIES, [])
@@ -100,6 +164,9 @@ class CoverManager:
         if not cover_entities or not temp_sensor:
             return
 
+        await self._async_check_proactive_close(now, cover_entities)
+        await self._async_check_evening_reopen(now, cover_entities)
+
         active = self.is_heat_protection_active(now)
         if not active:
             return
@@ -107,44 +174,156 @@ class CoverManager:
         temp_state = self._hass.states.get(temp_sensor)
         temperature = float(temp_state.state) if temp_state else 0.0
         threshold = float(self._config.get(CONF_COVER_TEMP_THRESHOLD, DEFAULT_COVER_TEMP_THRESHOLD))
+
+        _LOGGER.info(
+            "Cover heat protection: temperature=%.1f > threshold=%.1f, reacting on covers %s",
+            temperature,
+            threshold,
+            cover_entities,
+        )
+        await self._async_apply_cover_action(cover_entities)
+        self._closed_date = now.date()
+        await self._async_save_state()
+
+    async def _async_apply_cover_action(self, cover_entities: list[str]) -> None:
+        """Press the configured My button, or call the configured cover service."""
         my_button = self._config.get(CONF_COVER_MY_BUTTON, "")
 
         if my_button:
-            _LOGGER.info(
-                "Cover heat protection: temperature=%.1f > threshold=%.1f, pressing My button %s",
-                temperature,
-                threshold,
-                my_button,
-            )
             await self._hass.services.async_call(
                 "button",
                 "press",
                 {"entity_id": my_button},
                 blocking=False,
             )
-        else:
-            configured_cover_action = self._config.get(CONF_COVER_ACTION, DEFAULT_COVER_ACTION)
-            allowed_cover_actions = {"close_cover", "stop_cover"}
-            cover_action = configured_cover_action if configured_cover_action in allowed_cover_actions else DEFAULT_COVER_ACTION
-            if configured_cover_action not in allowed_cover_actions:
-                _LOGGER.warning(
-                    "Cover heat protection: invalid cover action '%s', falling back to '%s'",
-                    configured_cover_action,
-                    DEFAULT_COVER_ACTION,
-                )
-            _LOGGER.info(
-                "Cover heat protection: temperature=%.1f > threshold=%.1f, action=%s on covers %s",
-                temperature,
-                threshold,
-                cover_action,
-                cover_entities,
+            return
+
+        configured_cover_action = self._config.get(CONF_COVER_ACTION, DEFAULT_COVER_ACTION)
+        allowed_cover_actions = {"close_cover", "stop_cover"}
+        cover_action = configured_cover_action if configured_cover_action in allowed_cover_actions else DEFAULT_COVER_ACTION
+        if configured_cover_action not in allowed_cover_actions:
+            _LOGGER.warning(
+                "Cover heat protection: invalid cover action '%s', falling back to '%s'",
+                configured_cover_action,
+                DEFAULT_COVER_ACTION,
             )
-            await self._hass.services.async_call(
-                "cover",
-                cover_action,
-                {"entity_id": cover_entities},
-                blocking=False,
+        await self._hass.services.async_call(
+            "cover",
+            cover_action,
+            {"entity_id": cover_entities},
+            blocking=False,
+        )
+
+    async def _async_check_proactive_close(self, now: datetime, cover_entities: list[str]) -> None:
+        """Close covers ahead of time when today's forecast high is hot enough.
+
+        Reactive closing (temperature > threshold) only fires once the outdoor
+        air is already hot — by then a south-facing room has often already
+        absorbed hours of solar/conductive gain that a later closure can't
+        undo. Checking the day's forecast once, at CONF_COVER_TIME_START,
+        lets the cover close before that gain happens.
+        Runs at most once per calendar day; a failed forecast lookup is
+        retried on the next call instead of being marked done.
+        """
+        weather_entity = self._config.get(CONF_COVER_WEATHER_ENTITY, "")
+        if not weather_entity:
+            return
+
+        today = now.date()
+        if self._proactive_checked_date == today:
+            return
+
+        time_start = _parse_time_str(self._config.get(CONF_COVER_TIME_START, DEFAULT_COVER_TIME_START))
+        if time_start is None or now.time() < time_start:
+            return
+
+        forecast_high = await self._async_get_forecast_high(weather_entity)
+        if forecast_high is None:
+            return
+
+        self._proactive_checked_date = today
+
+        threshold = float(self._config.get(CONF_COVER_FORECAST_THRESHOLD, DEFAULT_COVER_FORECAST_THRESHOLD))
+        if forecast_high <= threshold:
+            await self._async_save_state()
+            return
+
+        _LOGGER.info(
+            "Cover proactive close: forecast high=%.1f > threshold=%.1f, closing covers %s",
+            forecast_high,
+            threshold,
+            cover_entities,
+        )
+        await self._async_apply_cover_action(cover_entities)
+        self._closed_date = today
+        await self._async_save_state()
+
+    async def _async_get_forecast_high(self, weather_entity: str) -> float | None:
+        """Return today's forecast high temperature for weather_entity, or None on failure."""
+        try:
+            response = await self._hass.services.async_call(
+                "weather",
+                "get_forecasts",
+                {"entity_id": weather_entity, "type": "daily"},
+                blocking=True,
+                return_response=True,
             )
+        except Exception as err:  # noqa: BLE001 - defensive boundary around an external service call
+            _LOGGER.warning("Cover proactive close: get_forecasts failed for '%s': %s", weather_entity, err)
+            return None
+
+        forecasts = (response or {}).get(weather_entity, {}).get("forecast") or []
+        if not forecasts:
+            return None
+
+        try:
+            return float(forecasts[0].get("temperature"))
+        except (TypeError, ValueError):
+            return None
+
+    async def _async_check_evening_reopen(self, now: datetime, cover_entities: list[str]) -> None:
+        """Reopen covers the heat-protection automation closed, once it has cooled down.
+
+        Only reopens covers that this automation itself closed today (proactively
+        or reactively), only after CONF_COVER_TIME_END, and only once per day —
+        it never touches a cover the user closed manually for other reasons.
+        """
+        today = now.date()
+        if self._closed_date != today or self._reopened_date == today:
+            return
+
+        time_end = _parse_time_str(self._config.get(CONF_COVER_TIME_END, DEFAULT_COVER_TIME_END))
+        if time_end is None or now.time() < time_end:
+            return
+
+        temp_sensor = self._config.get(CONF_COVER_TEMP_SENSOR, "")
+        temp_state = self._hass.states.get(temp_sensor)
+        if temp_state is None:
+            return
+
+        try:
+            temperature = float(temp_state.state)
+        except (ValueError, TypeError):
+            return
+
+        reopen_temp = float(self._config.get(CONF_COVER_EVENING_REOPEN_TEMP, DEFAULT_COVER_EVENING_REOPEN_TEMP))
+        if temperature > reopen_temp:
+            return
+
+        _LOGGER.info(
+            "Cover evening reopen: temperature=%.1f <= %.1f, opening covers %s",
+            temperature,
+            reopen_temp,
+            cover_entities,
+        )
+        await self._hass.services.async_call(
+            "cover",
+            "open_cover",
+            {"entity_id": cover_entities},
+            blocking=False,
+        )
+        self._reopened_date = today
+        await self._async_save_state()
 
     def is_heat_protection_active(self, now: datetime) -> bool | None:
         """Return whether heat protection conditions are currently met.

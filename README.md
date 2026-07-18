@@ -35,6 +35,11 @@ Automatic day-mode and thermostat-mode management for Home Assistant, driven by 
     - [Thermostat Tags](#thermostat-tags)
   - [🌅 Sunrise Scheduler Adjustment](#-sunrise-scheduler-adjustment)
   - [☀️ Cover Heat Protection](#️-cover-heat-protection)
+    - [Reactive Close](#reactive-close)
+    - [Proactive Forecast-Based Close](#proactive-forecast-based-close)
+    - [Automatic Evening Reopen](#automatic-evening-reopen)
+    - [State Persistence](#state-persistence)
+  - [🧩 Feature Support](#-feature-support)
   - [📄 License](#-license)
 
 ---
@@ -180,9 +185,14 @@ All parameters can be changed at any time via **Settings → Devices & Services 
 | **Away Mode**             | `Away`                          | When this mode is active, automatic updates are paused        |
 | **Cover Entities**        | —                               | Cover entities to close when it is too hot (optional)         |
 | **Temperature Sensor**    | —                               | Sensor providing the outdoor temperature                      |
-| **Temperature Threshold** | `30 °C`                         | Temperature above which covers are closed                     |
-| **Heat Window Start**     | `08:00`                         | Earliest time of day the heat protection is active            |
-| **Heat Window End**       | `20:00`                         | Latest time of day the heat protection is active              |
+| **Temperature Threshold** | `30 °C`                         | Temperature above which covers close reactively (fallback for days the forecast misses) |
+| **Cover Action**          | `close_cover`                   | Service called when heat protection triggers: `close_cover` or `stop_cover` |
+| **My Position Button**    | —                               | Button entity to press instead of a cover service (e.g. Somfy RTS "My" position) |
+| **Heat Window Start**     | `08:35`                         | Earliest time of day the heat protection is active; also when the forecast is checked for the proactive close |
+| **Heat Window End**       | `18:00`                         | Latest time of day the heat protection is active; also the earliest time the evening reopen can fire |
+| **Weather Entity**        | —                               | Weather entity with daily forecasts, used for the proactive close (optional) |
+| **Forecast Threshold**    | `28 °C`                         | Forecast daily high above which covers close proactively      |
+| **Evening Reopen Temperature** | `26 °C`                     | Once closed by this automation, covers reopen after Heat Window End when the sensor drops to/below this value |
 | **Sunrise Schedulers**    | —                               | Scheduler switch entities whose opening time tracks sunrise   |
 | **Earliest Open Time**    | `07:10`                         | Minimum opening time even when sunrise is earlier             |
 
@@ -277,19 +287,54 @@ and calls `scheduler.edit` on each configured scheduler entity to update its fir
 
 ## ☀️ Cover Heat Protection
 
-HomeShift can automatically close covers when the outdoor temperature exceeds a threshold during a configurable time window. This prevents heat build-up without requiring any automation.
+HomeShift can automatically close covers to prevent heat build-up, and reopen them once it has cooled down — without requiring any separate automation. There are two ways a close can be triggered, and one way covers reopen automatically.
+
+### Reactive Close
 
 Each time the coordinator runs **and** whenever the temperature sensor value changes, HomeShift checks:
-- Is the current time within the configured active window?
-- Is the temperature above the configured threshold?
+- Is the current time within the configured active window (**Heat Window Start/End**)?
+- Is the outdoor temperature above **Temperature Threshold**?
 
-If both conditions are met, `cover.stop_cover` is called on all configured cover entities. For Somfy covers this closes the cover to their pre-recorded favourite position.
+If both conditions are met, the configured **Cover Action** is applied to all configured cover entities: `close_cover` (default), `stop_cover` (interrupts movement mid-travel — useful for Somfy RTS covers), or pressing the **My Position Button** if one is configured (sends the cover to its pre-recorded favourite position).
 
-**Configuration:**
-- **Cover Entities** — covers to control
-- **Temperature Sensor** — sensor providing the current outdoor temperature
-- **Temperature Threshold** — temperature above which covers are closed (default: `30 °C`)
-- **Heat Window Start / End** — time range during which the feature is active (default: `08:00–20:00`)
+This check reacts to the outdoor sensor as it happens, so on a well-insulated room it can end up closing the cover only after the room has already absorbed a few hours of heat.
+
+### Proactive Forecast-Based Close
+
+If a **Weather Entity** (with daily forecasts) is configured, HomeShift also checks — once per day, at **Heat Window Start** — whether today's forecast high exceeds **Forecast Threshold**. If it does, covers close immediately, ahead of the outdoor sensor actually crossing the reactive threshold.
+
+The reactive close above still runs during the rest of the window as a fallback, in case the forecast lookup fails or under-predicts the day.
+
+Leave **Weather Entity** unset to disable the proactive close entirely; behavior then falls back to the reactive close only.
+
+### Automatic Evening Reopen
+
+Once a cover has been closed by this automation (proactively or reactively) on a given day, HomeShift reopens it automatically — at most once per day — after **Heat Window End**, as soon as the outdoor sensor drops to or below **Evening Reopen Temperature**.
+
+The reopen only ever applies to a cover this automation itself closed that day; it never touches a cover closed manually or by an unrelated automation/scheduler.
+
+### State Persistence
+
+Which covers were closed today, when the forecast was last checked, and whether the evening reopen already ran are all persisted to storage, so a Home Assistant restart mid-day doesn't lose track of the day's state (e.g. it won't skip the evening reopen just because HA restarted in the afternoon).
+
+---
+
+## 🧩 Feature Support
+
+| Feature                                    | Status | Notes                                                              |
+| ------------------------------------------- | :----: | -------------------------------------------------------------------|
+| Calendar-driven day mode                    |   ✅   | See [Detection Logic](#-detection-logic)                           |
+| Thermostat mode + scheduler tags            |   ✅   | See [Thermostat Tags](#thermostat-tags)                            |
+| Half-day event support                      |   ✅   | See [Half-Day Events](#half-day-events)                            |
+| Early switch (pre-activation)               |   ✅   | See [Early Switch](#early-switch)                                  |
+| Manual override with timeout                |   ✅   | `number.override_duration`                                         |
+| Sunrise-based scheduler opening time         |   ✅   | See [Sunrise Scheduler Adjustment](#-sunrise-scheduler-adjustment)  |
+| Cover reactive heat close                   |   ✅   | See [Reactive Close](#reactive-close)                              |
+| Cover proactive forecast-based close        |   ✅   | See [Proactive Forecast-Based Close](#proactive-forecast-based-close) |
+| Cover automatic evening reopen              |   ✅   | See [Automatic Evening Reopen](#automatic-evening-reopen)          |
+| Cover automation state survives HA restart  |   ✅   | See [State Persistence](#state-persistence)                        |
+| Day-mode/thermostat-mode state survives HA restart |  ✅  | Restored from storage at startup                             |
+| Cover position feedback (open/closed state) |   ❌   | Not tracked — commands are sent blind; HomeShift only tracks whether *it* closed a cover today, not the cover's actual position |
 
 ---
 

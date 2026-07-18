@@ -41,6 +41,11 @@ from .const import (
     DEFAULT_COVER_TIME_START,
     DEFAULT_COVER_TIME_END,
     DEFAULT_COVER_ACTION,
+    CONF_COVER_WEATHER_ENTITY,
+    CONF_COVER_FORECAST_THRESHOLD,
+    DEFAULT_COVER_FORECAST_THRESHOLD,
+    CONF_COVER_EVENING_REOPEN_TEMP,
+    DEFAULT_COVER_EVENING_REOPEN_TEMP,
     CONF_SUNRISE_SCHEDULERS,
     CONF_SUNRISE_EARLIEST,
     DEFAULT_SUNRISE_EARLIEST,
@@ -334,6 +339,32 @@ def _covers_schema(hass, data: dict[str, Any]) -> vol.Schema:
                 CONF_COVER_TIME_END,
                 default=data.get(CONF_COVER_TIME_END, DEFAULT_COVER_TIME_END),
             ): selector.TimeSelector(),
+            vol.Optional(
+                CONF_COVER_WEATHER_ENTITY,
+                default=data.get(CONF_COVER_WEATHER_ENTITY, ""),
+            ): selector.EntitySelector(selector.EntitySelectorConfig(domain="weather")),
+            vol.Optional(
+                CONF_COVER_FORECAST_THRESHOLD,
+                default=data.get(CONF_COVER_FORECAST_THRESHOLD, DEFAULT_COVER_FORECAST_THRESHOLD),
+            ): selector.NumberSelector(
+                selector.NumberSelectorConfig(
+                    min=0,
+                    max=60,
+                    step=0.5,
+                    mode=selector.NumberSelectorMode.BOX,
+                )
+            ),
+            vol.Optional(
+                CONF_COVER_EVENING_REOPEN_TEMP,
+                default=data.get(CONF_COVER_EVENING_REOPEN_TEMP, DEFAULT_COVER_EVENING_REOPEN_TEMP),
+            ): selector.NumberSelector(
+                selector.NumberSelectorConfig(
+                    min=0,
+                    max=60,
+                    step=0.5,
+                    mode=selector.NumberSelectorMode.BOX,
+                )
+            ),
         }
     )
 

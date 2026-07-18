@@ -42,6 +42,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Create coordinator
     coordinator = HomeShiftCoordinator(hass, entry)
     await coordinator.async_restore_state()
+    await coordinator._cover_manager.async_restore_state()
     await coordinator.async_config_entry_first_refresh()
 
     hass.data[DOMAIN][entry.entry_id] = coordinator

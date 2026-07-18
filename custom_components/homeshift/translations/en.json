@@ -81,16 +81,22 @@
           "cover_time_start": "Active Window Start",
           "cover_time_end": "Active Window End",
           "cover_action": "Cover Action",
-          "cover_my_button": "My position button"
+          "cover_my_button": "My position button",
+          "cover_weather_entity": "Weather Entity (proactive close)",
+          "cover_forecast_threshold": "Forecast Threshold (°C)",
+          "cover_evening_reopen_temp": "Evening Reopen Temperature (°C)"
         },
         "data_description": {
           "cover_entities": "Select the cover entities to control when it is too hot.",
           "cover_temp_sensor": "Sensor providing the outdoor temperature.",
           "cover_temp_threshold": "Temperature above which the selected action is triggered.",
-          "cover_time_start": "Earliest time of day the feature is active.",
-          "cover_time_end": "Latest time of day the feature is active.",
+          "cover_time_start": "Earliest time of day the feature is active. Also the time the forecast is checked for the proactive close.",
+          "cover_time_end": "Latest time of day the feature is active. Also the earliest time the evening reopen can fire.",
           "cover_action": "'Close' sends the standard close_cover command. 'Stop' sends stop_cover, halting movement mid-travel — useful for Somfy RTS covers (the My/favorite position is a separate button entity).",
-          "cover_my_button": "Button to press to send covers to their favorite (My) position. If set, this button is used instead of the action below."
+          "cover_my_button": "Button to press to send covers to their favorite (My) position. If set, this button is used instead of the action below.",
+          "cover_weather_entity": "Optional weather entity with daily forecasts. When set, covers close proactively at Active Window Start if today's forecast high exceeds the forecast threshold, instead of waiting for the outdoor sensor to actually cross it.",
+          "cover_forecast_threshold": "Forecast daily high above which the proactive close triggers.",
+          "cover_evening_reopen_temp": "Once covers have been closed by this automation, they reopen automatically after Active Window End as soon as the outdoor sensor drops to or below this temperature."
         }
       },
       "sunrise_schedulers": {
@@ -201,16 +207,22 @@
           "cover_time_start": "Active Window Start",
           "cover_time_end": "Active Window End",
           "cover_action": "Cover Action",
-          "cover_my_button": "My position button"
+          "cover_my_button": "My position button",
+          "cover_weather_entity": "Weather Entity (proactive close)",
+          "cover_forecast_threshold": "Forecast Threshold (°C)",
+          "cover_evening_reopen_temp": "Evening Reopen Temperature (°C)"
         },
         "data_description": {
           "cover_entities": "Select the cover entities to control when it is too hot.",
           "cover_temp_sensor": "Sensor providing the outdoor temperature.",
           "cover_temp_threshold": "Temperature above which the selected action is triggered.",
-          "cover_time_start": "Earliest time of day the feature is active.",
-          "cover_time_end": "Latest time of day the feature is active.",
+          "cover_time_start": "Earliest time of day the feature is active. Also the time the forecast is checked for the proactive close.",
+          "cover_time_end": "Latest time of day the feature is active. Also the earliest time the evening reopen can fire.",
           "cover_action": "'Close' sends the standard close_cover command. 'Stop' sends stop_cover, halting movement mid-travel — useful for Somfy RTS covers (the My/favorite position is a separate button entity).",
-          "cover_my_button": "Button to press to send covers to their favorite (My) position. If set, this button is used instead of the action below."
+          "cover_my_button": "Button to press to send covers to their favorite (My) position. If set, this button is used instead of the action below.",
+          "cover_weather_entity": "Optional weather entity with daily forecasts. When set, covers close proactively at Active Window Start if today's forecast high exceeds the forecast threshold, instead of waiting for the outdoor sensor to actually cross it.",
+          "cover_forecast_threshold": "Forecast daily high above which the proactive close triggers.",
+          "cover_evening_reopen_temp": "Once covers have been closed by this automation, they reopen automatically after Active Window End as soon as the outdoor sensor drops to or below this temperature."
         }
       },
       "sunrise_schedulers": {

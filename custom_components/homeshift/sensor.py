@@ -10,7 +10,14 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import CONF_SUNRISE_SCHEDULERS, DOMAIN, SENSOR_COVER_OPEN_TIME, SENSOR_NEXT_MODE, SENSOR_NEXT_MODE_AT
+from .const import (
+    CONF_DAILY_COVER_ENTITIES,
+    DOMAIN,
+    SENSOR_COVER_CLOSE_TIME,
+    SENSOR_COVER_OPEN_TIME,
+    SENSOR_NEXT_MODE,
+    SENSOR_NEXT_MODE_AT,
+)
 from .coordinator import HomeShiftCoordinator
 
 _LOGGER = logging.getLogger(__name__)
@@ -28,8 +35,10 @@ async def async_setup_entry(
         HomeShiftNextModeAtSensor(coordinator, entry),
     ]
     config = {**entry.data, **entry.options}
-    if config.get(CONF_SUNRISE_SCHEDULERS):
+    if config.get(CONF_DAILY_COVER_ENTITIES):
         entities.append(HomeShiftCoverOpenTimeSensor(coordinator, entry))
+    if config.get(CONF_DAILY_COVER_ENTITIES):
+        entities.append(HomeShiftCoverCloseTimeSensor(coordinator, entry))
     async_add_entities(entities)
 
 
@@ -95,8 +104,8 @@ class HomeShiftNextModeAtSensor(CoordinatorEntity[HomeShiftCoordinator], SensorE
 class HomeShiftCoverOpenTimeSensor(CoordinatorEntity[HomeShiftCoordinator], SensorEntity):
     """String sensor: the scheduled cover opening time for today.
 
-    Only registered when CONF_SUNRISE_SCHEDULERS is configured.
-    Updated each morning when async_adjust_sunrise_schedulers() runs.
+    Only registered when CONF_DAILY_COVER_ENTITIES is configured.
+    Updated each morning when async_compute_daily_schedule() runs.
     """
 
     _attr_has_entity_name = True
@@ -113,6 +122,35 @@ class HomeShiftCoverOpenTimeSensor(CoordinatorEntity[HomeShiftCoordinator], Sens
     def native_value(self) -> str | None:
         """Return today's computed cover opening time (HH:MM)."""
         return self.coordinator.cover_open_time
+
+    @property
+    def device_info(self) -> dict:
+        """Return device information."""
+        return _device_info(self._entry)
+
+
+class HomeShiftCoverCloseTimeSensor(CoordinatorEntity[HomeShiftCoordinator], SensorEntity):
+    """String sensor: the scheduled daily cover closing time for today.
+
+    Only registered when CONF_DAILY_COVER_ENTITIES is configured.
+    Updated each morning when async_compute_daily_schedule() runs
+    (today's sunset + CONF_DAILY_COVER_CLOSE_OFFSET_MINUTES).
+    """
+
+    _attr_has_entity_name = True
+    _attr_name = "Cover Close Time"
+    _attr_icon = "mdi:roller-shade-closed"
+
+    def __init__(self, coordinator: HomeShiftCoordinator, entry: ConfigEntry) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{entry.entry_id}_{SENSOR_COVER_CLOSE_TIME}"
+        self._entry = entry
+
+    @property
+    def native_value(self) -> str | None:
+        """Return today's computed cover closing time (HH:MM)."""
+        return self.coordinator.cover_close_time
 
     @property
     def device_info(self) -> dict:

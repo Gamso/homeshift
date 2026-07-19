@@ -9,7 +9,7 @@
           "mapping": "Mode Mapping",
           "schedulers": "Schedulers",
           "covers": "Cover Heat Control",
-          "sunrise_schedulers": "Sunrise Scheduler Adjustment",
+          "daily_cover_schedule": "Daily Cover Schedule",
           "finalize": "Save Configuration"
         }
       },
@@ -73,36 +73,46 @@
       },
       "covers": {
         "title": "Cover Heat Control",
-        "description": "Close covers automatically when the temperature exceeds the threshold during the configured time window.",
+        "description": "Close a cover automatically when it's too hot. Once closed, it stays closed for the rest of the day — only the next day's normal open, or the daily schedule's own evening close, touch it again. The active window is entirely derived from Daily Cover Schedule's computed open/close times — configure that first.",
         "data": {
           "cover_entities": "Cover Entities",
           "cover_temp_sensor": "Temperature Sensor",
           "cover_temp_threshold": "Temperature Threshold (°C)",
-          "cover_time_start": "Active Window Start",
-          "cover_time_end": "Active Window End",
           "cover_action": "Cover Action",
-          "cover_my_button": "My position button"
+          "cover_my_button": "My position button",
+          "cover_weather_entity": "Weather Entity (proactive close)",
+          "cover_forecast_threshold": "Forecast Threshold (°C)"
         },
         "data_description": {
           "cover_entities": "Select the cover entities to control when it is too hot.",
           "cover_temp_sensor": "Sensor providing the outdoor temperature.",
           "cover_temp_threshold": "Temperature above which the selected action is triggered.",
-          "cover_time_start": "Earliest time of day the feature is active.",
-          "cover_time_end": "Latest time of day the feature is active.",
           "cover_action": "'Close' sends the standard close_cover command. 'Stop' sends stop_cover, halting movement mid-travel — useful for Somfy RTS covers (the My/favorite position is a separate button entity).",
-          "cover_my_button": "Button to press to send covers to their favorite (My) position. If set, this button is used instead of the action below."
+          "cover_my_button": "Button to press to send covers to their favorite (My) position. If set, this button is used instead of the action below.",
+          "cover_weather_entity": "Optional weather entity with daily forecasts. When set, the cover closes proactively at the day's cover open time if today's forecast high exceeds the forecast threshold, instead of waiting for the outdoor sensor to actually cross it.",
+          "cover_forecast_threshold": "Forecast daily high above which the proactive close triggers."
         }
       },
-      "sunrise_schedulers": {
-        "title": "Sunrise Scheduler Adjustment",
-        "description": "Adjust the opening time of scheduler switches daily based on sunrise, respecting a configurable earliest time.",
+      "daily_cover_schedule": {
+        "title": "Daily Cover Schedule",
+        "description": "Natively open and close a cover group every day, without a separate Scheduler-integration entity. Kept separate from Cover Heat Control, which targets a single cover. For each day mode below, set 'sunrise', 'skip', or a custom 'HH:MM' opening time — modes sharing the same value form a batch. Closing always happens once per day, for every mode, at sunset + the offset below.",
         "data": {
-          "sunrise_schedulers": "Scheduler Entities to Adjust",
-          "sunrise_earliest": "Earliest Allowed Opening Time"
+          "daily_cover_entities": "Daily Cover Entities",
+          "sunrise_earliest": "Earliest Allowed Opening Time",
+          "daily_cover_close_offset_minutes": "Close Offset From Sunset (minutes)",
+          "daily_open_time_home": "Open Time — Home",
+          "daily_open_time_work": "Open Time — Work",
+          "daily_open_time_remote": "Open Time — Remote",
+          "daily_open_time_away": "Open Time — Away"
         },
         "data_description": {
-          "sunrise_schedulers": "Select the scheduler switch entities whose first timeslot will be adjusted at each new day.",
-          "sunrise_earliest": "The opening time will be the later of sunrise and this value."
+          "daily_cover_entities": "Cover entities (e.g. a cover group) to open and close on the daily schedule below.",
+          "sunrise_earliest": "The sunrise-based opening time will be the later of actual sunrise and this value.",
+          "daily_cover_close_offset_minutes": "Covers close this many minutes relative to sunset, every day, regardless of day mode. Positive closes after sunset, negative closes before (e.g. -10 = 10 min before sunset).",
+          "daily_open_time_home": "Opening time for the Home day mode: 'sunrise', 'skip', or a custom 'HH:MM' value.",
+          "daily_open_time_work": "Opening time for the Work day mode: 'sunrise', 'skip', or a custom 'HH:MM' value.",
+          "daily_open_time_remote": "Opening time for the Remote day mode: 'sunrise', 'skip', or a custom 'HH:MM' value.",
+          "daily_open_time_away": "Opening time for the Away day mode: 'sunrise', 'skip', or a custom 'HH:MM' value."
         }
       }
     },
@@ -123,7 +133,7 @@
           "mapping": "Mode Mapping",
           "schedulers": "Schedulers",
           "covers": "Cover Heat Control",
-          "sunrise_schedulers": "Sunrise Scheduler Adjustment",
+          "daily_cover_schedule": "Daily Cover Schedule",
           "finalize": "Save Configuration"
         }
       },
@@ -193,36 +203,46 @@
       },
       "covers": {
         "title": "Cover Heat Control",
-        "description": "Close covers automatically when the temperature exceeds the threshold during the configured time window.",
+        "description": "Close a cover automatically when it's too hot. Once closed, it stays closed for the rest of the day — only the next day's normal open, or the daily schedule's own evening close, touch it again. The active window is entirely derived from Daily Cover Schedule's computed open/close times — configure that first.",
         "data": {
           "cover_entities": "Cover Entities",
           "cover_temp_sensor": "Temperature Sensor",
           "cover_temp_threshold": "Temperature Threshold (°C)",
-          "cover_time_start": "Active Window Start",
-          "cover_time_end": "Active Window End",
           "cover_action": "Cover Action",
-          "cover_my_button": "My position button"
+          "cover_my_button": "My position button",
+          "cover_weather_entity": "Weather Entity (proactive close)",
+          "cover_forecast_threshold": "Forecast Threshold (°C)"
         },
         "data_description": {
           "cover_entities": "Select the cover entities to control when it is too hot.",
           "cover_temp_sensor": "Sensor providing the outdoor temperature.",
           "cover_temp_threshold": "Temperature above which the selected action is triggered.",
-          "cover_time_start": "Earliest time of day the feature is active.",
-          "cover_time_end": "Latest time of day the feature is active.",
           "cover_action": "'Close' sends the standard close_cover command. 'Stop' sends stop_cover, halting movement mid-travel — useful for Somfy RTS covers (the My/favorite position is a separate button entity).",
-          "cover_my_button": "Button to press to send covers to their favorite (My) position. If set, this button is used instead of the action below."
+          "cover_my_button": "Button to press to send covers to their favorite (My) position. If set, this button is used instead of the action below.",
+          "cover_weather_entity": "Optional weather entity with daily forecasts. When set, the cover closes proactively at the day's cover open time if today's forecast high exceeds the forecast threshold, instead of waiting for the outdoor sensor to actually cross it.",
+          "cover_forecast_threshold": "Forecast daily high above which the proactive close triggers."
         }
       },
-      "sunrise_schedulers": {
-        "title": "Sunrise Scheduler Adjustment",
-        "description": "Adjust the opening time of scheduler switches daily based on sunrise, respecting a configurable earliest time.",
+      "daily_cover_schedule": {
+        "title": "Daily Cover Schedule",
+        "description": "Natively open and close a cover group every day, without a separate Scheduler-integration entity. Kept separate from Cover Heat Control, which targets a single cover. For each day mode below, set 'sunrise', 'skip', or a custom 'HH:MM' opening time — modes sharing the same value form a batch. Closing always happens once per day, for every mode, at sunset + the offset below.",
         "data": {
-          "sunrise_schedulers": "Scheduler Entities to Adjust",
-          "sunrise_earliest": "Earliest Allowed Opening Time"
+          "daily_cover_entities": "Daily Cover Entities",
+          "sunrise_earliest": "Earliest Allowed Opening Time",
+          "daily_cover_close_offset_minutes": "Close Offset From Sunset (minutes)",
+          "daily_open_time_home": "Open Time — Home",
+          "daily_open_time_work": "Open Time — Work",
+          "daily_open_time_remote": "Open Time — Remote",
+          "daily_open_time_away": "Open Time — Away"
         },
         "data_description": {
-          "sunrise_schedulers": "Select the scheduler switch entities whose first timeslot will be adjusted at each new day.",
-          "sunrise_earliest": "The opening time will be the later of sunrise and this value."
+          "daily_cover_entities": "Cover entities (e.g. a cover group) to open and close on the daily schedule below.",
+          "sunrise_earliest": "The sunrise-based opening time will be the later of actual sunrise and this value.",
+          "daily_cover_close_offset_minutes": "Covers close this many minutes relative to sunset, every day, regardless of day mode. Positive closes after sunset, negative closes before (e.g. -10 = 10 min before sunset).",
+          "daily_open_time_home": "Opening time for the Home day mode: 'sunrise', 'skip', or a custom 'HH:MM' value.",
+          "daily_open_time_work": "Opening time for the Work day mode: 'sunrise', 'skip', or a custom 'HH:MM' value.",
+          "daily_open_time_remote": "Opening time for the Remote day mode: 'sunrise', 'skip', or a custom 'HH:MM' value.",
+          "daily_open_time_away": "Opening time for the Away day mode: 'sunrise', 'skip', or a custom 'HH:MM' value."
         }
       }
     }
@@ -250,6 +270,9 @@
       },
       "next_mode_at": {
         "name": "Next Mode At"
+      },
+      "cover_close_time": {
+        "name": "Cover Close Time"
       }
     },
     "binary_sensor": {

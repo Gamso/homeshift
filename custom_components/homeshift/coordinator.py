@@ -162,11 +162,17 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
         # Persistent storage — used to restore modes after HA restart
         self._store: Store = Store(hass, STORAGE_VERSION, f"{STORAGE_KEY}.{entry.entry_id}")
 
-        # Cover heat-protection and sunrise scheduler adjustment
+        # Cover heat-protection and native daily cover open/close schedule
         self._cover_manager = CoverManager(hass, entry)
 
         # One-shot timer scheduled to fire at _next_mode_at; None when no timer is pending
         self._cancel_next_mode_timer: Callable[[], None] | None = None
+
+        # One-shot timers so the daily cover open/close (and heat protection's
+        # forecast check tied to open time) fire exactly on time instead of
+        # waiting for the next periodic poll; None when no timer is pending.
+        self._cancel_cover_open_timer: Callable[[], None] | None = None
+        self._cancel_cover_close_timer: Callable[[], None] | None = None
 
     @property
     def _config(self) -> dict:
@@ -259,6 +265,67 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
         if self._cancel_next_mode_timer is not None:
             self._cancel_next_mode_timer()
             self._cancel_next_mode_timer = None
+
+    @callback
+    def _schedule_cover_timers(self) -> None:
+        """Schedule one-shot timers so cover open/close fire exactly on time.
+
+        Without this, the daily open/close (and heat protection's proactive
+        forecast check, which is tied to open time) would wait for the next
+        ~SCAN_INTERVAL_MINUTES poll, firing up to that long after the
+        scheduled time. Called whenever today's cover_open_time/
+        daily_close_time are (re)computed (see async_compute_daily_schedule).
+        If a target time has already passed today (e.g. HA restarted after
+        it), the timer fires almost immediately — harmless, since the checks
+        it triggers are idempotent no-ops once already handled for the day.
+        """
+        if self._cancel_cover_open_timer is not None:
+            self._cancel_cover_open_timer()
+            self._cancel_cover_open_timer = None
+        if self._cancel_cover_close_timer is not None:
+            self._cancel_cover_close_timer()
+            self._cancel_cover_close_timer = None
+
+        now = dt_util.now()
+
+        @callback
+        def _on_cover_timer(_now: datetime) -> None:
+            self.hass.async_create_task(self._async_run_cover_checks())
+
+        open_at = self._cover_manager.open_datetime(now)
+        if open_at is not None:
+            self._cancel_cover_open_timer = async_track_point_in_time(self.hass, _on_cover_timer, open_at)
+            _LOGGER.debug("Scheduled cover open timer at %s", open_at)
+
+        close_at = self._cover_manager.close_datetime(now)
+        if close_at is not None:
+            self._cancel_cover_close_timer = async_track_point_in_time(self.hass, _on_cover_timer, close_at)
+            _LOGGER.debug("Scheduled cover close timer at %s", close_at)
+
+    async def _async_run_cover_checks(self) -> None:
+        """Run the daily cover schedule and heat protection checks immediately.
+
+        Called by the precise open/close timers scheduled in
+        _schedule_cover_timers, in the same order as the periodic poll
+        (daily schedule first, so a heat-protection close isn't undone by
+        the group's own open action firing in the same cycle).
+        """
+        now = dt_util.now()
+        await self._cover_manager.async_check_daily_schedule(now)
+        await self._cover_manager.async_check_heat_protection(now)
+
+    @callback
+    def async_cancel_cover_timers(self) -> None:
+        """Cancel the pending cover open/close timers, if any.
+
+        Called on integration unload to prevent stale timer callbacks.
+        """
+        if self._cancel_cover_open_timer is not None:
+            self._cancel_cover_open_timer()
+            self._cancel_cover_open_timer = None
+        if self._cancel_cover_close_timer is not None:
+            self._cancel_cover_close_timer()
+            self._cancel_cover_close_timer = None
 
     def _log_next_mode_prediction(self, context: str) -> None:
         """Log the currently computed next-mode prediction at INFO level."""
@@ -435,8 +502,13 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
 
     @property
     def cover_open_time(self) -> str | None:
-        """Today's computed cover opening time (HH:MM), or None if sunrise adjustment is not configured."""
+        """Today's computed cover opening time (HH:MM), or None if not configured."""
         return self._cover_manager.cover_open_time
+
+    @property
+    def cover_close_time(self) -> str | None:
+        """Today's computed daily cover closing time (HH:MM), or None if not configured."""
+        return self._cover_manager.daily_close_time
 
     def is_heat_protection_active(self, now: datetime) -> bool | None:
         """Return whether cover heat protection conditions are currently met.
@@ -637,8 +709,10 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
             _LOGGER.info("New calendar day (%s), resetting today_type", today)
             self._today_type = EVENT_NONE
             self._today_date = today
-            # Adjust sunrise-based schedulers for the new day
-            await self._cover_manager.async_adjust_sunrise_schedulers()
+            # Compute today's native daily cover open/close times, then
+            # schedule precise timers so they fire exactly on time.
+            await self._cover_manager.async_compute_daily_schedule(now, self.day_mode_key)
+            self._schedule_cover_timers()
 
         if calendar_state.state == "on":
             event_message = calendar_state.attributes.get("message", "")
@@ -730,6 +804,12 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
             now,
             context="Next-mode prediction updated",
         )
+
+        # Native daily cover open/close schedule — runs first so the morning
+        # group open is never undone by a heat-protection action that fires
+        # at the same cover_open_time (the heat-protected cover is typically
+        # also a member of the daily-schedule cover group).
+        await self._cover_manager.async_check_daily_schedule(now)
 
         # Cover heat protection — close covers if temperature exceeds threshold in window
         await self._cover_manager.async_check_heat_protection(now)

@@ -61,6 +61,7 @@ class TestStartupCalendarSync:
         ):
             coord = MagicMock()
             coord.async_restore_state = AsyncMock()
+            coord._cover_manager.async_restore_state = AsyncMock()
             coord.async_config_entry_first_refresh = AsyncMock()
             coord.async_sync_calendar = AsyncMock()
             MockCoord.return_value = coord
@@ -82,6 +83,7 @@ class TestStartupCalendarSync:
         ):
             coord = MagicMock()
             coord.async_restore_state = AsyncMock()
+            coord._cover_manager.async_restore_state = AsyncMock()
             coord.async_config_entry_first_refresh = AsyncMock()
             coord.async_sync_calendar = AsyncMock()
             MockCoord.return_value = coord
@@ -108,6 +110,7 @@ class TestStartupCalendarSync:
         ):
             coord = MagicMock()
             coord.async_restore_state = AsyncMock()
+            coord._cover_manager.async_restore_state = AsyncMock()
             coord.async_config_entry_first_refresh = AsyncMock()
             coord.async_sync_calendar = AsyncMock()
             MockCoord.return_value = coord
@@ -140,6 +143,7 @@ class TestStartupCalendarSync:
         ):
             coord = MagicMock()
             coord.async_restore_state = AsyncMock()
+            coord._cover_manager.async_restore_state = AsyncMock()
             coord.async_config_entry_first_refresh = AsyncMock()
             coord.async_sync_calendar = AsyncMock()
             MockCoord.return_value = coord
@@ -176,6 +180,7 @@ class TestStartupCalendarSync:
         ):
             coord = MagicMock()
             coord.async_restore_state = AsyncMock()
+            coord._cover_manager.async_restore_state = AsyncMock()
             coord.async_config_entry_first_refresh = AsyncMock()
             coord.async_sync_calendar = AsyncMock()
             MockCoord.return_value = coord

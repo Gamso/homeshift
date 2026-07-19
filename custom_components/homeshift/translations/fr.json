@@ -9,7 +9,7 @@
           "mapping": "Mapping des modes",
           "schedulers": "Schedulers",
           "covers": "Contrôle des volets (chaleur)",
-          "sunrise_schedulers": "Ajustement des schedulers au lever du soleil",
+          "daily_cover_schedule": "Planning quotidien des volets",
           "finalize": "Enregistrer la configuration"
         }
       },
@@ -73,36 +73,46 @@
       },
       "covers": {
         "title": "Contrôle des volets (chaleur)",
-        "description": "Fermer les volets automatiquement quand la température dépasse le seuil pendant la plage horaire configurée.",
+        "description": "Fermer un volet automatiquement en cas de forte chaleur. Une fois fermé, il reste fermé pour le reste de la journée — seule l'ouverture normale du lendemain, ou la fermeture du soir du planning quotidien, le touchent à nouveau. La plage active est entièrement dérivée des heures d'ouverture/fermeture calculées par le Planning quotidien des volets — configurez-le d'abord.",
         "data": {
           "cover_entities": "Entités volets",
           "cover_temp_sensor": "Capteur de température",
           "cover_temp_threshold": "Seuil de température (°C)",
-          "cover_time_start": "Début de la plage horaire",
-          "cover_time_end": "Fin de la plage horaire",
           "cover_action": "Action sur les volets",
-          "cover_my_button": "Bouton position favorite (My)"
+          "cover_my_button": "Bouton position favorite (My)",
+          "cover_weather_entity": "Entité météo (fermeture proactive)",
+          "cover_forecast_threshold": "Seuil de prévision (°C)"
         },
         "data_description": {
           "cover_entities": "Sélectionnez les entités volets à contrôler en cas de forte chaleur.",
           "cover_temp_sensor": "Capteur fournissant la température extérieure.",
           "cover_temp_threshold": "Température au-dessus de laquelle l'action sélectionnée est déclenchée.",
-          "cover_time_start": "Heure de début de la plage d'activation.",
-          "cover_time_end": "Heure de fin de la plage d'activation.",
           "cover_action": "'Fermer' envoie close_cover (volets standard). 'Arrêter' envoie stop_cover, qui interrompt le mouvement en cours — utile pour les volets Somfy RTS (la position favorite My est un bouton séparé).",
-          "cover_my_button": "Bouton à appuyer pour envoyer les volets en position favorite (My). Si renseigné, ce bouton est utilisé à la place de l'action ci-dessous."
+          "cover_my_button": "Bouton à appuyer pour envoyer les volets en position favorite (My). Si renseigné, ce bouton est utilisé à la place de l'action ci-dessous.",
+          "cover_weather_entity": "Entité météo optionnelle avec prévisions journalières. Si renseignée, le volet se ferme de manière proactive à l'heure d'ouverture du jour si la prévision du jour dépasse le seuil de prévision, sans attendre que le capteur extérieur le dépasse réellement.",
+          "cover_forecast_threshold": "Température maximale prévue au-delà de laquelle la fermeture proactive se déclenche."
         }
       },
-      "sunrise_schedulers": {
-        "title": "Ajustement des schedulers au lever du soleil",
-        "description": "Ajuster quotidiennement l'heure d'ouverture des schedulers en fonction du lever du soleil, en respectant une heure minimum configurable.",
+      "daily_cover_schedule": {
+        "title": "Planning quotidien des volets",
+        "description": "Ouvre et ferme un groupe de volets tous les jours nativement, sans passer par une entité Scheduler séparée. Reste indépendant du Contrôle des volets (chaleur), qui cible un volet unitaire. Pour chaque mode de journée ci-dessous, définissez 'sunrise', 'skip', ou une heure personnalisée 'HH:MM' — les modes partageant la même valeur forment un lot. La fermeture a toujours lieu une fois par jour, pour tous les modes, au coucher du soleil + le décalage ci-dessous.",
         "data": {
-          "sunrise_schedulers": "Schedulers à ajuster",
-          "sunrise_earliest": "Heure d'ouverture minimale"
+          "daily_cover_entities": "Entités volets (planning quotidien)",
+          "sunrise_earliest": "Heure d'ouverture minimale",
+          "daily_cover_close_offset_minutes": "Décalage de fermeture par rapport au coucher du soleil (minutes)",
+          "daily_open_time_home": "Heure d'ouverture — Maison",
+          "daily_open_time_work": "Heure d'ouverture — Travail",
+          "daily_open_time_remote": "Heure d'ouverture — Télétravail",
+          "daily_open_time_away": "Heure d'ouverture — Absence"
         },
         "data_description": {
-          "sunrise_schedulers": "Sélectionnez les schedulers dont le premier créneau sera ajusté chaque jour.",
-          "sunrise_earliest": "L'heure d'ouverture sera la plus tardive entre le lever du soleil et cette valeur."
+          "daily_cover_entities": "Entités volets (par exemple un groupe) à ouvrir et fermer selon le planning ci-dessous.",
+          "sunrise_earliest": "L'heure d'ouverture au lever du soleil sera la plus tardive entre le lever réel et cette valeur.",
+          "daily_cover_close_offset_minutes": "Les volets se ferment ce nombre de minutes par rapport au coucher du soleil, tous les jours, quel que soit le mode. Positif = après le coucher, négatif = avant (ex: -10 = 10 min avant le coucher du soleil).",
+          "daily_open_time_home": "Heure d'ouverture pour le mode Maison : 'sunrise', 'skip', ou une valeur personnalisée 'HH:MM'.",
+          "daily_open_time_work": "Heure d'ouverture pour le mode Travail : 'sunrise', 'skip', ou une valeur personnalisée 'HH:MM'.",
+          "daily_open_time_remote": "Heure d'ouverture pour le mode Télétravail : 'sunrise', 'skip', ou une valeur personnalisée 'HH:MM'.",
+          "daily_open_time_away": "Heure d'ouverture pour le mode Absence : 'sunrise', 'skip', ou une valeur personnalisée 'HH:MM'."
         }
       }
     },
@@ -123,7 +133,7 @@
           "mapping": "Mapping des modes",
           "schedulers": "Schedulers",
           "covers": "Contrôle des volets (chaleur)",
-          "sunrise_schedulers": "Ajustement des schedulers au lever du soleil",
+          "daily_cover_schedule": "Planning quotidien des volets",
           "finalize": "Enregistrer la configuration"
         }
       },
@@ -193,36 +203,46 @@
       },
       "covers": {
         "title": "Contrôle des volets (chaleur)",
-        "description": "Fermer les volets automatiquement quand la température dépasse le seuil pendant la plage horaire configurée.",
+        "description": "Fermer un volet automatiquement en cas de forte chaleur. Une fois fermé, il reste fermé pour le reste de la journée — seule l'ouverture normale du lendemain, ou la fermeture du soir du planning quotidien, le touchent à nouveau. La plage active est entièrement dérivée des heures d'ouverture/fermeture calculées par le Planning quotidien des volets — configurez-le d'abord.",
         "data": {
           "cover_entities": "Entités volets",
           "cover_temp_sensor": "Capteur de température",
           "cover_temp_threshold": "Seuil de température (°C)",
-          "cover_time_start": "Début de la plage horaire",
-          "cover_time_end": "Fin de la plage horaire",
           "cover_action": "Action sur les volets",
-          "cover_my_button": "Bouton position favorite (My)"
+          "cover_my_button": "Bouton position favorite (My)",
+          "cover_weather_entity": "Entité météo (fermeture proactive)",
+          "cover_forecast_threshold": "Seuil de prévision (°C)"
         },
         "data_description": {
           "cover_entities": "Sélectionnez les entités volets à contrôler en cas de forte chaleur.",
           "cover_temp_sensor": "Capteur fournissant la température extérieure.",
           "cover_temp_threshold": "Température au-dessus de laquelle l'action sélectionnée est déclenchée.",
-          "cover_time_start": "Heure de début de la plage d'activation.",
-          "cover_time_end": "Heure de fin de la plage d'activation.",
           "cover_action": "'Fermer' envoie close_cover (volets standard). 'Arrêter' envoie stop_cover, qui interrompt le mouvement en cours — utile pour les volets Somfy RTS (la position favorite My est un bouton séparé).",
-          "cover_my_button": "Bouton à appuyer pour envoyer les volets en position favorite (My). Si renseigné, ce bouton est utilisé à la place de l'action ci-dessous."
+          "cover_my_button": "Bouton à appuyer pour envoyer les volets en position favorite (My). Si renseigné, ce bouton est utilisé à la place de l'action ci-dessous.",
+          "cover_weather_entity": "Entité météo optionnelle avec prévisions journalières. Si renseignée, le volet se ferme de manière proactive à l'heure d'ouverture du jour si la prévision du jour dépasse le seuil de prévision, sans attendre que le capteur extérieur le dépasse réellement.",
+          "cover_forecast_threshold": "Température maximale prévue au-delà de laquelle la fermeture proactive se déclenche."
         }
       },
-      "sunrise_schedulers": {
-        "title": "Ajustement des schedulers au lever du soleil",
-        "description": "Ajuster quotidiennement l'heure d'ouverture des schedulers en fonction du lever du soleil, en respectant une heure minimum configurable.",
+      "daily_cover_schedule": {
+        "title": "Planning quotidien des volets",
+        "description": "Ouvre et ferme un groupe de volets tous les jours nativement, sans passer par une entité Scheduler séparée. Reste indépendant du Contrôle des volets (chaleur), qui cible un volet unitaire. Pour chaque mode de journée ci-dessous, définissez 'sunrise', 'skip', ou une heure personnalisée 'HH:MM' — les modes partageant la même valeur forment un lot. La fermeture a toujours lieu une fois par jour, pour tous les modes, au coucher du soleil + le décalage ci-dessous.",
         "data": {
-          "sunrise_schedulers": "Schedulers à ajuster",
-          "sunrise_earliest": "Heure d'ouverture minimale"
+          "daily_cover_entities": "Entités volets (planning quotidien)",
+          "sunrise_earliest": "Heure d'ouverture minimale",
+          "daily_cover_close_offset_minutes": "Décalage de fermeture par rapport au coucher du soleil (minutes)",
+          "daily_open_time_home": "Heure d'ouverture — Maison",
+          "daily_open_time_work": "Heure d'ouverture — Travail",
+          "daily_open_time_remote": "Heure d'ouverture — Télétravail",
+          "daily_open_time_away": "Heure d'ouverture — Absence"
         },
         "data_description": {
-          "sunrise_schedulers": "Sélectionnez les schedulers dont le premier créneau sera ajusté chaque jour.",
-          "sunrise_earliest": "L'heure d'ouverture sera la plus tardive entre le lever du soleil et cette valeur."
+          "daily_cover_entities": "Entités volets (par exemple un groupe) à ouvrir et fermer selon le planning ci-dessous.",
+          "sunrise_earliest": "L'heure d'ouverture au lever du soleil sera la plus tardive entre le lever réel et cette valeur.",
+          "daily_cover_close_offset_minutes": "Les volets se ferment ce nombre de minutes par rapport au coucher du soleil, tous les jours, quel que soit le mode. Positif = après le coucher, négatif = avant (ex: -10 = 10 min avant le coucher du soleil).",
+          "daily_open_time_home": "Heure d'ouverture pour le mode Maison : 'sunrise', 'skip', ou une valeur personnalisée 'HH:MM'.",
+          "daily_open_time_work": "Heure d'ouverture pour le mode Travail : 'sunrise', 'skip', ou une valeur personnalisée 'HH:MM'.",
+          "daily_open_time_remote": "Heure d'ouverture pour le mode Télétravail : 'sunrise', 'skip', ou une valeur personnalisée 'HH:MM'.",
+          "daily_open_time_away": "Heure d'ouverture pour le mode Absence : 'sunrise', 'skip', ou une valeur personnalisée 'HH:MM'."
         }
       }
     }
@@ -250,6 +270,9 @@
       },
       "next_mode_at": {
         "name": "Prochain changement à"
+      },
+      "cover_close_time": {
+        "name": "Heure de fermeture des volets"
       }
     },
     "binary_sensor": {

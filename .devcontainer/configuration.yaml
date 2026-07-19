@@ -7,11 +7,14 @@ homeassistant:
   country: FR
   time_zone: Europe/Paris
 
-# Charger la config par défaut SAUF conversation
-default_config:
-
-# Désactiver explicitement conversation
-conversation: null
+# default_config: pulls in bluetooth/usb/dhcp/ssdp/cloud/assist_pipeline/
+# conversation/stream/mobile_app/go2rtc — none of which work (or matter) in a
+# devcontainer, and their on-the-fly pip installs are what caused frontend to
+# fail to load (concurrent installs during startup). Declare only what's
+# actually useful for testing HomeShift instead. frontend/config/automation/
+# script/scene are already pulled in via lovelace: below and core bootstrap.
+history:
+logbook:
 
 # Enable development mode
 logger:

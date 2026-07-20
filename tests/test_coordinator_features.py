@@ -1609,6 +1609,60 @@ class TestDailyCoverScheduleCompute:
         assert coordinator._cover_manager.daily_close_time is None
 
 
+class TestDailyCoverScheduleUsesTodaysDayMode:
+    """Regression: a midnight day-mode change must be applied BEFORE the daily
+    cover schedule is computed for the new day, not after.
+
+    coordinator._async_update_data() detects a new day and resolves today's
+    day mode in the same call. async_compute_daily_schedule() must run with
+    the newly-resolved mode (e.g. Sunday 'Home' -> Monday 'Work'), not the
+    stale mode from before the midnight transition — otherwise the open time
+    for the whole day is computed using yesterday's mode.
+    """
+
+    def test_midnight_mode_change_uses_new_mode_for_open_time(self):
+        from custom_components.homeshift.const import (
+            CONF_DAILY_COVER_ENTITIES,
+            CONF_DAILY_COVER_OPEN_TIME_MAP,
+        )
+
+        hass = make_mock_hass()
+        entry = make_mock_entry()
+        entry.options = {
+            CONF_DAILY_COVER_ENTITIES: ["cover.volets"],
+            CONF_DAILY_COVER_OPEN_TIME_MAP: "home:08:30, work:07:10",
+        }
+
+        sun_state = MagicMock()
+        sun_state.attributes = {"next_setting": "2026-07-20T19:30:00+00:00"}
+
+        def _states_get(entity_id):
+            if entity_id == "sun.sun":
+                return sun_state
+            return make_calendar_state(state="off")
+
+        hass.states.get.side_effect = _states_get
+
+        coordinator = HomeShiftCoordinator(hass, entry)
+        coordinator.day_mode = "Maison"  # Sunday's mode (weekend)
+        coordinator._today_date = date(2026, 7, 19)  # Sunday
+
+        with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt, \
+             patch("custom_components.homeshift.cover_manager.dt_util") as mock_cover_dt:
+            monday = datetime(2026, 7, 20, 0, 5, 0)  # Monday, just after midnight
+            mock_dt.now.return_value = monday
+            from datetime import timezone, timedelta as tdelta
+            tz_paris = timezone(tdelta(hours=2))
+            mock_cover_dt.as_local.side_effect = lambda dt: dt.astimezone(tz_paris)
+            asyncio.get_event_loop().run_until_complete(coordinator.async_update_data())
+
+        # Monday is a weekday with no calendar event -> resolves to the default mode
+        assert coordinator.day_mode == "Travail"
+        # ... and the daily schedule must use THAT mode's open time (07:10),
+        # not the stale Sunday/Home value (08:30).
+        assert coordinator._cover_manager.cover_open_time == "07:10"
+
+
 # ---------------------------------------------------------------------------
 # Daily cover schedule — check (open/close actions)
 # ---------------------------------------------------------------------------

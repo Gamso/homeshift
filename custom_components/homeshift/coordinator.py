@@ -705,14 +705,11 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
 
         # Reset day-level event type at midnight (new calendar day)
         today = now.date()
-        if today != self._today_date:
+        is_new_day = today != self._today_date
+        if is_new_day:
             _LOGGER.info("New calendar day (%s), resetting today_type", today)
             self._today_type = EVENT_NONE
             self._today_date = today
-            # Compute today's native daily cover open/close times, then
-            # schedule precise timers so they fire exactly on time.
-            await self._cover_manager.async_compute_daily_schedule(now, self.day_mode_key)
-            self._schedule_cover_timers()
 
         if calendar_state.state == "on":
             event_message = calendar_state.attributes.get("message", "")
@@ -797,6 +794,15 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
                     self._day_mode,
                     self._current_event,
                 )
+
+        if is_new_day:
+            # Compute today's native daily cover open/close times using
+            # TODAY's day mode — resolved just above, since a midnight
+            # mode change (e.g. Sunday 'Home' -> Monday 'Work') must be
+            # applied before this runs, not after — then schedule precise
+            # timers so open/close fire exactly on time.
+            await self._cover_manager.async_compute_daily_schedule(now, self.day_mode_key)
+            self._schedule_cover_timers()
 
         # Compute when and to what mode the next automatic change is expected
         await self._async_refresh_next_mode_prediction(

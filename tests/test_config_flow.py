@@ -32,6 +32,7 @@ def _make_hass(language: str = "en", switch_states: list | None = None) -> Magic
     hass.config.language = language
     hass.states.async_all.return_value = switch_states or []
     hass.states.get.return_value = MagicMock()  # any entity_id "exists"
+    hass.config_entries.async_entries.return_value = []  # nothing configured yet
     return hass
 
 
@@ -320,6 +321,15 @@ class TestConfigFlowMenu:
         flow.hass = _make_hass()
         result = await flow.async_step_user()
         assert result["step_id"] == "menu"
+
+    async def test_user_step_aborts_when_already_configured(self):
+        """A second entry would mean two coordinators driving the same covers."""
+        flow = cf.HomeShiftConfigFlow()
+        flow.hass = _make_hass()
+        flow.hass.config_entries.async_entries.return_value = [MagicMock()]
+        result = await flow.async_step_user()
+        assert result["type"] == "abort"
+        assert result["reason"] == "single_instance_allowed"
 
     async def test_finalize_absent_when_incomplete(self):
         flow = cf.HomeShiftConfigFlow()

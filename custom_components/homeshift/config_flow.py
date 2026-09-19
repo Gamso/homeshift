@@ -578,7 +578,13 @@ class HomeShiftConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self,
         _user_input: dict[str, Any] | None = None,
     ) -> config_entries.ConfigFlowResult:
-        """Entry point – redirect to the menu."""
+        """Entry point – redirect to the menu, unless HomeShift is already set up.
+
+        A second entry would mean a second coordinator driving the same covers
+        and schedulers, each unaware of the other.
+        """
+        if self._async_current_entries():
+            return self.async_abort(reason="single_instance_allowed")
         return await self.async_step_menu()
 
     # -- menu --------------------------------------------------------------

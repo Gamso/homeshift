@@ -149,7 +149,8 @@
       "invalid_calendar": "L'entité calendrier spécifiée n'existe pas"
     },
     "abort": {
-      "already_configured": "HomeShift est déjà configuré"
+      "already_configured": "HomeShift est déjà configuré",
+      "single_instance_allowed": "HomeShift est déjà configuré — une seule instance est prise en charge."
     }
   },
   "options": {

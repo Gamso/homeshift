@@ -126,6 +126,9 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
         # Predicted next automatic mode change
         self._next_mode: str | None = None
         self._next_mode_at: datetime | None = None
+        # Last prediction logged at INFO — the prediction is recomputed every
+        # poll, so only an actual change is worth a line in the log.
+        self._last_logged_prediction: tuple[str | None, datetime | None] | None = None
 
         # Parse thermostat mode map (InternalKey:DisplayValue, ...)
         thermostat_map_str = _config.get(CONF_THERMOSTAT_MODE_MAP, _loc.get(CONF_THERMOSTAT_MODE_MAP, DEFAULT_THERMOSTAT_MODE_MAP))
@@ -342,9 +345,18 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
             self._cancel_cover_close_timer = None
 
     def _log_next_mode_prediction(self, context: str) -> None:
-        """Log the currently computed next-mode prediction at INFO level."""
+        """Log the next-mode prediction: INFO when it changed, DEBUG otherwise.
+
+        This runs on every poll. Logging it at INFO each time buried the log
+        under ~300 identical lines a day; a prediction that moved is the part
+        worth seeing.
+        """
+        prediction = (self._next_mode, self._next_mode_at)
+        changed = prediction != self._last_logged_prediction
+        self._last_logged_prediction = prediction
         next_mode_at = self._next_mode_at.isoformat() if self._next_mode_at else None
-        _LOGGER.info(
+        log = _LOGGER.info if changed else _LOGGER.debug
+        log(
             "%s | next_mode=%s | next_mode_at=%s",
             context,
             self._next_mode,
@@ -779,13 +791,13 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
         # Auto-update mode (skip if absence was selected by hand, or a manual
         # override is active)
         if self._day_mode == self._mode_absence and self._absence_is_manual:
-            _LOGGER.info(
+            _LOGGER.debug(
                 "Periodic check: auto-update skipped, absence mode selected manually ('%s')",
                 self._day_mode,
             )
         elif self._override_until is not None and now < self._override_until:
             remaining = int((self._override_until - now).total_seconds() / 60) + 1
-            _LOGGER.info(
+            _LOGGER.debug(
                 "Periodic check: auto-update skipped, manual override active for ~%d more min",
                 remaining,
             )
@@ -811,7 +823,7 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
                 await self.async_refresh_schedulers()
                 await self._async_save_state()
             else:
-                _LOGGER.info(
+                _LOGGER.debug(
                     "Periodic check: day_mode unchanged ('%s') | event=%s",
                     self._day_mode,
                     self._current_event,
@@ -1213,7 +1225,7 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
         broadcast — and made the homeshift.sync_calendar service silently do
         nothing.
         """
-        _LOGGER.info("Running scheduled day type check")
+        _LOGGER.debug("Running scheduled day type check")
         await self.async_refresh()
 
     async def async_refresh_schedulers(self) -> None:

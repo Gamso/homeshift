@@ -2692,3 +2692,58 @@ class TestDebugLogsDoNotDoWorkWhenDisabled:
             )
 
         summarize.assert_called_once()
+class TestSteadyStatePollIsQuiet:
+    """A poll where nothing happened must not write to the log at INFO.
+
+    The coordinator polls every 5 minutes; logging "unchanged" and the
+    recomputed prediction at INFO each time produced hundreds of identical
+    lines a day in home-assistant.log.
+    """
+
+    def _coordinator(self, hass):
+        coordinator = HomeShiftCoordinator(hass, make_mock_entry())
+        coordinator.async_refresh_schedulers = AsyncMock()
+        coordinator._async_save_state = AsyncMock()
+        return coordinator
+
+    def _poll(self, coordinator, now):
+        with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
+            mock_dt.now.return_value = now
+            asyncio.get_event_loop().run_until_complete(coordinator.async_update_data())
+
+    def _infos(self, caplog):
+        return [
+            record.getMessage()
+            for record in caplog.records
+            if record.levelname == "INFO" and "coordinator" in record.name
+        ]
+
+    def test_second_identical_poll_logs_nothing_at_info(self, caplog):
+        hass = make_mock_hass()
+        hass.states.get.return_value = make_calendar_state(state="off")
+        hass.services.async_call = AsyncMock(return_value={})
+        coordinator = self._coordinator(hass)
+
+        # First poll of the day: legitimately logs the new day and the first
+        # prediction.
+        with caplog.at_level("DEBUG"):
+            self._poll(coordinator, datetime(2026, 3, 4, 10, 0, 0))
+            caplog.clear()
+            self._poll(coordinator, datetime(2026, 3, 4, 10, 5, 0))
+
+        assert self._infos(caplog) == []
+
+    def test_a_changed_prediction_is_still_logged_at_info(self, caplog):
+        hass = make_mock_hass()
+        hass.states.get.return_value = make_calendar_state(state="off")
+        hass.services.async_call = AsyncMock(return_value={})
+        coordinator = self._coordinator(hass)
+
+        with caplog.at_level("DEBUG"):
+            self._poll(coordinator, datetime(2026, 3, 4, 10, 0, 0))
+            caplog.clear()
+            # a different prediction than the one already reported
+            coordinator._last_logged_prediction = ("Something else", None)
+            self._poll(coordinator, datetime(2026, 3, 4, 10, 5, 0))
+
+        assert any("next_mode=" in message for message in self._infos(caplog))

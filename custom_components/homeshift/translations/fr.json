@@ -45,10 +45,13 @@
             "name": "Assignations de modes par défaut",
             "data": {
               "mode_default": "Mode par défaut (jour ouvré)",
-              "mode_absence": "Mode absence (bloque la mise à jour auto)",
+              "mode_absence": "Mode Absence (met en pause l'auto-update s'il est choisi à la main)",
               "mode_weekend": "Mode week-end",
               "mode_holiday": "Mode jour férié",
               "event_mode_map": "Mapping événement vers mode (MotClé:CléMode, ...)"
+            },
+            "data_description": {
+              "mode_absence": "Choisir ce mode vous-même met en pause les mises à jour automatiques jusqu'à ce que vous en sortiez. Un événement de calendrier associé à ce mode ne met rien en pause."
             }
           },
           "thermostat_section": {
@@ -199,10 +202,13 @@
             "name": "Assignations de modes par défaut",
             "data": {
               "mode_default": "Mode par défaut (jour ouvré)",
-              "mode_absence": "Mode absence (bloque la mise à jour auto)",
+              "mode_absence": "Mode Absence (met en pause l'auto-update s'il est choisi à la main)",
               "mode_weekend": "Mode week-end",
               "mode_holiday": "Mode jour férié",
               "event_mode_map": "Mapping événement vers mode (MotClé:CléMode, ...)"
+            },
+            "data_description": {
+              "mode_absence": "Choisir ce mode vous-même met en pause les mises à jour automatiques jusqu'à ce que vous en sortiez. Un événement de calendrier associé à ce mode ne met rien en pause."
             }
           },
           "thermostat_section": {

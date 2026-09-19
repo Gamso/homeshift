@@ -117,6 +117,12 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
             self._early_switch_minutes = DEFAULT_EARLY_SWITCH_MINUTES
         # Manual override: blocks auto-update until this datetime
         self._override_until: datetime | None = None
+        # True when the absence mode currently active was picked by hand.
+        # Absence freezes automatic updates indefinitely, which is what you
+        # want from a manual "I'm away, don't touch anything" switch — but not
+        # from a calendar event mapped to absence, which would leave the
+        # integration frozen for good once the event ends.
+        self._absence_is_manual: bool = False
         # Predicted next automatic mode change
         self._next_mode: str | None = None
         self._next_mode_at: datetime | None = None
@@ -203,6 +209,13 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
             )
             self._day_mode = resolved
 
+        if "absence_is_manual" in stored:
+            self._absence_is_manual = bool(stored["absence_is_manual"])
+        else:
+            # Payload written before this flag existed: absence could only
+            # persist if it had been selected by hand, so assume it was.
+            self._absence_is_manual = self._day_mode == self._mode_absence
+
         thermostat_mode_key = stored.get("thermostat_mode_key")
         if thermostat_mode_key and thermostat_mode_key in self._thermostat_mode_map:
             resolved = self._thermostat_mode_map[thermostat_mode_key]
@@ -220,6 +233,7 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
                 {
                     "day_mode_key": self.day_mode_key,
                     "thermostat_mode_key": self.thermostat_mode_key,
+                    "absence_is_manual": self._absence_is_manual,
                 }
             )
         except Exception as err:  # noqa: BLE001
@@ -467,8 +481,11 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
         """Set day mode directly (no override logic or scheduler refresh).
 
         Intended for test setup only. Use async_set_day_mode() at runtime.
+        Like a manual selection, this marks absence as hand-picked — the
+        automatic path is what clears that flag.
         """
         self._day_mode = value
+        self._absence_is_manual = value == self._mode_absence
 
     @property
     def thermostat_mode(self) -> str:
@@ -572,6 +589,7 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
             return
         old_mode = self._day_mode
         self._day_mode = resolved
+        self._absence_is_manual = resolved == self._mode_absence
         # Activate override to block automatic changes for the configured duration
         override_minutes = self._override_duration_minutes
         if override_minutes > 0:
@@ -758,10 +776,11 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
                     )
                     break
 
-        # Auto-update mode (skip if absence mode or manual override is active)
-        if self._day_mode == self._mode_absence:
+        # Auto-update mode (skip if absence was selected by hand, or a manual
+        # override is active)
+        if self._day_mode == self._mode_absence and self._absence_is_manual:
             _LOGGER.info(
-                "Periodic check: auto-update skipped, absence mode active ('%s')",
+                "Periodic check: auto-update skipped, absence mode selected manually ('%s')",
                 self._day_mode,
             )
         elif self._override_until is not None and now < self._override_until:
@@ -786,6 +805,9 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
                     self._current_event,
                 )
                 self._day_mode = new_mode
+                # Automatic absence (a calendar event mapped to it) must not
+                # freeze the integration the way a manual one does.
+                self._absence_is_manual = False
                 await self.async_refresh_schedulers()
                 await self._async_save_state()
             else:
@@ -1181,11 +1203,12 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
 
         This is the daily check entry point. It triggers a full refresh which
         in turn calls _async_update_data and auto-determines the mode.
+        Absence mode is not short-circuited here: _async_update_data already
+        leaves the day mode alone in that case, and skipping the whole refresh
+        also skipped the cover schedule, the next-mode prediction and the data
+        broadcast — and made the homeshift.sync_calendar service silently do
+        nothing.
         """
-        if self._day_mode == self._mode_absence:
-            _LOGGER.info("Mode is %s, skipping automatic check", self._mode_absence)
-            return
-
         _LOGGER.info("Running scheduled day type check")
         await self.async_refresh()
 

@@ -190,7 +190,7 @@ All parameters can be changed at any time via **Settings → Devices & Services 
 | **Weekend Mode**          | `Home`                          | Mode used on Saturdays and Sundays                            |
 | **Holiday Mode**          | `Home`                          | Mode used on public holidays                                  |
 | **Event Mode Map**        | `Vacation:home, Remote:remote`  | Maps calendar event names to day modes                        |
-| **Away Mode**             | `Away`                          | When this mode is active, automatic updates are paused        |
+| **Away Mode**             | `Away`                          | When *you* select this mode, automatic updates are paused until you leave it |
 | **Cover Entities**        | —                               | Cover entities to close when it is too hot (optional; requires Individual Covers below to be configured too) |
 | **Temperature Sensor**    | —                               | Sensor providing the outdoor temperature                      |
 | **Temperature Threshold** | `30 °C`                         | Temperature above which covers close reactively (fallback for days the forecast misses) |
@@ -217,7 +217,9 @@ Each time HomeShift refreshes, it looks at today's active calendar event and det
 | 4        | Today is a public holiday                                                 | **Holiday mode**               |
 | 5        | No special condition                                                      | **Default mode** (e.g. `Work`) |
 
-> **Note:** If the day mode is currently set to the **Away mode**, all automatic updates are paused until you change it manually.
+> **Note:** If **you** select the **Away mode** yourself, all automatic updates are paused until you change it manually — that is the point of the mode.
+>
+> A calendar event mapped to the Away mode does **not** pause anything: it sets the mode like any other event, and the mode moves on normally once the event ends. Otherwise a single mapped event would freeze the integration for good.
 
 ### Half-Day Events
 

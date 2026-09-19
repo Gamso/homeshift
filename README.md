@@ -35,6 +35,7 @@ Automatic day-mode and thermostat-mode management for Home Assistant, driven by 
   - [🗓️ Scheduler Integration](#️-scheduler-integration)
     - [Thermostat Tags](#thermostat-tags)
   - [🗓️ Daily Cover Schedule](#️-daily-cover-schedule)
+    - [Individual Covers](#individual-covers)
   - [☀️ Cover Heat Protection](#️-cover-heat-protection)
     - [Reactive Close](#reactive-close)
     - [Proactive Forecast-Based Close](#proactive-forecast-based-close)
@@ -151,14 +152,14 @@ Shows the cover opening time computed for today by the Daily Cover Schedule feat
 
 - **Type:** Sensor (text)
 - **Value:** `HH:MM` string (e.g. `07:45`), or `unknown` if not configured or has not run yet.
-- **Only registered** when **Daily Cover Entities** is configured.
+- **Only registered** when at least one cover is listed under **Individual Covers**.
 
 ### `sensor.cover_close_time`
 Shows the daily cover closing time computed for today (today's sunset + offset) by the Daily Cover Schedule feature.
 
 - **Type:** Sensor (text)
 - **Value:** `HH:MM` string (e.g. `21:40`), or `unknown` if not configured or not yet computed.
-- **Only registered** when **Daily Cover Entities** is configured.
+- **Only registered** when at least one cover is listed under **Individual Covers**.
 
 ---
 
@@ -190,14 +191,14 @@ All parameters can be changed at any time via **Settings → Devices & Services 
 | **Holiday Mode**          | `Home`                          | Mode used on public holidays                                  |
 | **Event Mode Map**        | `Vacation:home, Remote:remote`  | Maps calendar event names to day modes                        |
 | **Away Mode**             | `Away`                          | When this mode is active, automatic updates are paused        |
-| **Cover Entities**        | —                               | Cover entities to close when it is too hot (optional; requires Daily Cover Entities below to be configured too) |
+| **Cover Entities**        | —                               | Cover entities to close when it is too hot (optional; requires Individual Covers below to be configured too) |
 | **Temperature Sensor**    | —                               | Sensor providing the outdoor temperature                      |
 | **Temperature Threshold** | `30 °C`                         | Temperature above which covers close reactively (fallback for days the forecast misses) |
 | **Cover Action**          | `close_cover`                   | Service called when heat protection triggers: `close_cover` or `stop_cover` |
 | **My Position Button**    | —                               | Button entity to press instead of a cover service (e.g. Somfy RTS "My" position) |
 | **Weather Entity**        | —                               | Weather entity with daily forecasts, used for the proactive close (optional) |
 | **Forecast Threshold**    | `28 °C`                         | Forecast daily high above which covers close proactively      |
-| **Daily Cover Entities**  | —                               | Cover entity/group opened and closed daily (optional, separate from Cover Entities above); Cover Heat Protection's active window is derived from this |
+| **Individual Covers**     | —                               | The covers opened and closed daily, added one at a time, each with an optional window sensor and an optional My position button (separate from Cover Entities above); Cover Heat Protection's active window is derived from this schedule |
 | **Open Time — *(per day mode)*** | `08:30`                  | One field per day mode: `sunrise`, `skip`, or a custom `HH:MM` value |
 | **Earliest Open Time**    | `07:00`                         | Floor time used when a day mode's Open Time is `sunrise`      |
 | **Close Offset From Sunset** | `10 min`                     | Covers close this many minutes relative to sunset, every day, for every mode. Positive = after sunset, negative = before (e.g. `-10` = 10 min before sunset) |
@@ -275,7 +276,7 @@ When `thermostat_mode` is set to **Off**, HomeShift will force-disable all switc
 
 ## 🗓️ Daily Cover Schedule
 
-HomeShift can natively open and close a cover (typically a cover group) every day, without depending on any Scheduler-integration entity. **Daily Cover Entities** is its own entity list, separate from Cover Heat Protection's **Cover Entities** — so a whole-house cover group can follow the daily open/close schedule below while a single south-facing cover stays under heat-protection's control. [Cover Heat Protection](#️-cover-heat-protection) derives its active window from the times computed here, so configure this feature first.
+HomeShift can natively open and close covers every day, without depending on any Scheduler-integration entity. The covers it drives are listed under [Individual Covers](#individual-covers) — one entry per cover, a whole-house cover group counting as one — while this section sets the times. That list is separate from Cover Heat Protection's **Cover Entities**, so a south-facing cover can stay under heat-protection's control while the rest follow the daily open/close schedule below. [Cover Heat Protection](#️-cover-heat-protection) derives its active window from the times computed here, so configure both.
 
 Once per day, shortly after midnight, HomeShift computes:
 - **Open time** — resolved per day mode. Each configured day mode has its own **Open Time** field, set to one of:
@@ -289,6 +290,36 @@ Once per day, shortly after midnight, HomeShift computes:
 A one-shot timer fires the open/close action at the exact scheduled minute; the periodic coordinator poll (5 minutes by default) acts as a fallback in case the timer is missed (e.g. a HA restart). Each action fires at most once per calendar day.
 
 **`sensor.cover_open_time`** and **`sensor.cover_close_time`** reflect today's computed times, so you can display them on your dashboard.
+
+### Individual Covers
+
+The covers driven by the daily schedule are added **one at a time** from the *Individual Covers* menu: pick the cover, and optionally a **window opening sensor** (does that window stand open?) and a **My position button** (how should this cover close?). Adding a cover that is already in the list updates its settings instead of duplicating it. A cover group is a cover entity like any other, so driving the whole house through one group is simply a single entry.
+
+The window sensor changes one thing: **the evening close skips a cover whose window is reported open.** Rather than closing a cover over an open window, HomeShift leaves it alone and logs a warning:
+
+```
+WARNING ... Daily cover schedule: not closing cover 'cover.volet_chambre' — window sensor 'binary_sensor.fenetre_chambre' reports the window open
+```
+
+#### My Position Instead of a Full Close
+
+Some covers shouldn't come all the way down in the evening. Give such a cover a **My position button** — the button entity that sends a Somfy RTS (or similar) cover to its recorded favourite position — and the evening close presses that button instead of sending `close_cover` to it:
+
+```
+INFO ... Daily cover schedule: pressing My position button 'button.my_salon' for cover 'cover.volet_salon' (close_time=21:40)
+```
+
+- The cover is held back from the bulk `close_cover` — it only ever receives its button press.
+- An open window still wins: a blocked cover gets neither a close nor a press.
+- The **morning open is unchanged** — the My position only changes how a cover closes.
+- This is per-cover, and independent of Cover Heat Protection's own **My Position Button** setting.
+
+Details worth knowing:
+- **The morning open is never skipped** — an open window is only a reason not to close.
+- **A skipped cover is not retried later that night.** The day's close is marked done once it runs; the warning is the signal to close that cover by hand if you want it closed.
+- **A sensor that is missing or `unavailable` closes the cover as usual**, with a warning — an unavailable sensor can't establish that the window is open.
+- **A cover reached through a group is not protected.** HomeShift sends the close to the entity ids you configured and does not look inside a group, so a cover that should keep its own window sensor or My position must be listed here individually (and dropped from the group).
+- Covers without a window sensor behave exactly as before.
 
 > **Migrating from Scheduler-integration volet entities:** if you previously used two Scheduler entities (a fixed/sunrise-based "open" and a sunset-offset "close") purely to drive covers, you can disable/delete them once Daily Cover Schedule is configured with the same times — HomeShift no longer needs the Scheduler integration for covers at all.
 
@@ -331,6 +362,8 @@ Whether the cover has already been closed by this automation today, and when the
 | Manual override with timeout                |   ✅   | `number.override_duration`                                         |
 | Native daily cover open/close (no Scheduler entity needed) | ✅ | See [Daily Cover Schedule](#️-daily-cover-schedule)                |
 | Daily cover schedule state survives HA restart |  ✅  | Persisted alongside the heat-protection cover state                |
+| Skip the evening close when a window is open |  ✅  | See [Individual Covers](#individual-covers) |
+| Per-cover My position instead of a full close |  ✅  | See [Individual Covers](#individual-covers) |
 | Cover reactive heat close                   |   ✅   | See [Reactive Close](#reactive-close); active window derived from Daily Cover Schedule; never reopens itself |
 | Cover proactive forecast-based close        |   ✅   | See [Proactive Forecast-Based Close](#proactive-forecast-based-close) |
 | Cover automation state survives HA restart  |   ✅   | See [State Persistence](#state-persistence)                        |

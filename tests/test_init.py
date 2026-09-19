@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
 from homeassistant.core import CoreState
 
-from custom_components.homeshift import async_setup_entry
+from custom_components.homeshift import async_migrate_entry, async_setup_entry
 from custom_components.homeshift.const import DOMAIN
 
 from .conftest import make_mock_entry
@@ -195,3 +195,97 @@ class TestStartupCalendarSync:
         # async_sync_calendar() was called to obtain the coroutine for async_create_task.
         coord.async_sync_calendar.assert_called_once()
         hass.async_create_task.assert_called()
+class TestMigrationToVersion3:
+    """v2 → v3 folds the flat "Daily Cover Entities" list into the per-cover list."""
+
+    def _hass(self) -> MagicMock:
+        hass = MagicMock()
+        hass.config_entries.async_update_entry = MagicMock()
+        return hass
+
+    def _entry(self, data: dict, options: dict, version: int = 2) -> MagicMock:
+        entry = MagicMock()
+        entry.version = version
+        entry.data = data
+        entry.options = options
+        return entry
+
+    def _migrate(self, hass, entry) -> dict:
+        with patch("custom_components.homeshift.er"):
+            asyncio.get_event_loop().run_until_complete(async_migrate_entry(hass, entry))
+        return hass.config_entries.async_update_entry.call_args.kwargs
+
+    def test_entities_become_items(self):
+        hass = self._hass()
+        entry = self._entry({}, {"daily_cover_entities": ["cover.volets", "cover.bureau"]})
+
+        updated = self._migrate(hass, entry)
+
+        assert updated["version"] == 3
+        assert updated["options"]["daily_cover_items"] == [
+            {"cover": "cover.volets", "window_sensor": "", "my_button": ""},
+            {"cover": "cover.bureau", "window_sensor": "", "my_button": ""},
+        ]
+        assert "daily_cover_entities" not in updated["options"]
+        assert "daily_cover_entities" not in updated["data"]
+
+    def test_existing_items_are_kept_first_and_not_duplicated(self):
+        hass = self._hass()
+        entry = self._entry(
+            {},
+            {
+                "daily_cover_entities": ["cover.chambre", "cover.volets"],
+                "daily_cover_items": [
+                    {"cover": "cover.chambre", "window_sensor": "binary_sensor.f", "my_button": ""}
+                ],
+            },
+        )
+
+        updated = self._migrate(hass, entry)
+
+        assert updated["options"]["daily_cover_items"] == [
+            {"cover": "cover.chambre", "window_sensor": "binary_sensor.f", "my_button": ""},
+            {"cover": "cover.volets", "window_sensor": "", "my_button": ""},
+        ]
+
+    def test_entities_stored_in_data_are_migrated_too(self):
+        """An entry that was never edited through the options flow."""
+        hass = self._hass()
+        entry = self._entry({"daily_cover_entities": ["cover.volets"]}, {})
+
+        updated = self._migrate(hass, entry)
+
+        assert updated["data"] == {}
+        assert updated["options"]["daily_cover_items"] == [
+            {"cover": "cover.volets", "window_sensor": "", "my_button": ""}
+        ]
+
+    def test_other_keys_are_left_untouched(self):
+        hass = self._hass()
+        entry = self._entry(
+            {"calendar_entity": "calendar.a"},
+            {"daily_cover_entities": ["cover.volets"], "sunrise_earliest": "07:10:00"},
+        )
+
+        updated = self._migrate(hass, entry)
+
+        assert updated["data"]["calendar_entity"] == "calendar.a"
+        assert updated["options"]["sunrise_earliest"] == "07:10:00"
+
+    def test_nothing_configured_leaves_an_empty_list(self):
+        hass = self._hass()
+        entry = self._entry({}, {})
+
+        updated = self._migrate(hass, entry)
+
+        assert updated["version"] == 3
+        assert "daily_cover_items" not in updated["options"]
+
+    def test_an_already_migrated_entry_is_not_touched(self):
+        hass = self._hass()
+        entry = self._entry({}, {"daily_cover_items": [{"cover": "cover.a"}]}, version=3)
+
+        with patch("custom_components.homeshift.er"):
+            asyncio.get_event_loop().run_until_complete(async_migrate_entry(hass, entry))
+
+        hass.config_entries.async_update_entry.assert_not_called()

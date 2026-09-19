@@ -10,6 +10,7 @@
           "schedulers": "Schedulers",
           "covers": "Cover Heat Control",
           "daily_cover_schedule": "Daily Cover Schedule",
+          "cover_items": "Individual Covers",
           "finalize": "Save Configuration"
         }
       },
@@ -95,9 +96,8 @@
       },
       "daily_cover_schedule": {
         "title": "Daily Cover Schedule",
-        "description": "Natively open and close a cover group every day, without a separate Scheduler-integration entity. Kept separate from Cover Heat Control, which targets a single cover. For each day mode below, set 'sunrise', 'skip', or a custom 'HH:MM' opening time — modes sharing the same value form a batch. Closing always happens once per day, for every mode, at sunset + the offset below.",
+        "description": "Natively open and close your covers every day, without a separate Scheduler-integration entity. Which covers are driven is set under Individual Covers; this section sets the times. Kept independent from Cover Heat Control, which targets a single cover. For each day mode below, set 'sunrise', 'skip', or a custom 'HH:MM' opening time — modes sharing the same value form a batch. Closing always happens once per day, for every mode, at sunset + the offset below.",
         "data": {
-          "daily_cover_entities": "Daily Cover Entities",
           "sunrise_earliest": "Earliest Allowed Opening Time",
           "daily_cover_close_offset_minutes": "Close Offset From Sunset (minutes)",
           "daily_open_time_home": "Open Time — Home",
@@ -106,13 +106,42 @@
           "daily_open_time_away": "Open Time — Away"
         },
         "data_description": {
-          "daily_cover_entities": "Cover entities (e.g. a cover group) to open and close on the daily schedule below.",
           "sunrise_earliest": "The sunrise-based opening time will be the later of actual sunrise and this value.",
           "daily_cover_close_offset_minutes": "Covers close this many minutes relative to sunset, every day, regardless of day mode. Positive closes after sunset, negative closes before (e.g. -10 = 10 min before sunset).",
           "daily_open_time_home": "Opening time for the Home day mode: 'sunrise', 'skip', or a custom 'HH:MM' value.",
           "daily_open_time_work": "Opening time for the Work day mode: 'sunrise', 'skip', or a custom 'HH:MM' value.",
           "daily_open_time_remote": "Opening time for the Remote day mode: 'sunrise', 'skip', or a custom 'HH:MM' value.",
           "daily_open_time_away": "Opening time for the Away day mode: 'sunrise', 'skip', or a custom 'HH:MM' value."
+        }
+      },
+      "cover_items": {
+        "title": "Individual Covers",
+        "description": "The covers opened and closed by the Daily Cover Schedule, added one at a time — a cover group counts as one cover. Each can carry an optional window sensor and an optional My position button. At the evening close, a cover whose window sensor reports the window open is left alone and a warning is logged instead.\n\nCurrently configured:\n{covers}",
+        "menu_options": {
+          "cover_item_add": "➕ Add a cover",
+          "cover_item_remove": "Remove covers",
+          "menu": "← Back to the main menu"
+        }
+      },
+      "cover_item_add": {
+        "title": "Add a Cover",
+        "description": "Pick the cover and, optionally, the sensor telling whether its window is open. Selecting a cover that is already in the list updates its window sensor instead of adding it twice. A cover with a My position button closes to that position instead of closing fully.",
+        "data": {
+          "cover": "Cover",
+          "window_sensor": "Window opening sensor (optional)",
+          "my_button": "My position button (optional)"
+        },
+        "data_description": {
+          "cover": "The cover to open and close with the daily schedule.",
+          "window_sensor": "Binary sensor that is 'on' when the window is open. If it reports open at the evening close, this cover is not closed and a warning is logged.",
+          "my_button": "Button that sends this cover to its recorded favourite (My) position — for a cover that must not close fully. When set, the evening close presses this button instead of sending a close command."
+        }
+      },
+      "cover_item_remove": {
+        "title": "Remove Covers",
+        "description": "Select the covers to remove from the individual list. The cover group configured in Daily Cover Schedule is not affected.",
+        "data": {
+          "remove_covers": "Covers to remove"
         }
       }
     },
@@ -134,6 +163,7 @@
           "schedulers": "Schedulers",
           "covers": "Cover Heat Control",
           "daily_cover_schedule": "Daily Cover Schedule",
+          "cover_items": "Individual Covers",
           "finalize": "Save Configuration"
         }
       },
@@ -225,9 +255,8 @@
       },
       "daily_cover_schedule": {
         "title": "Daily Cover Schedule",
-        "description": "Natively open and close a cover group every day, without a separate Scheduler-integration entity. Kept separate from Cover Heat Control, which targets a single cover. For each day mode below, set 'sunrise', 'skip', or a custom 'HH:MM' opening time — modes sharing the same value form a batch. Closing always happens once per day, for every mode, at sunset + the offset below.",
+        "description": "Natively open and close your covers every day, without a separate Scheduler-integration entity. Which covers are driven is set under Individual Covers; this section sets the times. Kept independent from Cover Heat Control, which targets a single cover. For each day mode below, set 'sunrise', 'skip', or a custom 'HH:MM' opening time — modes sharing the same value form a batch. Closing always happens once per day, for every mode, at sunset + the offset below.",
         "data": {
-          "daily_cover_entities": "Daily Cover Entities",
           "sunrise_earliest": "Earliest Allowed Opening Time",
           "daily_cover_close_offset_minutes": "Close Offset From Sunset (minutes)",
           "daily_open_time_home": "Open Time — Home",
@@ -236,13 +265,42 @@
           "daily_open_time_away": "Open Time — Away"
         },
         "data_description": {
-          "daily_cover_entities": "Cover entities (e.g. a cover group) to open and close on the daily schedule below.",
           "sunrise_earliest": "The sunrise-based opening time will be the later of actual sunrise and this value.",
           "daily_cover_close_offset_minutes": "Covers close this many minutes relative to sunset, every day, regardless of day mode. Positive closes after sunset, negative closes before (e.g. -10 = 10 min before sunset).",
           "daily_open_time_home": "Opening time for the Home day mode: 'sunrise', 'skip', or a custom 'HH:MM' value.",
           "daily_open_time_work": "Opening time for the Work day mode: 'sunrise', 'skip', or a custom 'HH:MM' value.",
           "daily_open_time_remote": "Opening time for the Remote day mode: 'sunrise', 'skip', or a custom 'HH:MM' value.",
           "daily_open_time_away": "Opening time for the Away day mode: 'sunrise', 'skip', or a custom 'HH:MM' value."
+        }
+      },
+      "cover_items": {
+        "title": "Individual Covers",
+        "description": "The covers opened and closed by the Daily Cover Schedule, added one at a time — a cover group counts as one cover. Each can carry an optional window sensor and an optional My position button. At the evening close, a cover whose window sensor reports the window open is left alone and a warning is logged instead.\n\nCurrently configured:\n{covers}",
+        "menu_options": {
+          "cover_item_add": "➕ Add a cover",
+          "cover_item_remove": "Remove covers",
+          "menu": "← Back to the main menu"
+        }
+      },
+      "cover_item_add": {
+        "title": "Add a Cover",
+        "description": "Pick the cover and, optionally, the sensor telling whether its window is open. Selecting a cover that is already in the list updates its window sensor instead of adding it twice. A cover with a My position button closes to that position instead of closing fully.",
+        "data": {
+          "cover": "Cover",
+          "window_sensor": "Window opening sensor (optional)",
+          "my_button": "My position button (optional)"
+        },
+        "data_description": {
+          "cover": "The cover to open and close with the daily schedule.",
+          "window_sensor": "Binary sensor that is 'on' when the window is open. If it reports open at the evening close, this cover is not closed and a warning is logged.",
+          "my_button": "Button that sends this cover to its recorded favourite (My) position — for a cover that must not close fully. When set, the evening close presses this button instead of sending a close command."
+        }
+      },
+      "cover_item_remove": {
+        "title": "Remove Covers",
+        "description": "Select the covers to remove from the individual list. The cover group configured in Daily Cover Schedule is not affected.",
+        "data": {
+          "remove_covers": "Covers to remove"
         }
       }
     }

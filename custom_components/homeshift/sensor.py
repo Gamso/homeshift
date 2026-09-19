@@ -11,7 +11,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import (
-    CONF_DAILY_COVER_ENTITIES,
+    CONF_DAILY_COVER_ITEMS,
     DOMAIN,
     SENSOR_COVER_CLOSE_TIME,
     SENSOR_COVER_OPEN_TIME,
@@ -35,11 +35,16 @@ async def async_setup_entry(
         HomeShiftNextModeAtSensor(coordinator, entry),
     ]
     config = {**entry.data, **entry.options}
-    if config.get(CONF_DAILY_COVER_ENTITIES):
+    if _daily_covers_configured(config):
         entities.append(HomeShiftCoverOpenTimeSensor(coordinator, entry))
-    if config.get(CONF_DAILY_COVER_ENTITIES):
+    if _daily_covers_configured(config):
         entities.append(HomeShiftCoverCloseTimeSensor(coordinator, entry))
     async_add_entities(entities)
+
+
+def _daily_covers_configured(config: dict) -> bool:
+    """Return True when at least one cover is configured for the daily schedule."""
+    return bool(config.get(CONF_DAILY_COVER_ITEMS))
 
 
 def _device_info(entry: ConfigEntry) -> dict:
@@ -104,7 +109,8 @@ class HomeShiftNextModeAtSensor(CoordinatorEntity[HomeShiftCoordinator], SensorE
 class HomeShiftCoverOpenTimeSensor(CoordinatorEntity[HomeShiftCoordinator], SensorEntity):
     """String sensor: the scheduled cover opening time for today.
 
-    Only registered when CONF_DAILY_COVER_ENTITIES is configured.
+    Only registered when the daily schedule drives at least one cover
+    (CONF_DAILY_COVER_ITEMS).
     Updated each morning when async_compute_daily_schedule() runs.
     """
 
@@ -132,7 +138,8 @@ class HomeShiftCoverOpenTimeSensor(CoordinatorEntity[HomeShiftCoordinator], Sens
 class HomeShiftCoverCloseTimeSensor(CoordinatorEntity[HomeShiftCoordinator], SensorEntity):
     """String sensor: the scheduled daily cover closing time for today.
 
-    Only registered when CONF_DAILY_COVER_ENTITIES is configured.
+    Only registered when the daily schedule drives at least one cover
+    (CONF_DAILY_COVER_ITEMS).
     Updated each morning when async_compute_daily_schedule() runs
     (today's sunset + CONF_DAILY_COVER_CLOSE_OFFSET_MINUTES).
     """

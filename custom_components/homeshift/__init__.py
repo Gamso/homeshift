@@ -8,7 +8,17 @@ from homeassistant.const import EVENT_HOMEASSISTANT_STARTED, Platform
 from homeassistant.core import CoreState, Event, HomeAssistant, callback
 from homeassistant.helpers import entity_registry as er
 
-from .const import DOMAIN, SENSOR_NEXT_SCAN, SERVICE_REFRESH_SCHEDULERS, SERVICE_SYNC_CALENDAR
+from .const import (
+    CONF_DAILY_COVER_ENTITIES,
+    CONF_DAILY_COVER_ITEMS,
+    CONF_ITEM_COVER,
+    CONF_ITEM_MY_BUTTON,
+    CONF_ITEM_WINDOW_SENSOR,
+    DOMAIN,
+    SENSOR_NEXT_SCAN,
+    SERVICE_REFRESH_SCHEDULERS,
+    SERVICE_SYNC_CALENDAR,
+)
 from .coordinator import HomeShiftCoordinator
 
 _LOGGER = logging.getLogger(__name__)
@@ -31,6 +41,42 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
         hass.config_entries.async_update_entry(entry, version=2)
         _LOGGER.info("HomeShift config entry migrated to version 2")
+
+    if entry.version < 3:
+        # v2 → v3: the flat "Daily Cover Entities" list and the per-cover list
+        # were two ways of saying the same thing. Fold the former into the
+        # latter, where each cover can also carry a window sensor and a My
+        # position button.
+        merged = {**entry.data, **entry.options}
+        items = [
+            dict(item)
+            for item in (merged.get(CONF_DAILY_COVER_ITEMS) or [])
+            if isinstance(item, dict) and item.get(CONF_ITEM_COVER)
+        ]
+        known = {item[CONF_ITEM_COVER] for item in items}
+        for entity_id in merged.get(CONF_DAILY_COVER_ENTITIES) or []:
+            if entity_id and entity_id not in known:
+                items.append(
+                    {
+                        CONF_ITEM_COVER: entity_id,
+                        CONF_ITEM_WINDOW_SENSOR: "",
+                        CONF_ITEM_MY_BUTTON: "",
+                    }
+                )
+                known.add(entity_id)
+
+        data = {k: v for k, v in entry.data.items() if k != CONF_DAILY_COVER_ENTITIES}
+        options = {k: v for k, v in entry.options.items() if k != CONF_DAILY_COVER_ENTITIES}
+        if items:
+            # Options win over data in the merged view, so that is where the
+            # single list belongs.
+            options[CONF_DAILY_COVER_ITEMS] = items
+
+        hass.config_entries.async_update_entry(entry, data=data, options=options, version=3)
+        _LOGGER.info(
+            "HomeShift config entry migrated to version 3 (%d cover(s) in the daily schedule)",
+            len(items),
+        )
 
     return True
 

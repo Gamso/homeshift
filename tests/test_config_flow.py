@@ -4,15 +4,18 @@ from __future__ import annotations
 from unittest.mock import MagicMock
 
 import pytest
+import voluptuous as vol
 
 import custom_components.homeshift.config_flow as cf
 from custom_components.homeshift.const import (
     CONF_CALENDAR_ENTITY,
     CONF_COVER_ACTION,
     CONF_COVER_ENTITIES,
+    CONF_COVER_TEMP_SENSOR,
     CONF_COVER_TEMP_THRESHOLD,
     CONF_DAILY_COVER_CLOSE_OFFSET_MINUTES,
-    CONF_DAILY_COVER_ENTITIES,
+    CONF_DAILY_COVER_ITEMS,
+    CONF_ITEM_COVER,
     CONF_DAILY_COVER_OPEN_TIME_MAP,
     CONF_DAY_MODE_MAP,
     CONF_HOLIDAY_CALENDAR,
@@ -214,7 +217,6 @@ class TestDailyCoverSchema:
         schema = cf._daily_cover_schema(hass, data)
         field_names = {marker.schema for marker in schema.schema}
         assert {
-            CONF_DAILY_COVER_ENTITIES,
             CONF_SUNRISE_EARLIEST,
             CONF_DAILY_COVER_CLOSE_OFFSET_MINUTES,
             "daily_open_time_home",
@@ -323,7 +325,7 @@ class TestConfigFlowMenu:
         flow = cf.HomeShiftConfigFlow()
         flow.hass = _make_hass()
         result = await flow.async_step_menu()
-        assert result["menu_options"] == ["calendars", "mapping", "schedulers", "covers", "daily_cover_schedule"]
+        assert result["menu_options"] == ["calendars", "mapping", "schedulers", "covers", "daily_cover_schedule", "cover_items"]
 
     async def test_finalize_present_once_calendar_configured(self):
         flow = cf.HomeShiftConfigFlow()
@@ -409,14 +411,12 @@ class TestConfigFlowDailyCoverScheduleStep:
         flow._data[CONF_DAY_MODE_MAP] = "home:Home, away:Away"
         result = await flow.async_step_daily_cover_schedule(
             {
-                CONF_DAILY_COVER_ENTITIES: ["cover.volets"],
                 "daily_open_time_home": "sunrise",
                 "daily_open_time_away": "skip",
             }
         )
         assert result["step_id"] == "menu"
         assert flow._data[CONF_DAILY_COVER_OPEN_TIME_MAP] == "home:sunrise, away:skip"
-        assert flow._data[CONF_DAILY_COVER_ENTITIES] == ["cover.volets"]
 
     async def test_per_mode_fields_not_leaked_into_stored_data(self):
         flow = cf.HomeShiftConfigFlow()
@@ -577,3 +577,251 @@ class TestOptionsFlowShowForms:
         await flow.async_step_init()
         form = await flow.async_step_daily_cover_schedule()
         assert form["step_id"] == "daily_cover_schedule"
+# ---------------------------------------------------------------------------
+# Individual covers (add / remove one cover + its optional window sensor)
+# ---------------------------------------------------------------------------
+
+class TestCoverItemHelpers:
+    """_cover_items* helpers: normalize, summarize, add/update and remove."""
+
+    def test_drops_entries_without_a_cover(self):
+        data = {CONF_DAILY_COVER_ITEMS: [{"cover": "cover.a"}, {"window_sensor": "binary_sensor.b"}, "junk"]}
+        assert cf._cover_items(data) == [{"cover": "cover.a"}]
+
+    def test_summary_lists_each_cover_with_its_sensor(self):
+        data = {
+            CONF_DAILY_COVER_ITEMS: [
+                {"cover": "cover.a", "window_sensor": "binary_sensor.b"},
+                {"cover": "cover.c", "window_sensor": ""},
+            ]
+        }
+        summary = cf._cover_items_summary(data)
+        assert "cover.a" in summary and "binary_sensor.b" in summary
+        assert summary.splitlines()[-1].strip() == "- cover.c"
+
+    def test_summary_shows_the_my_button(self):
+        data = {CONF_DAILY_COVER_ITEMS: [{"cover": "cover.a", "window_sensor": "", "my_button": "button.my_a"}]}
+        assert cf._cover_items_summary(data) == "- cover.a (My: button.my_a)"
+
+    def test_summary_when_nothing_configured(self):
+        assert cf._cover_items_summary({}) == "—"
+
+    def test_menu_offers_remove_only_when_covers_exist(self):
+        assert cf._cover_items_menu_options({}) == ["cover_item_add", "menu"]
+        assert cf._cover_items_menu_options({CONF_DAILY_COVER_ITEMS: [{"cover": "cover.a"}]}) == [
+            "cover_item_add",
+            "cover_item_remove",
+            "menu",
+        ]
+
+    def test_add_appends_a_new_cover(self):
+        data = {CONF_DAILY_COVER_ITEMS: [{"cover": "cover.a", "window_sensor": ""}]}
+        result = cf._apply_cover_item_add({"cover": "cover.b", "window_sensor": "binary_sensor.b"}, data)
+        assert result == [
+            {"cover": "cover.a", "window_sensor": ""},
+            {"cover": "cover.b", "window_sensor": "binary_sensor.b", "my_button": ""},
+        ]
+
+    def test_re_adding_a_cover_updates_its_sensor_instead_of_duplicating(self):
+        data = {CONF_DAILY_COVER_ITEMS: [{"cover": "cover.a", "window_sensor": "binary_sensor.old"}]}
+        result = cf._apply_cover_item_add({"cover": "cover.a", "window_sensor": "binary_sensor.new"}, data)
+        assert result == [{"cover": "cover.a", "window_sensor": "binary_sensor.new", "my_button": ""}]
+
+    def test_re_adding_a_cover_updates_its_my_button(self):
+        data = {CONF_DAILY_COVER_ITEMS: [{"cover": "cover.a", "window_sensor": "", "my_button": "button.old"}]}
+        result = cf._apply_cover_item_add({"cover": "cover.a", "my_button": "button.new"}, data)
+        assert result == [{"cover": "cover.a", "window_sensor": "", "my_button": "button.new"}]
+
+    def test_add_stores_the_my_button(self):
+        result = cf._apply_cover_item_add({"cover": "cover.a", "my_button": "button.my_a"}, {})
+        assert result == [{"cover": "cover.a", "window_sensor": "", "my_button": "button.my_a"}]
+
+    def test_add_without_a_sensor_stores_an_empty_string(self):
+        result = cf._apply_cover_item_add({"cover": "cover.a"}, {})
+        assert result == [{"cover": "cover.a", "window_sensor": "", "my_button": ""}]
+
+    def test_remove_drops_the_selected_covers(self):
+        data = {
+            CONF_DAILY_COVER_ITEMS: [
+                {"cover": "cover.a", "window_sensor": ""},
+                {"cover": "cover.b", "window_sensor": ""},
+            ]
+        }
+        assert cf._apply_cover_item_remove({"remove_covers": ["cover.a"]}, data) == [
+            {"cover": "cover.b", "window_sensor": ""}
+        ]
+
+    def test_remove_with_nothing_selected_keeps_everything(self):
+        data = {CONF_DAILY_COVER_ITEMS: [{"cover": "cover.a", "window_sensor": ""}]}
+        assert cf._apply_cover_item_remove({}, data) == [{"cover": "cover.a", "window_sensor": ""}]
+
+    def test_add_schema_has_a_required_cover_and_two_optional_fields(self):
+        schema = cf._cover_item_add_schema()
+        markers = {marker.schema: marker for marker in schema.schema}
+        assert set(markers) == {"cover", "window_sensor", "my_button"}
+        assert isinstance(markers["cover"], vol.Required)
+        assert isinstance(markers["window_sensor"], vol.Optional)
+        assert isinstance(markers["my_button"], vol.Optional)
+
+    def test_remove_schema_offers_every_configured_cover(self):
+        data = {
+            CONF_DAILY_COVER_ITEMS: [
+                {"cover": "cover.a", "window_sensor": "binary_sensor.b"},
+                {"cover": "cover.c", "window_sensor": ""},
+            ]
+        }
+        schema = cf._cover_item_remove_schema(data)
+        (marker,) = schema.schema
+        assert marker.schema == "remove_covers"
+        options = schema.schema[marker].config["options"]
+        assert [option["value"] for option in options] == ["cover.a", "cover.c"]
+
+
+class TestConfigFlowCoverItemSteps:
+    """async_step_cover_item*: menu, add and remove all return to the cover-item menu."""
+
+    async def test_menu_lists_configured_covers(self):
+        flow = cf.HomeShiftConfigFlow()
+        flow.hass = _make_hass()
+        flow._data[CONF_DAILY_COVER_ITEMS] = [{"cover": "cover.a", "window_sensor": "binary_sensor.b"}]
+        result = await flow.async_step_cover_items()
+        assert result["step_id"] == "cover_items"
+        assert result["menu_options"] == ["cover_item_add", "cover_item_remove", "menu"]
+        assert "cover.a" in result["description_placeholders"]["covers"]
+
+    async def test_add_shows_form_then_stores_the_cover(self):
+        flow = cf.HomeShiftConfigFlow()
+        flow.hass = _make_hass()
+        form = await flow.async_step_cover_item_add()
+        assert form["step_id"] == "cover_item_add"
+
+        result = await flow.async_step_cover_item_add(
+            {"cover": "cover.chambre", "window_sensor": "binary_sensor.fenetre_chambre"}
+        )
+        assert result["step_id"] == "cover_items"
+        assert flow._data[CONF_DAILY_COVER_ITEMS] == [
+            {"cover": "cover.chambre", "window_sensor": "binary_sensor.fenetre_chambre", "my_button": ""}
+        ]
+
+    async def test_remove_shows_form_then_drops_the_cover(self):
+        flow = cf.HomeShiftConfigFlow()
+        flow.hass = _make_hass()
+        flow._data[CONF_DAILY_COVER_ITEMS] = [{"cover": "cover.chambre", "window_sensor": ""}]
+        form = await flow.async_step_cover_item_remove()
+        assert form["step_id"] == "cover_item_remove"
+
+        result = await flow.async_step_cover_item_remove({"remove_covers": ["cover.chambre"]})
+        assert result["step_id"] == "cover_items"
+        assert flow._data[CONF_DAILY_COVER_ITEMS] == []
+
+
+class TestOptionsFlowCoverItemSteps:
+    """The options flow exposes the same individual-cover steps, seeded from the entry."""
+
+    async def test_menu_and_add_round_trip(self):
+        flow = _make_options_flow({CONF_DAILY_COVER_ITEMS: [{"cover": "cover.a", "window_sensor": ""}]})
+        await flow.async_step_init()
+
+        menu = await flow.async_step_cover_items()
+        assert menu["menu_options"] == ["cover_item_add", "cover_item_remove", "menu"]
+
+        result = await flow.async_step_cover_item_add(
+            {"cover": "cover.b", "window_sensor": "binary_sensor.b"}
+        )
+        assert result["step_id"] == "cover_items"
+        assert flow._data[CONF_DAILY_COVER_ITEMS] == [
+            {"cover": "cover.a", "window_sensor": ""},
+            {"cover": "cover.b", "window_sensor": "binary_sensor.b", "my_button": ""},
+        ]
+
+    async def test_remove_clears_the_list(self):
+        flow = _make_options_flow({CONF_DAILY_COVER_ITEMS: [{"cover": "cover.a", "window_sensor": ""}]})
+        await flow.async_step_init()
+        result = await flow.async_step_cover_item_remove({"remove_covers": ["cover.a"]})
+        assert result["step_id"] == "cover_items"
+        assert flow._data[CONF_DAILY_COVER_ITEMS] == []
+# ---------------------------------------------------------------------------
+# Optional entity fields must not default to "" (an EntitySelector rejects it)
+# ---------------------------------------------------------------------------
+
+class TestEntityFieldsAreNeverEmptyByDefault:
+    """An EntitySelector validates its value as an entity id, so a field left
+    at default="" renders with "Entity is neither a valid entity ID nor a
+    valid UUID" before the user has touched anything.
+    """
+
+    def _markers(self, schema) -> dict:
+        return {marker.schema: marker for marker in schema.schema}
+
+    def test_add_cover_optional_fields_have_no_default(self):
+        markers = self._markers(cf._cover_item_add_schema())
+        for key in ("window_sensor", "my_button"):
+            assert markers[key].default is vol.UNDEFINED, key
+
+    def test_cover_step_entity_fields_have_no_default_when_unset(self):
+        markers = self._markers(cf._covers_schema(_make_hass(), {}))
+        for key in ("cover_temp_sensor", "cover_my_button", "cover_weather_entity"):
+            assert markers[key].default is vol.UNDEFINED, key
+
+    def test_cover_step_entity_fields_suggest_the_stored_value(self):
+        data = {
+            "cover_temp_sensor": "sensor.temp",
+            "cover_my_button": "button.my",
+            "cover_weather_entity": "weather.home",
+        }
+        markers = self._markers(cf._covers_schema(_make_hass(), data))
+        for key, value in data.items():
+            assert markers[key].default is vol.UNDEFINED, key
+            assert markers[key].description == {"suggested_value": value}, key
+
+    def test_calendar_fields_have_no_default_on_first_setup(self):
+        """The very first Calendars form must not open on two error boxes."""
+        markers = self._markers(cf._calendars_schema({}))
+        for key in (CONF_CALENDAR_ENTITY, CONF_HOLIDAY_CALENDAR):
+            assert markers[key].default is vol.UNDEFINED, key
+            assert isinstance(markers[key], vol.Required), key
+
+    def test_calendar_fields_suggest_the_stored_value(self):
+        data = {CONF_CALENDAR_ENTITY: "calendar.a", CONF_HOLIDAY_CALENDAR: "calendar.b"}
+        markers = self._markers(cf._calendars_schema(data))
+        assert markers[CONF_CALENDAR_ENTITY].description == {"suggested_value": "calendar.a"}
+        assert markers[CONF_HOLIDAY_CALENDAR].description == {"suggested_value": "calendar.b"}
+
+
+class TestClearingAnOptionalEntityField:
+    """A cleared field is absent from the submitted data — it must not silently
+    keep its previous value."""
+
+    async def test_cleared_cover_entities_are_stored_as_empty(self):
+        flow = cf.HomeShiftConfigFlow()
+        flow.hass = _make_hass()
+        flow._data.update(
+            {
+                CONF_COVER_TEMP_SENSOR: "sensor.temp",
+                "cover_my_button": "button.my",
+                "cover_weather_entity": "weather.home",
+            }
+        )
+
+        # the user cleared all three and submitted
+        result = await flow.async_step_covers({CONF_COVER_ENTITIES: ["cover.salon"]})
+
+        assert result["step_id"] == "menu"
+        assert flow._data[CONF_COVER_TEMP_SENSOR] == ""
+        assert flow._data["cover_my_button"] == ""
+        assert flow._data["cover_weather_entity"] == ""
+        assert flow._data[CONF_COVER_ENTITIES] == ["cover.salon"]
+
+    async def test_submitted_values_still_win(self):
+        flow = cf.HomeShiftConfigFlow()
+        flow.hass = _make_hass()
+        await flow.async_step_covers({CONF_COVER_TEMP_SENSOR: "sensor.new"})
+        assert flow._data[CONF_COVER_TEMP_SENSOR] == "sensor.new"
+
+    async def test_add_cover_without_optional_fields_stores_empty_strings(self):
+        flow = cf.HomeShiftConfigFlow()
+        flow.hass = _make_hass()
+        await flow.async_step_cover_item_add({CONF_ITEM_COVER: "cover.chambre"})
+        assert flow._data[CONF_DAILY_COVER_ITEMS] == [
+            {"cover": "cover.chambre", "window_sensor": "", "my_button": ""}
+        ]

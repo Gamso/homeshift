@@ -52,6 +52,7 @@ from .const import (
     DEFAULT_SUNRISE_EARLIEST,
     LOCALIZED_DEFAULTS,
     get_localized_defaults,
+    parse_key_value_map,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -101,13 +102,7 @@ def _calendars_schema(data: dict[str, Any]) -> vol.Schema:
 
 def _parse_day_mode_map(map_str: str) -> dict[str, str]:
     """Parse 'Key:Display, ...' string into an ordered dict."""
-    result: dict[str, str] = {}
-    for pair in map_str.split(","):
-        pair = pair.strip()
-        if ":" in pair:
-            key, _, display = pair.partition(":")
-            result[key.strip()] = display.strip()
-    return result
+    return parse_key_value_map(map_str)
 
 
 def _day_mode_display_fields(data: dict[str, Any]) -> dict:
@@ -138,13 +133,7 @@ def _rebuild_day_mode_map(user_input: dict[str, Any], data: dict[str, Any]) -> s
 
 def _parse_thermostat_map(map_str: str) -> dict[str, str]:
     """Parse 'Key:Display, ...' string into an ordered dict."""
-    result: dict[str, str] = {}
-    for pair in map_str.split(","):
-        pair = pair.strip()
-        if ":" in pair:
-            key, _, display = pair.partition(":")
-            result[key.strip()] = display.strip()
-    return result
+    return parse_key_value_map(map_str)
 
 
 def _thermostat_display_fields(data: dict[str, Any]) -> dict:

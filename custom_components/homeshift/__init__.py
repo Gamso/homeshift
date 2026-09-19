@@ -88,7 +88,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Create coordinator
     coordinator = HomeShiftCoordinator(hass, entry)
     await coordinator.async_restore_state()
-    await coordinator._cover_manager.async_restore_state()
+    await coordinator.cover_manager.async_restore_state()
     await coordinator.async_config_entry_first_refresh()
 
     hass.data[DOMAIN][entry.entry_id] = coordinator
@@ -106,7 +106,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     entry.async_on_unload(coordinator.async_cancel_cover_timers)
 
     # React immediately when the temperature sensor changes (no need to wait for the poll)
-    entry.async_on_unload(coordinator._cover_manager.async_setup_listeners())
+    entry.async_on_unload(coordinator.cover_manager.async_setup_listeners())
 
     # Reload the integration when options are saved so the coordinator picks up changes
     entry.async_on_unload(entry.add_update_listener(_async_reload_on_options_update))

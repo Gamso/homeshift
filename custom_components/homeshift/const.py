@@ -147,6 +147,28 @@ LOCALIZED_DEFAULTS: dict[str, dict] = {
 }
 
 
+def parse_key_value_map(raw: str, *, lower_keys: bool = False) -> dict[str, str]:
+    """Parse a 'Key:Value, Key:Value, ...' configuration string.
+
+    Used by every mapping option of the integration: day modes, thermostat
+    modes, event keywords and the per-mode cover open times. Entries with no
+    colon, an empty key or an empty value are skipped; only the first colon
+    separates a pair, so a value may contain one ('work:08:30').
+    Pass lower_keys=True for case-insensitive lookups (event keywords).
+    """
+    mapping: dict[str, str] = {}
+    if not raw:
+        return mapping
+    for pair in raw.split(","):
+        key, separator, value = pair.partition(":")
+        if not separator:
+            continue
+        key, value = key.strip(), value.strip()
+        if key and value:
+            mapping[key.lower() if lower_keys else key] = value
+    return mapping
+
+
 def get_localized_defaults(hass) -> dict:
     """Return defaults localized to the HA instance language."""
     lang = getattr(hass.config, "language", "en") or "en"

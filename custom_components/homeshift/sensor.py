@@ -37,7 +37,6 @@ async def async_setup_entry(
     config = {**entry.data, **entry.options}
     if _daily_covers_configured(config):
         entities.append(HomeShiftCoverOpenTimeSensor(coordinator, entry))
-    if _daily_covers_configured(config):
         entities.append(HomeShiftCoverCloseTimeSensor(coordinator, entry))
     async_add_entities(entities)
 

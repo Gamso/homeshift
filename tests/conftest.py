@@ -1,7 +1,7 @@
 """Shared fixtures and helpers for HomeShift coordinator tests."""
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 from custom_components.homeshift.const import (
     CONF_CALENDAR_ENTITY,
@@ -44,15 +44,6 @@ DEFAULT_MODE_WEEKEND: str = _fr_day_map[_FR[CONF_MODE_WEEKEND]]  # key "home"  �
 DEFAULT_MODE_HOLIDAY: str = _fr_day_map[_FR[CONF_MODE_HOLIDAY]]  # key "home"  → "Maison"
 DEFAULT_MODE_ABSENCE: str = _fr_day_map[_FR[CONF_MODE_ABSENCE]]  # key "away" → "Absence"
 DEFAULT_EVENT_MODE_MAP: str = _FR[CONF_EVENT_MODE_MAP]
-
-# Patch frame.report_usage globally so DataUpdateCoordinator can be instantiated
-_FRAME_PATCH = patch(
-    "homeassistant.helpers.frame.report_usage",
-    new=lambda *a, **kw: None,
-    create=True,
-)
-_FRAME_PATCH.start()
-
 
 def make_mock_hass() -> MagicMock:
     """Return a MagicMock hass with language='fr' for get_localized_defaults."""

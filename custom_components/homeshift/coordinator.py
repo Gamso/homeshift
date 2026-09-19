@@ -39,6 +39,7 @@ from .const import (
     EVENT_NONE,
     THERMOSTAT_OFF_KEY,
     get_localized_defaults,
+    parse_key_value_map,
 )
 
 from .cover_manager import CoverManager
@@ -86,6 +87,7 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
         super().__init__(
             hass,
             _LOGGER,
+            config_entry=entry,
             name=DOMAIN,
             update_interval=timedelta(minutes=SCAN_INTERVAL_MINUTES),
         )
@@ -398,21 +400,8 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
         """Parse 'Key1:Display1, Key2:Display2' into an ordered dict.
 
         Keys are internal English identifiers; values are display texts.
-        Identical to parse_thermostat_mode_map — kept as a named alias for clarity.
         """
-        mapping: dict[str, str] = {}
-        if not raw:
-            return mapping
-        for pair in raw.split(","):
-            pair = pair.strip()
-            if ":" not in pair:
-                continue
-            key, display = pair.split(":", 1)
-            key = key.strip()
-            display = display.strip()
-            if key and display:
-                mapping[key] = display
-        return mapping
+        return parse_key_value_map(raw)
 
     @staticmethod
     def parse_event_mode_map(raw: str) -> dict[str, str]:
@@ -420,19 +409,7 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
 
         Returns a case-insensitive-lookup dict (keys are lowered).
         """
-        mapping: dict[str, str] = {}
-        if not raw:
-            return mapping
-        for pair in raw.split(","):
-            pair = pair.strip()
-            if ":" not in pair:
-                continue
-            event_key, mode_value = pair.split(":", 1)
-            event_key = event_key.strip()
-            mode_value = mode_value.strip()
-            if event_key and mode_value:
-                mapping[event_key.lower()] = mode_value
-        return mapping
+        return parse_key_value_map(raw, lower_keys=True)
 
     @staticmethod
     def parse_thermostat_mode_map(raw: str) -> dict[str, str]:
@@ -441,19 +418,7 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
         Keys are internal English identifiers (case preserved).
         Values are display texts used in UI and as scheduler tags.
         """
-        mapping: dict[str, str] = {}
-        if not raw:
-            return mapping
-        for pair in raw.split(","):
-            pair = pair.strip()
-            if ":" not in pair:
-                continue
-            key, display = pair.split(":", 1)
-            key = key.strip()
-            display = display.strip()
-            if key and display:
-                mapping[key] = display
-        return mapping
+        return parse_key_value_map(raw)
 
     @property
     def day_mode_map(self) -> dict[str, str]:
@@ -528,6 +493,11 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
     def next_mode_at(self) -> datetime | None:
         """Timestamp when the next automatic day mode change is expected."""
         return self._next_mode_at
+
+    @property
+    def cover_manager(self) -> CoverManager:
+        """The cover manager: heat protection and the daily open/close schedule."""
+        return self._cover_manager
 
     @property
     def cover_open_time(self) -> str | None:

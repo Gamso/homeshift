@@ -41,6 +41,7 @@ from .const import (
     DEFAULT_DAILY_COVER_CLOSE_OFFSET_MINUTES,
     CONF_SUNRISE_EARLIEST,
     DEFAULT_SUNRISE_EARLIEST,
+    parse_key_value_map,
 )
 
 if TYPE_CHECKING:
@@ -77,17 +78,6 @@ def _parse_stored_date(value: str | None) -> date | None:
         return date.fromisoformat(value)
     except ValueError:
         return None
-
-
-def _parse_mode_map(raw: str) -> dict[str, str]:
-    """Parse a 'Key:Value, Key:Value, ...' string into a dict."""
-    result: dict[str, str] = {}
-    for pair in raw.split(","):
-        pair = pair.strip()
-        if ":" in pair:
-            key, _, value = pair.partition(":")
-            result[key.strip()] = value.strip()
-    return result
 
 
 class CoverManager:
@@ -521,7 +511,7 @@ class CoverManager:
         if not self._daily_cover_targets():
             return
 
-        open_time_map = _parse_mode_map(self._config.get(CONF_DAILY_COVER_OPEN_TIME_MAP, ""))
+        open_time_map = parse_key_value_map(self._config.get(CONF_DAILY_COVER_OPEN_TIME_MAP, ""))
         raw_value = open_time_map.get(day_mode_key or "", DEFAULT_DAILY_COVER_OPEN_TIME).strip().lower()
 
         if raw_value == "skip":

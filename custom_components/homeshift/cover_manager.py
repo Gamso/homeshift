@@ -109,6 +109,10 @@ class CoverManager:
         # (separate cover group from heat protection).
         self._daily_opened_date: date | None = None
         self._daily_closed_date: date | None = None
+        # Calendar day the schedule was last computed for. Persisted so that a
+        # same-day recomputation (an HA restart re-runs the "new day" path with
+        # an empty in-memory date) doesn't wrongly rearm heat protection.
+        self._schedule_computed_date: date | None = None
         self._store: Store = Store(hass, STORAGE_VERSION, f"{STORAGE_KEY}.{entry.entry_id}")
 
     @property
@@ -137,6 +141,7 @@ class CoverManager:
         self._proactive_checked_date = _parse_stored_date(stored.get("proactive_checked_date"))
         self._daily_opened_date = _parse_stored_date(stored.get("daily_opened_date"))
         self._daily_closed_date = _parse_stored_date(stored.get("daily_closed_date"))
+        self._schedule_computed_date = _parse_stored_date(stored.get("schedule_computed_date"))
 
     async def _async_save_state(self) -> None:
         """Persist cover-automation state to storage."""
@@ -147,6 +152,7 @@ class CoverManager:
                     "proactive_checked_date": self._proactive_checked_date.isoformat() if self._proactive_checked_date else None,
                     "daily_opened_date": self._daily_opened_date.isoformat() if self._daily_opened_date else None,
                     "daily_closed_date": self._daily_closed_date.isoformat() if self._daily_closed_date else None,
+                    "schedule_computed_date": self._schedule_computed_date.isoformat() if self._schedule_computed_date else None,
                 }
             )
         except Exception as err:  # noqa: BLE001 - defensive around storage I/O
@@ -490,9 +496,17 @@ class CoverManager:
         — unlike opening, closing is not mode-dependent.
         Called once when a new calendar day is detected. Computed once per
         day — a day-mode change later that same day does not recompute the
-        open time. Also resets heat protection's closed state for the new day.
+        open time. Also resets heat protection's closed state, but only when
+        the calendar day actually changed: the coordinator's "new day" flag
+        lives in memory only, so an HA restart re-runs this for today, and
+        clearing the flag then would let heat protection close a cover a
+        second time — including one reopened by hand after the morning close.
         """
-        self._heat_closed = False
+        today = now.date()
+        if self._schedule_computed_date != today:
+            self._heat_closed = False
+            self._schedule_computed_date = today
+            await self._async_save_state()
 
         if not self._daily_cover_targets():
             return

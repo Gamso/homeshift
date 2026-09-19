@@ -2448,3 +2448,105 @@ class TestDailyCoverMyPositionButton:
         self._run_close(coordinator)
 
         assert coordinator._cover_manager._daily_closed_date == date(2026, 7, 1)
+class TestHeatProtectionResetIsPerCalendarDay:
+    """async_compute_daily_schedule() rearms heat protection only on a real new day.
+
+    The coordinator's "new day" detection is in-memory (_today_date starts as
+    None), so every HA restart re-runs the new-day path for today. Clearing
+    _heat_closed there would let heat protection close a cover a second time
+    the same day — the one thing it promises never to do.
+    """
+
+    def _make_entry(self):
+        from custom_components.homeshift.const import (
+            CONF_DAILY_COVER_ITEMS,
+            CONF_DAILY_COVER_OPEN_TIME_MAP,
+            CONF_SUNRISE_EARLIEST,
+        )
+        entry = make_mock_entry()
+        entry.options = {
+            CONF_DAILY_COVER_ITEMS: _cover_items("cover.volets"),
+            CONF_DAILY_COVER_OPEN_TIME_MAP: "home:08:30",
+            CONF_SUNRISE_EARLIEST: "07:10:00",
+        }
+        return entry
+
+    def _sun_hass(self):
+        hass = make_mock_hass()
+        sun_state = MagicMock()
+        sun_state.attributes = {
+            "next_setting": "2026-07-01T19:30:00+00:00",
+            "next_rising": "2026-07-01T05:45:00+00:00",
+        }
+        hass.states.get.side_effect = lambda eid: sun_state if eid == "sun.sun" else None
+        return hass
+
+    def _compute(self, manager, now):
+        with patch("custom_components.homeshift.cover_manager.dt_util") as mock_dt:
+            from datetime import timezone, timedelta as tdelta
+            tz_paris = timezone(tdelta(hours=2))
+            mock_dt.as_local.side_effect = lambda dt: dt.astimezone(tz_paris)
+            asyncio.get_event_loop().run_until_complete(
+                manager.async_compute_daily_schedule(now, "home")
+            )
+
+    def _manager(self):
+        coordinator = HomeShiftCoordinator(self._sun_hass(), self._make_entry())
+        manager = coordinator._cover_manager
+        manager._async_save_state = AsyncMock()
+        return manager
+
+    def test_same_day_recompute_keeps_the_closed_flag(self):
+        """HA restarts at 15:00: the schedule is recomputed, the flag survives."""
+        manager = self._manager()
+        # state restored from storage after the restart
+        manager._heat_closed = True
+        manager._schedule_computed_date = date(2026, 7, 1)
+
+        self._compute(manager, datetime(2026, 7, 1, 15, 0, 0))
+
+        assert manager._heat_closed is True
+        # the times are still recomputed — they are not persisted
+        assert manager.daily_close_time == "21:40"
+
+    def test_new_day_recompute_clears_the_closed_flag(self):
+        """Next morning: heat protection starts over."""
+        manager = self._manager()
+        manager._heat_closed = True
+        manager._schedule_computed_date = date(2026, 6, 30)
+
+        self._compute(manager, datetime(2026, 7, 1, 0, 5, 0))
+
+        assert manager._heat_closed is False
+        assert manager._schedule_computed_date == date(2026, 7, 1)
+
+    def test_first_ever_run_clears_the_flag_and_records_the_day(self):
+        """With nothing persisted yet, the first compute behaves like a new day."""
+        manager = self._manager()
+        manager._heat_closed = True  # would be False in practice; proves the reset runs
+
+        self._compute(manager, datetime(2026, 7, 1, 0, 5, 0))
+
+        assert manager._heat_closed is False
+        assert manager._schedule_computed_date == date(2026, 7, 1)
+
+    def test_the_day_is_persisted_on_the_flip(self):
+        """The new day is written to storage, so the next restart sees it."""
+        manager = self._manager()
+        manager._schedule_computed_date = date(2026, 6, 30)
+
+        self._compute(manager, datetime(2026, 7, 1, 0, 5, 0))
+
+        manager._async_save_state.assert_awaited()
+
+    def test_restore_reads_back_the_computed_day(self):
+        """async_restore_state picks the date up from storage."""
+        manager = self._manager()
+        manager._store.async_load = AsyncMock(
+            return_value={"heat_closed": True, "schedule_computed_date": "2026-07-01"}
+        )
+
+        asyncio.get_event_loop().run_until_complete(manager.async_restore_state())
+
+        assert manager._heat_closed is True
+        assert manager._schedule_computed_date == date(2026, 7, 1)

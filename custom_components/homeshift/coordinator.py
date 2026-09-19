@@ -881,14 +881,17 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
                 events = entity_data.get("events", [])
                 if isinstance(events, list):
                     valid_events = [e for e in events if isinstance(e, dict)]
-                    _LOGGER.debug(
-                        "calendar.get_events returned %d event(s) for '%s' between %s and %s: %s",
-                        len(valid_events),
-                        calendar_entity,
-                        start.isoformat(),
-                        end.isoformat(),
-                        self._summarize_events_for_log(valid_events),
-                    )
+                    if _LOGGER.isEnabledFor(logging.DEBUG):
+                        # Summarizing builds a list per call — only worth it
+                        # when the record will actually be emitted.
+                        _LOGGER.debug(
+                            "calendar.get_events returned %d event(s) for '%s' between %s and %s: %s",
+                            len(valid_events),
+                            calendar_entity,
+                            start,
+                            end,
+                            self._summarize_events_for_log(valid_events),
+                        )
                     return valid_events
         except Exception as err:  # noqa: BLE001
             _LOGGER.debug("calendar.get_events failed for '%s': %s", calendar_entity, err)
@@ -1040,7 +1043,7 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
         )
         _LOGGER.debug(
             "Predicting next mode from now=%s | current_mode=%s | work_events=%d | holiday_calendar=%s | holiday_state=%s | holiday_events=%d | early_switch=%d",
-            now.isoformat(),
+            now,
             self._day_mode,
             len(upcoming),
             holiday_calendar or None,
@@ -1112,11 +1115,12 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
 
         # Sort chronologically using naive times to avoid tz comparison errors
         sorted_candidates = sorted(candidates, key=self._to_naive)
-        _LOGGER.debug(
-            "Next-mode candidates (%d): %s",
-            len(sorted_candidates),
-            [candidate.isoformat() for candidate in sorted_candidates],
-        )
+        if _LOGGER.isEnabledFor(logging.DEBUG):
+            _LOGGER.debug(
+                "Next-mode candidates (%d): %s",
+                len(sorted_candidates),
+                [candidate.isoformat() for candidate in sorted_candidates],
+            )
 
         # Walk candidates and return the first that produces a different mode
         current_mode = self._day_mode
@@ -1131,14 +1135,14 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
             )
             _LOGGER.debug(
                 "Next-mode candidate %s -> mode=%s (current_mode=%s)",
-                candidate.isoformat(),
+                candidate,
                 mode_at,
                 current_mode,
             )
             if mode_at != current_mode:
                 _LOGGER.debug(
                     "Next-mode first change found at %s -> %s",
-                    candidate.isoformat(),
+                    candidate,
                     mode_at,
                 )
                 return mode_at, candidate

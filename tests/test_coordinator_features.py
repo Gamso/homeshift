@@ -2647,3 +2647,48 @@ class TestCoverActionsAreNotSentTwice:
 
         assert hass.services.async_call.await_count == 1
         assert manager._heat_closed is True
+class TestDebugLogsDoNotDoWorkWhenDisabled:
+    """Log arguments are evaluated before the call, so building them costs the
+    same whether or not debug logging is on. The two collection-building
+    arguments in the hot path (every poll) are now guarded.
+    """
+
+    def _coordinator_and_result(self):
+        hass = make_mock_hass()
+        hass.services.async_call = AsyncMock(
+            return_value={"calendar.teletravail": {"events": [{"summary": "A", "start": "x", "end": "y"}]}}
+        )
+        return HomeShiftCoordinator(hass, make_mock_entry())
+
+    def test_event_summary_is_not_built_when_debug_is_off(self):
+        import custom_components.homeshift.coordinator as coord_module
+
+        coordinator = self._coordinator_and_result()
+        with (
+            patch.object(coord_module._LOGGER, "isEnabledFor", return_value=False),
+            patch.object(coord_module.HomeShiftCoordinator, "_summarize_events_for_log") as summarize,
+        ):
+            events = asyncio.get_event_loop().run_until_complete(
+                coordinator._async_get_upcoming_events(
+                    "calendar.teletravail", datetime(2026, 7, 1), datetime(2026, 7, 2)
+                )
+            )
+
+        summarize.assert_not_called()
+        assert len(events) == 1  # the events themselves are still returned
+
+    def test_event_summary_is_built_when_debug_is_on(self):
+        import custom_components.homeshift.coordinator as coord_module
+
+        coordinator = self._coordinator_and_result()
+        with (
+            patch.object(coord_module._LOGGER, "isEnabledFor", return_value=True),
+            patch.object(coord_module.HomeShiftCoordinator, "_summarize_events_for_log") as summarize,
+        ):
+            asyncio.get_event_loop().run_until_complete(
+                coordinator._async_get_upcoming_events(
+                    "calendar.teletravail", datetime(2026, 7, 1), datetime(2026, 7, 2)
+                )
+            )
+
+        summarize.assert_called_once()

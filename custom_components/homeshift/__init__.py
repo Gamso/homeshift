@@ -97,7 +97,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     # Register services
-    await async_setup_services(hass, coordinator)
+    async_setup_services(hass)
 
     # Cancel the next-mode timer when the entry is unloaded
     entry.async_on_unload(coordinator.async_cancel_next_mode_timer)
@@ -157,21 +157,40 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if unload_ok := await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
         hass.data[DOMAIN].pop(entry.entry_id)
 
+        if not hass.data[DOMAIN]:
+            # Last entry gone: drop the services too. Left registered, they
+            # would still appear in the UI and act on an unloaded coordinator
+            # (writing to its store, calling cover/switch services).
+            hass.data.pop(DOMAIN)
+            for service in (SERVICE_REFRESH_SCHEDULERS, SERVICE_SYNC_CALENDAR):
+                hass.services.async_remove(DOMAIN, service)
+
     return unload_ok
 
 
-async def async_setup_services(hass: HomeAssistant, coordinator: HomeShiftCoordinator) -> None:
-    """Set up services for the HomeShift integration."""
+@callback
+def async_setup_services(hass: HomeAssistant) -> None:
+    """Register the HomeShift services.
+
+    The handlers resolve the loaded coordinators at call time rather than
+    capturing one: a captured coordinator outlives its entry (a reload builds
+    a new one) and would keep answering service calls after being unloaded.
+    """
+
+    def _coordinators() -> list[HomeShiftCoordinator]:
+        return list(hass.data.get(DOMAIN, {}).values())
 
     async def handle_refresh_schedulers(_call) -> None:
         """Handle the refresh_schedulers service call."""
         _LOGGER.info("Service call: refresh_schedulers")
-        await coordinator.async_refresh_schedulers()
+        for coordinator in _coordinators():
+            await coordinator.async_refresh_schedulers()
 
     async def handle_sync_calendar(_call) -> None:
         """Handle the sync_calendar service call."""
         _LOGGER.info("Service call: sync_calendar")
-        await coordinator.async_sync_calendar()
+        for coordinator in _coordinators():
+            await coordinator.async_sync_calendar()
 
     hass.services.async_register(
         DOMAIN, SERVICE_REFRESH_SCHEDULERS, handle_refresh_schedulers

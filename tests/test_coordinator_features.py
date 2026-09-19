@@ -2747,3 +2747,59 @@ class TestSteadyStatePollIsQuiet:
             self._poll(coordinator, datetime(2026, 3, 4, 10, 5, 0))
 
         assert any("next_mode=" in message for message in self._infos(caplog))
+class TestPreparedEventViews:
+    """_prepare_events / _prepare_active_event parse once what _mode_at_time
+    used to reparse for every inflection point of the next seven days."""
+
+    def _coordinator(self):
+        return HomeShiftCoordinator(make_mock_hass(), make_mock_entry())
+
+    def test_event_is_parsed_into_naive_bounds_and_mapped_mode(self):
+        coordinator = self._coordinator()
+        prepared = coordinator._prepare_events(
+            [{"summary": "Journée Télétravail", "start": "2026-03-04T09:00:00+01:00", "end": "2026-03-04T18:00:00+01:00"}],
+            None,
+        )
+        (start, end, mode, all_day), = prepared
+        assert (start.hour, end.hour) == (9, 18)
+        assert start.tzinfo is None  # comparisons are done naive
+        assert mode == "Télétravail"
+        assert all_day is False
+
+    def test_unmapped_summary_yields_no_mode(self):
+        coordinator = self._coordinator()
+        (_, _, mode, _), = coordinator._prepare_events(
+            [{"summary": "Dentiste", "start": "2026-03-04T09:00:00+01:00", "end": "2026-03-04T10:00:00+01:00"}],
+            None,
+        )
+        assert mode is None
+
+    def test_all_day_event_is_flagged_and_unparseable_bounds_are_none(self):
+        coordinator = self._coordinator()
+        prepared = coordinator._prepare_events(
+            [
+                {"summary": "Vacances", "start": "2026-03-04", "end": "2026-03-05"},
+                {"summary": "Vacances", "start": "not-a-date", "end": ""},
+            ],
+            None,
+        )
+        assert prepared[0][3] is True
+        assert prepared[1][0] is None and prepared[1][1] is None
+
+    def test_active_event_window_is_parsed_with_its_mode(self):
+        coordinator = self._coordinator()
+        state = make_calendar_state(
+            state="on", message="Télétravail",
+            start_time="2026-03-04 09:00:00", end_time="2026-03-04 18:00:00",
+        )
+        start, end, mode = coordinator._prepare_active_event(state)
+        assert (start.hour, end.hour) == (9, 18)
+        assert mode == "Télétravail"
+
+    def test_active_event_is_none_when_off_or_unparseable(self):
+        coordinator = self._coordinator()
+        assert coordinator._prepare_active_event(None) is None
+        assert coordinator._prepare_active_event(make_calendar_state(state="off")) is None
+        assert coordinator._prepare_active_event(
+            make_calendar_state(state="on", message="x", start_time="nope", end_time="nope")
+        ) is None

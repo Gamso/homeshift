@@ -8,6 +8,7 @@ times, so it is inert until the daily schedule is configured.
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import date, datetime, time as dt_time, timedelta
 from typing import TYPE_CHECKING, Callable
@@ -114,6 +115,14 @@ class CoverManager:
         # an empty in-memory date) doesn't wrongly rearm heat protection.
         self._schedule_computed_date: date | None = None
         self._store: Store = Store(hass, STORAGE_VERSION, f"{STORAGE_KEY}.{entry.entry_id}")
+        # Serializes the once-per-day actions. They are triggered from several
+        # places at once — the precise open/close timers, the periodic poll and
+        # every temperature-sensor change — and each guard ("already done
+        # today") is only updated after the service call is awaited. Without
+        # this lock two overlapping runs both pass the guard and send the
+        # command twice: harmless for close_cover, not for stop_cover or a My
+        # position button, which would move the cover a second time.
+        self._action_lock = asyncio.Lock()
 
     @property
     def _config(self) -> dict:
@@ -212,8 +221,9 @@ class CoverManager:
             )
             return
 
-        await self._async_check_proactive_close(now, cover_entities)
-        await self._async_check_reactive_close(now, cover_entities, temp_sensor)
+        async with self._action_lock:
+            await self._async_check_proactive_close(now, cover_entities)
+            await self._async_check_reactive_close(now, cover_entities, temp_sensor)
 
     async def _async_apply_cover_action(self, cover_entities: list[str]) -> None:
         """Press the configured My button, or call the configured cover service."""
@@ -603,6 +613,16 @@ class CoverManager:
 
         today = now.date()
 
+        async with self._action_lock:
+            await self._async_run_daily_actions(now, today, targets)
+
+    async def _async_run_daily_actions(self, now: datetime, today: date, targets: list[str]) -> None:
+        """Send today's open and close actions, at most once each.
+
+        Runs under _action_lock: each "already done today" guard below is only
+        written after its service call is awaited, so overlapping callers must
+        not interleave here.
+        """
         if self._daily_opened_date != today and self.cover_open_time:
             open_time = _parse_time_str(self.cover_open_time)
             if open_time is not None and now.time() >= open_time:

@@ -2550,3 +2550,100 @@ class TestHeatProtectionResetIsPerCalendarDay:
 
         assert manager._heat_closed is True
         assert manager._schedule_computed_date == date(2026, 7, 1)
+class TestCoverActionsAreNotSentTwice:
+    """Overlapping runs must not send the same once-per-day command twice.
+
+    The daily open/close is triggered from the precise one-shot timer AND the
+    periodic poll, and heat protection additionally from every temperature
+    change. Each guard is written only after its service call is awaited, so
+    without serialization two overlapping runs both pass the guard.
+    """
+
+    def _slow_hass(self, states=None):
+        hass = make_mock_hass()
+
+        async def _slow_call(*_args, **_kwargs):
+            await asyncio.sleep(0)  # yield control mid-call, like a real service
+
+        hass.services.async_call = AsyncMock(side_effect=_slow_call)
+        hass.states.get.side_effect = lambda eid: (states or {}).get(eid)
+        return hass
+
+    def _temp_state(self, value):
+        state = MagicMock()
+        state.state = str(value)
+        return state
+
+    def _daily_manager(self, hass):
+        from custom_components.homeshift.const import CONF_DAILY_COVER_ITEMS
+
+        entry = make_mock_entry()
+        entry.options = {CONF_DAILY_COVER_ITEMS: _cover_items("cover.volets")}
+        manager = HomeShiftCoordinator(hass, entry)._cover_manager
+        manager._async_save_state = AsyncMock()
+        manager.cover_open_time = "08:30"
+        manager.daily_close_time = "21:40"
+        return manager
+
+    def test_two_overlapping_closes_send_one_command(self):
+        """The close timer and the periodic poll landing together."""
+        hass = self._slow_hass()
+        manager = self._daily_manager(hass)
+        manager._daily_opened_date = date(2026, 7, 1)
+
+        asyncio.get_event_loop().run_until_complete(
+            asyncio.gather(
+                manager.async_check_daily_schedule(datetime(2026, 7, 1, 21, 40, 0)),
+                manager.async_check_daily_schedule(datetime(2026, 7, 1, 21, 40, 1)),
+            )
+        )
+
+        assert hass.services.async_call.await_count == 1
+        assert manager._daily_closed_date == date(2026, 7, 1)
+
+    def test_two_overlapping_opens_send_one_command(self):
+        """Same race on the morning open."""
+        hass = self._slow_hass()
+        manager = self._daily_manager(hass)
+
+        asyncio.get_event_loop().run_until_complete(
+            asyncio.gather(
+                manager.async_check_daily_schedule(datetime(2026, 7, 1, 8, 30, 0)),
+                manager.async_check_daily_schedule(datetime(2026, 7, 1, 8, 30, 1)),
+            )
+        )
+
+        assert hass.services.async_call.await_count == 1
+        assert hass.services.async_call.await_args.args[1] == "open_cover"
+
+    def test_two_overlapping_temperature_changes_close_once(self):
+        """Two sensor updates in the same tick must not close the cover twice."""
+        from custom_components.homeshift.const import (
+            CONF_COVER_ENTITIES,
+            CONF_COVER_TEMP_SENSOR,
+            CONF_COVER_TEMP_THRESHOLD,
+            CONF_DAILY_COVER_ITEMS,
+        )
+
+        hass = self._slow_hass({"sensor.temp": self._temp_state(35.0)})
+        entry = make_mock_entry()
+        entry.options = {
+            CONF_COVER_ENTITIES: ["cover.salon"],
+            CONF_COVER_TEMP_SENSOR: "sensor.temp",
+            CONF_COVER_TEMP_THRESHOLD: 30.0,
+            CONF_DAILY_COVER_ITEMS: [],
+        }
+        manager = HomeShiftCoordinator(hass, entry)._cover_manager
+        manager._async_save_state = AsyncMock()
+        manager.cover_open_time = "08:30"
+        manager.daily_close_time = "21:40"
+
+        asyncio.get_event_loop().run_until_complete(
+            asyncio.gather(
+                manager.async_check_heat_protection(datetime(2026, 7, 1, 14, 0, 0)),
+                manager.async_check_heat_protection(datetime(2026, 7, 1, 14, 0, 1)),
+            )
+        )
+
+        assert hass.services.async_call.await_count == 1
+        assert manager._heat_closed is True

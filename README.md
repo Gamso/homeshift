@@ -77,6 +77,7 @@ At regular intervals (every 5 minutes by default), it reads your calendar, picks
 
 ## ✅ Requirements
 
+- **Home Assistant 2026.9** or newer
 - A **calendar** entity containing your work or schedule events
 - A **calendar** entity for public holidays
 - The [Scheduler integration](https://github.com/nielsfaber/scheduler-component) to automate scheduler switches

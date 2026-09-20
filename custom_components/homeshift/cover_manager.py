@@ -13,6 +13,7 @@ import logging
 from datetime import date, datetime, time as dt_time, timedelta
 from typing import TYPE_CHECKING, Callable
 
+from astral import Observer
 from astral.sun import (
     SunDirection,
     elevation as astral_elevation,
@@ -24,7 +25,6 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.event import EventStateChangedData, async_track_state_change_event
 from homeassistant.helpers.storage import Store
-from homeassistant.helpers.sun import get_astral_observer
 from homeassistant.util import dt as dt_util
 
 from .const import (
@@ -80,6 +80,19 @@ def _parse_time_str(time_str: str) -> dt_time | None:
     return None
 
 
+def _astral_observer(hass: HomeAssistant) -> Observer:
+    """Return an astral observer for the Home Assistant location.
+
+    Built here rather than taken from homeassistant.helpers.sun, which has
+    already moved this ground once: get_astral_location, still present, is
+    deprecated for removal in 2027.7 and logs a warning naming this
+    integration, and its replacement get_astral_observer is too recent to
+    exist everywhere. This is exactly what that replacement does, against
+    config attributes that have been stable for years.
+    """
+    return Observer(hass.config.latitude, hass.config.longitude, hass.config.elevation)
+
+
 def next_sun_datetime(hass: HomeAssistant, attr_name: str) -> datetime | None:
     """Return a sun.sun 'next_*' attribute as a local datetime, or None."""
     sun_state = hass.states.get("sun.sun")
@@ -116,7 +129,7 @@ def elevation_for_sunset_offset(hass: HomeAssistant, offset_minutes: int, year: 
     degree the config flow offers. Returns None when the location cannot be
     resolved.
     """
-    observer = get_astral_observer(hass)
+    observer = _astral_observer(hass)
     elevations: list[float] = []
     for month, day in ((3, 21), (6, 21), (9, 21), (12, 21)):
         try:
@@ -143,7 +156,7 @@ def sun_time_at_elevation(hass: HomeAssistant, elevation: float, on_date: date) 
     """
     try:
         event = astral_time_at_elevation(
-            get_astral_observer(hass),
+            _astral_observer(hass),
             elevation,
             date=on_date,
             direction=SunDirection.SETTING,

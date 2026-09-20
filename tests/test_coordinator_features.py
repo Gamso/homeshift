@@ -2911,7 +2911,7 @@ class TestSunTimeAtElevation:
     """sun_time_at_elevation(): the astral lookup behind the elevation trigger."""
 
     def _hass(self, latitude=48.85, longitude=2.35, time_zone="Europe/Paris"):
-        """A hass carrying a real location — get_astral_location needs a dict data store."""
+        """A hass carrying a real location, which is all the astral lookup reads."""
         hass = make_mock_hass()
         hass.data = {}
         hass.config.latitude = latitude

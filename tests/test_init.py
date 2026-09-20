@@ -204,12 +204,29 @@ class TestStartupCalendarSync:
         # async_sync_calendar() was called to obtain the coroutine for async_create_task.
         coord.async_sync_calendar.assert_called_once()
         hass.async_create_task.assert_called()
-class TestMigrationToVersion3:
-    """v2 → v3 folds the flat "Daily Cover Entities" list into the per-cover list."""
+class _MigrationHarness:
+    """Shared harness: migrations chain, so the fake entry must record writes.
 
-    def _hass(self) -> MagicMock:
+    async_update_entry applies data/options/version to the entry the way HA
+    does, otherwise a later step in the same run reads what the earlier one
+    was supposed to have replaced.
+    """
+
+    def _hass(self, entry=None) -> MagicMock:
         hass = MagicMock()
-        hass.config_entries.async_update_entry = MagicMock()
+        hass.config.latitude = 43.45
+        hass.config.longitude = 5.47
+        hass.config.time_zone = "Europe/Paris"
+        hass.config.elevation = 0
+        hass.data = {}
+
+        def _update(target, **kwargs):
+            for key in ("data", "options", "version"):
+                if key in kwargs:
+                    setattr(target, key, kwargs[key])
+            return True
+
+        hass.config_entries.async_update_entry = MagicMock(side_effect=_update)
         return hass
 
     def _entry(self, data: dict, options: dict, version: int = 2) -> MagicMock:
@@ -219,10 +236,24 @@ class TestMigrationToVersion3:
         entry.options = options
         return entry
 
-    def _migrate(self, hass, entry) -> dict:
+    def _run(self, hass, entry) -> None:
         with patch("custom_components.homeshift.er"):
             asyncio.get_event_loop().run_until_complete(async_migrate_entry(hass, entry))
-        return hass.config_entries.async_update_entry.call_args.kwargs
+
+    def _writes(self, hass, version: int) -> dict:
+        """Return the kwargs of the call that bumped the entry to `version`."""
+        for call in hass.config_entries.async_update_entry.call_args_list:
+            if call.kwargs.get("version") == version:
+                return call.kwargs
+        raise AssertionError(f"no migration wrote version {version}")
+
+
+class TestMigrationToVersion3(_MigrationHarness):
+    """v2 → v3 folds the flat "Daily Cover Entities" list into the per-cover list."""
+
+    def _migrate(self, hass, entry) -> dict:
+        self._run(hass, entry)
+        return self._writes(hass, 3)
 
     def test_entities_become_items(self):
         hass = self._hass()
@@ -290,14 +321,17 @@ class TestMigrationToVersion3:
         assert updated["version"] == 3
         assert "daily_cover_items" not in updated["options"]
 
-    def test_an_already_migrated_entry_is_not_touched(self):
+    def test_an_already_migrated_entry_skips_this_step(self):
         hass = self._hass()
         entry = self._entry({}, {"daily_cover_items": [{"cover": "cover.a"}]}, version=3)
 
-        with patch("custom_components.homeshift.er"):
-            asyncio.get_event_loop().run_until_complete(async_migrate_entry(hass, entry))
+        self._run(hass, entry)
 
-        hass.config_entries.async_update_entry.assert_not_called()
+        versions = [
+            call.kwargs.get("version")
+            for call in hass.config_entries.async_update_entry.call_args_list
+        ]
+        assert 3 not in versions
 
 class TestUnloadRemovesServices:
     """async_unload_entry drops the services once the last entry is gone.
@@ -386,3 +420,118 @@ class TestServicesTargetTheLoadedCoordinator:
         )
 
         stale.async_refresh_schedulers.assert_not_called()
+
+
+class TestMigrationToVersion4(_MigrationHarness):
+    """v3 → v4 converts the retired sunset offset into the elevation it landed on.
+
+    The reference location is Gardanne (43.45°N): sunset + 10 min sits at
+    -2.5° there, sunset - 10 min at +1.5°, measured with astral.
+    """
+
+    def _migrate(self, options: dict, data: dict | None = None) -> dict:
+        hass = self._hass()
+        entry = self._entry(data or {}, options, version=3)
+        self._run(hass, entry)
+        return self._writes(hass, 4)
+
+    def _covers(self) -> list[dict]:
+        return [{"cover": "cover.volets", "window_sensor": "", "my_button": ""}]
+
+    def test_a_stored_offset_becomes_the_elevation_it_landed_on(self):
+        """Closing 10 min before sunset is +1.5° at this latitude."""
+        updated = self._migrate(
+            {"daily_cover_items": self._covers(), "daily_cover_close_offset_minutes": -10}
+        )
+
+        assert updated["version"] == 4
+        assert updated["options"]["daily_cover_close_elevation"] == 1.5
+
+    def test_an_entry_that_never_touched_the_offset_gets_the_default_converted(self):
+        """It was silently running on +10 min, which is -2.5° here."""
+        updated = self._migrate({"daily_cover_items": self._covers()})
+
+        assert updated["options"]["daily_cover_close_elevation"] == -2.5
+
+    def test_the_retired_keys_are_stripped_from_data_and_options(self):
+        updated = self._migrate(
+            {"daily_cover_items": self._covers(), "daily_cover_close_offset_minutes": 10},
+            data={"daily_cover_close_offset_minutes": 30, "calendar_entity": "calendar.a"},
+        )
+
+        assert "daily_cover_close_offset_minutes" not in updated["options"]
+        assert "daily_cover_close_offset_minutes" not in updated["data"]
+        assert "daily_cover_close_mode" not in updated["options"]
+        assert updated["data"]["calendar_entity"] == "calendar.a"
+
+    def test_an_entry_that_already_picked_an_elevation_keeps_it(self):
+        """The intermediate build let the elevation be chosen explicitly."""
+        updated = self._migrate(
+            {
+                "daily_cover_items": self._covers(),
+                "daily_cover_close_mode": "elevation",
+                "daily_cover_close_elevation": -6.0,
+                "daily_cover_close_offset_minutes": 10,
+            }
+        )
+
+        assert updated["options"]["daily_cover_close_elevation"] == -6.0
+
+    def test_an_unused_daily_schedule_gets_no_setting(self):
+        """No cover is driven, so there is nothing to convert."""
+        updated = self._migrate({"daily_cover_close_offset_minutes": 10})
+
+        assert updated["version"] == 4
+        assert "daily_cover_close_elevation" not in updated["options"]
+
+    def test_a_corrupted_offset_converts_the_default_instead(self):
+        updated = self._migrate(
+            {"daily_cover_items": self._covers(), "daily_cover_close_offset_minutes": "nonsense"}
+        )
+
+        assert updated["options"]["daily_cover_close_elevation"] == -2.5
+
+    def test_an_unusable_location_falls_back_to_the_recommended_value(self):
+        from custom_components.homeshift.const import DEFAULT_DAILY_COVER_CLOSE_ELEVATION
+
+        hass = self._hass()
+        entry = self._entry({}, {"daily_cover_items": self._covers()}, version=3)
+        with patch("custom_components.homeshift.elevation_for_sunset_offset", return_value=None):
+            self._run(hass, entry)
+
+        assert (
+            self._writes(hass, 4)["options"]["daily_cover_close_elevation"]
+            == DEFAULT_DAILY_COVER_CLOSE_ELEVATION
+        )
+
+    def test_an_elevation_outside_the_offered_range_is_clamped(self, caplog):
+        from custom_components.homeshift.const import CLOSE_ELEVATION_MAX
+
+        hass = self._hass()
+        entry = self._entry({}, {"daily_cover_items": self._covers()}, version=3)
+        with patch("custom_components.homeshift.elevation_for_sunset_offset", return_value=40.0):
+            with caplog.at_level("WARNING"):
+                self._run(hass, entry)
+
+        assert self._writes(hass, 4)["options"]["daily_cover_close_elevation"] == CLOSE_ELEVATION_MAX
+        assert "clamped" in caplog.text
+
+    def test_a_v2_entry_runs_both_migrations_in_one_go(self):
+        """The old flat list and the old offset are both retired at once."""
+        hass = self._hass()
+        entry = self._entry({}, {"daily_cover_entities": ["cover.volets"]}, version=2)
+
+        self._run(hass, entry)
+
+        assert self._writes(hass, 3)["options"]["daily_cover_items"] == [
+            {"cover": "cover.volets", "window_sensor": "", "my_button": ""}
+        ]
+        assert self._writes(hass, 4)["options"]["daily_cover_close_elevation"] == -2.5
+
+    def test_an_already_migrated_entry_is_left_alone(self):
+        hass = self._hass()
+        entry = self._entry({}, {"daily_cover_items": self._covers()}, version=4)
+
+        self._run(hass, entry)
+
+        hass.config_entries.async_update_entry.assert_not_called()

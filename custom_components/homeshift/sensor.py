@@ -11,7 +11,10 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import (
+    CLOSE_TRIGGER_ELEVATION,
+    CONF_DAILY_COVER_CLOSE_ELEVATION,
     CONF_DAILY_COVER_ITEMS,
+    DEFAULT_DAILY_COVER_CLOSE_ELEVATION,
     DOMAIN,
     SENSOR_COVER_CLOSE_TIME,
     SENSOR_COVER_OPEN_TIME,
@@ -135,12 +138,15 @@ class HomeShiftCoverOpenTimeSensor(CoordinatorEntity[HomeShiftCoordinator], Sens
 
 
 class HomeShiftCoverCloseTimeSensor(CoordinatorEntity[HomeShiftCoordinator], SensorEntity):
-    """String sensor: the scheduled daily cover closing time for today.
+    """String sensor: the estimated daily cover closing time for today.
 
     Only registered when the daily schedule drives at least one cover
     (CONF_DAILY_COVER_ITEMS).
-    Updated each morning when async_compute_daily_schedule() runs
-    (today's sunset + CONF_DAILY_COVER_CLOSE_OFFSET_MINUTES).
+    Updated each morning when async_compute_daily_schedule() runs: the time
+    the setting sun reaches CONF_DAILY_COVER_CLOSE_ELEVATION. The attributes
+    report the configured elevation, and whether it is what produced tonight's
+    time — a day the sun never reaches it closes at plain sunset instead, and
+    that has to be visible rather than silent.
     """
 
     _attr_has_entity_name = True
@@ -155,8 +161,19 @@ class HomeShiftCoverCloseTimeSensor(CoordinatorEntity[HomeShiftCoordinator], Sen
 
     @property
     def native_value(self) -> str | None:
-        """Return today's computed cover closing time (HH:MM)."""
+        """Return today's estimated cover closing time (HH:MM)."""
         return self.coordinator.cover_close_time
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        """Return the configured elevation and what produced tonight's time."""
+        config = {**self._entry.data, **self._entry.options}
+        return {
+            "sun_elevation": config.get(
+                CONF_DAILY_COVER_CLOSE_ELEVATION, DEFAULT_DAILY_COVER_CLOSE_ELEVATION
+            ),
+            "trigger": self.coordinator.cover_close_trigger or CLOSE_TRIGGER_ELEVATION,
+        }
 
     @property
     def device_info(self) -> dict:

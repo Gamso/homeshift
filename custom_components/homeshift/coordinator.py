@@ -332,6 +332,10 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
         now = dt_util.now()
         await self._cover_manager.async_check_daily_schedule(now)
         await self._cover_manager.async_check_heat_protection(now)
+        # The timers fire between polls, so push the new cover state (today's
+        # times, the covers left open) to the entities right away instead of
+        # letting them show yesterday's until the next poll.
+        self.async_update_listeners()
 
     @callback
     def async_cancel_cover_timers(self) -> None:
@@ -508,6 +512,21 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
     def cover_close_time(self) -> str | None:
         """Today's computed daily cover closing time (HH:MM), or None if not configured."""
         return self._cover_manager.daily_close_time
+
+    @property
+    def covers_left_open(self) -> dict[str, str]:
+        """Covers tonight's close had to skip, as {cover: window sensor}."""
+        return self._cover_manager.covers_left_open
+
+    @property
+    def covers_left_open_date(self) -> date | None:
+        """The day the skipped-cover list was last established."""
+        return self._cover_manager.covers_left_open_date
+
+    @property
+    def cover_close_trigger(self) -> str | None:
+        """What produced today's closing time: 'sunset' or 'elevation'."""
+        return self._cover_manager.daily_close_trigger
 
     def is_heat_protection_active(self, now: datetime) -> bool | None:
         """Return whether cover heat protection conditions are currently met.

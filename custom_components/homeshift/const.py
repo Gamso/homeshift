@@ -71,7 +71,25 @@ CONF_DAILY_COVER_ENTITIES = "daily_cover_entities"
 # automatically that day), or a fixed 'HH:MM' time. A mode key missing from
 # the map falls back to DEFAULT_DAILY_COVER_OPEN_TIME.
 CONF_DAILY_COVER_OPEN_TIME_MAP = "daily_cover_open_time_map"
-# Minutes relative to sunset — negative closes before sunset, positive after.
+# The evening close fires when the descending sun reaches
+# CONF_DAILY_COVER_CLOSE_ELEVATION degrees above the horizon, as reported by
+# sun.sun's 'elevation' attribute: 0 is sunset, -6 is the end of civil
+# twilight (artificial light needed). A light level rather than a delay.
+CONF_DAILY_COVER_CLOSE_ELEVATION = "daily_cover_close_elevation"
+# Bounds offered by the config flow. Wide enough to hold every value the
+# retired sunset offset could express: +-120 minutes around sunset spans
+# roughly +21 to -22 degrees at 43N (measured with astral).
+CLOSE_ELEVATION_MIN = -25.0
+CLOSE_ELEVATION_MAX = 25.0
+# Reported by the Cover Close Time sensor as 'trigger'. Not a setting: the
+# elevation is the only trigger, and CLOSE_TRIGGER_SUNSET means the fallback
+# had to step in because the sun never reached the configured elevation.
+CLOSE_TRIGGER_ELEVATION = "elevation"
+CLOSE_TRIGGER_SUNSET = "sunset"
+# Retired settings, kept for the v3 -> v4 migration that converts the fixed
+# sunset offset into the elevation it was landing on. Nothing else reads them.
+CONF_DAILY_COVER_CLOSE_MODE = "daily_cover_close_mode"
+LEGACY_CLOSE_MODE_ELEVATION = "elevation"
 CONF_DAILY_COVER_CLOSE_OFFSET_MINUTES = "daily_cover_close_offset_minutes"
 # The covers driven by the daily schedule, added one at a time from the config
 # flow. Stored as a list of dicts: each pairs one cover with an optional
@@ -90,7 +108,14 @@ CONF_ITEM_MY_BUTTON = "my_button"
 WINDOW_OPEN_STATES = frozenset({"on", "open"})
 
 DEFAULT_DAILY_COVER_OPEN_TIME = "08:30"
+# The offset the retired setting defaulted to, used only to convert an entry
+# that never touched it.
 DEFAULT_DAILY_COVER_CLOSE_OFFSET_MINUTES = 10
+# -2 degrees is what that default offset landed on at every season (measured
+# at 48.8N: sunset + 10 min sits between -1.9 and -2.3 all year), so a fresh
+# install behaves like the old one. -4 waits until the room is genuinely
+# dark, -6 is the end of civil twilight.
+DEFAULT_DAILY_COVER_CLOSE_ELEVATION = -2.0
 
 # Entity IDs
 SELECT_DAY_MODE = "day_mode"
@@ -103,6 +128,7 @@ SENSOR_NEXT_MODE_AT = "next_mode_at"
 SENSOR_COVER_OPEN_TIME = "cover_open_time"
 SENSOR_COVER_CLOSE_TIME = "cover_close_time"
 BINARY_SENSOR_COVER_HEAT_ACTIVE = "cover_heat_active"
+BINARY_SENSOR_COVERS_LEFT_OPEN = "covers_left_open"
 
 # Sentinel value used as today_type when no calendar event is active
 EVENT_NONE = "None"

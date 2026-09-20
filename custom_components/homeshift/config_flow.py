@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import date
 from typing import Any, Self
 
 import voluptuous as vol
@@ -10,6 +11,7 @@ from homeassistant import config_entries
 from homeassistant.core import callback
 from homeassistant.data_entry_flow import section
 from homeassistant.helpers import selector
+from homeassistant.util import dt as dt_util
 
 from .const import (
     DOMAIN,
@@ -45,15 +47,18 @@ from .const import (
     CONF_ITEM_WINDOW_SENSOR,
     CONF_ITEM_MY_BUTTON,
     CONF_DAILY_COVER_OPEN_TIME_MAP,
-    CONF_DAILY_COVER_CLOSE_OFFSET_MINUTES,
+    CONF_DAILY_COVER_CLOSE_ELEVATION,
+    CLOSE_ELEVATION_MIN,
+    CLOSE_ELEVATION_MAX,
     DEFAULT_DAILY_COVER_OPEN_TIME,
-    DEFAULT_DAILY_COVER_CLOSE_OFFSET_MINUTES,
+    DEFAULT_DAILY_COVER_CLOSE_ELEVATION,
     CONF_SUNRISE_EARLIEST,
     DEFAULT_SUNRISE_EARLIEST,
     LOCALIZED_DEFAULTS,
     get_localized_defaults,
     parse_key_value_map,
 )
+from .cover_manager import sun_time_at_elevation
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -306,10 +311,19 @@ def _apply_covers_input(user_input: dict[str, Any]) -> dict[str, Any]:
     return {key: user_input.get(key, "") for key in _CLEARABLE_COVER_ENTITIES} | user_input
 
 
+def _ui_lang(hass) -> str:
+    """Return the HA instance language as a bare ISO 639-1 code.
+
+    Selector option labels are built in Python (the integration has no
+    'selector' translation section), so they need the language here.
+    """
+    raw_lang = getattr(hass.config, "language", "en") if hasattr(hass, "config") else "en"
+    return (raw_lang or "en").split("-")[0].lower()
+
+
 def _covers_schema(hass, data: dict[str, Any]) -> vol.Schema:
     """Build the cover heat-control form schema."""
-    raw_lang = getattr(hass.config, "language", "en") if hasattr(hass, "config") else "en"
-    lang = raw_lang.split("-")[0].lower()
+    lang = _ui_lang(hass)
     close_label = "Fermer les volets (close_cover)" if lang == "fr" else "Close Cover (close_cover)"
     stop_label = "Arrêter le mouvement (stop_cover)" if lang == "fr" else "Stop movement (stop_cover)"
     return vol.Schema(
@@ -408,6 +422,53 @@ def _rebuild_daily_open_time_map(user_input: dict[str, Any], data: dict[str, Any
     return ", ".join(pairs)
 
 
+def _close_elevation(data: dict[str, Any]) -> float:
+    """Return the configured close elevation, falling back to the default."""
+    try:
+        return float(data.get(CONF_DAILY_COVER_CLOSE_ELEVATION, DEFAULT_DAILY_COVER_CLOSE_ELEVATION))
+    except (TypeError, ValueError):
+        return DEFAULT_DAILY_COVER_CLOSE_ELEVATION
+
+
+def _close_time_preview(hass, data: dict[str, Any]) -> dict[str, str]:
+    """Return tonight's closing time, ready for the form text.
+
+    Degrees above the horizon say nothing about when the covers will move,
+    so the step description turns the configured elevation into tonight's
+    time, computed from the instance's own location. A time that cannot be
+    computed (no location set, or an elevation the sun never reaches today)
+    is rendered as '--:--'.
+    """
+    elevation = _close_elevation(data)
+    at_elevation = sun_time_at_elevation(hass, elevation, dt_util.now().date())
+    return {
+        "close_elevation": f"{elevation:g}",
+        "close_at_elevation": at_elevation.strftime("%H:%M") if at_elevation else "--:--",
+    }
+
+
+def _validate_close_elevation(hass, user_input: dict[str, Any]) -> dict[str, str]:
+    """Reject an elevation the sun never reaches at this location.
+
+    A threshold outside the sun's yearly range is a configuration mistake,
+    not a fact of the night — above the polar circle, or a positive value at
+    a high latitude in midwinter. Catching it here says so at once, instead
+    of leaving the user to discover months later that the covers had been
+    closing at sunset because the runtime kept falling back.
+    """
+    if CONF_DAILY_COVER_CLOSE_ELEVATION not in user_input:
+        return {}
+
+    elevation = _close_elevation(user_input)
+    year = dt_util.now().year
+    # The solstices bracket the year: the shortest night is the hardest day
+    # for a threshold below the horizon, the lowest midday sun for one above.
+    for solstice in (date(year, 6, 21), date(year, 12, 21)):
+        if sun_time_at_elevation(hass, elevation, solstice) is None:
+            return {CONF_DAILY_COVER_CLOSE_ELEVATION: "elevation_unreachable"}
+    return {}
+
+
 def _daily_cover_schema(hass, data: dict[str, Any]) -> vol.Schema:
     """Build the native daily cover open/close schedule form schema."""
     schema_dict: dict = {
@@ -416,13 +477,14 @@ def _daily_cover_schema(hass, data: dict[str, Any]) -> vol.Schema:
             default=data.get(CONF_SUNRISE_EARLIEST, DEFAULT_SUNRISE_EARLIEST),
         ): selector.TimeSelector(),
         vol.Optional(
-            CONF_DAILY_COVER_CLOSE_OFFSET_MINUTES,
-            default=data.get(CONF_DAILY_COVER_CLOSE_OFFSET_MINUTES, DEFAULT_DAILY_COVER_CLOSE_OFFSET_MINUTES),
+            CONF_DAILY_COVER_CLOSE_ELEVATION,
+            default=_close_elevation(data),
         ): selector.NumberSelector(
             selector.NumberSelectorConfig(
-                min=-120,
-                max=120,
-                step=1,
+                min=CLOSE_ELEVATION_MIN,
+                max=CLOSE_ELEVATION_MAX,
+                step=0.5,
+                unit_of_measurement="°",
                 mode=selector.NumberSelectorMode.BOX,
             )
         ),
@@ -541,7 +603,7 @@ def _apply_cover_item_remove(user_input: dict[str, Any], data: dict[str, Any]) -
 class HomeShiftConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for HomeShift."""
 
-    VERSION = 3
+    VERSION = 4
 
     def __init__(self) -> None:
         """Initialise the config flow."""
@@ -672,16 +734,27 @@ class HomeShiftConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         user_input: dict[str, Any] | None = None,
     ) -> config_entries.ConfigFlowResult:
         """Configure the native daily cover open/close schedule."""
+        errors: dict[str, str] = {}
+        data = self._effective_data()
+
         if user_input is not None:
-            user_input[CONF_DAILY_COVER_OPEN_TIME_MAP] = _rebuild_daily_open_time_map(
-                user_input, self._effective_data()
-            )
-            self._data.update(user_input)
-            return await self.async_step_menu()
+            errors = _validate_close_elevation(self.hass, user_input)
+            if not errors:
+                user_input[CONF_DAILY_COVER_OPEN_TIME_MAP] = _rebuild_daily_open_time_map(
+                    user_input, data
+                )
+                self._data.update(user_input)
+                return await self.async_step_menu()
+            # Redisplay what was typed, not what is stored, so the rejected
+            # value is there to correct and the preview matches it.
+            data = {**data, **user_input}
+            data[CONF_DAILY_COVER_OPEN_TIME_MAP] = _rebuild_daily_open_time_map(dict(user_input), data)
 
         return self.async_show_form(
             step_id="daily_cover_schedule",
-            data_schema=_daily_cover_schema(self.hass, self._effective_data()),
+            data_schema=_daily_cover_schema(self.hass, data),
+            description_placeholders=_close_time_preview(self.hass, data),
+            errors=errors,
         )
 
     # -- individual covers ---------------------------------------------------
@@ -873,16 +946,27 @@ class HomeShiftOptionsFlow(config_entries.OptionsFlow):
         user_input: dict[str, Any] | None = None,
     ) -> config_entries.ConfigFlowResult:
         """Configure the native daily cover open/close schedule."""
+        errors: dict[str, str] = {}
+        data = self._effective_data()
+
         if user_input is not None:
-            user_input[CONF_DAILY_COVER_OPEN_TIME_MAP] = _rebuild_daily_open_time_map(
-                user_input, self._effective_data()
-            )
-            self._data.update(user_input)
-            return await self.async_step_menu()
+            errors = _validate_close_elevation(self.hass, user_input)
+            if not errors:
+                user_input[CONF_DAILY_COVER_OPEN_TIME_MAP] = _rebuild_daily_open_time_map(
+                    user_input, data
+                )
+                self._data.update(user_input)
+                return await self.async_step_menu()
+            # Redisplay what was typed, not what is stored, so the rejected
+            # value is there to correct and the preview matches it.
+            data = {**data, **user_input}
+            data[CONF_DAILY_COVER_OPEN_TIME_MAP] = _rebuild_daily_open_time_map(dict(user_input), data)
 
         return self.async_show_form(
             step_id="daily_cover_schedule",
-            data_schema=_daily_cover_schema(self.hass, self._effective_data()),
+            data_schema=_daily_cover_schema(self.hass, data),
+            description_placeholders=_close_time_preview(self.hass, data),
+            errors=errors,
         )
 
     # -- individual covers ---------------------------------------------------

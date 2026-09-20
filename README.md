@@ -25,6 +25,7 @@ Automatic day-mode and thermostat-mode management for Home Assistant, driven by 
     - [`sensor.next_mode_at`](#sensornext_mode_at)
     - [`sensor.cover_open_time`](#sensorcover_open_time)
     - [`sensor.cover_close_time`](#sensorcover_close_time)
+    - [`binary_sensor.covers_left_open`](#binary_sensorcovers_left_open)
   - [🛠️ Services](#️-services)
     - [`homeshift.refresh_schedulers`](#homeshiftrefresh_schedulers)
     - [`homeshift.sync_calendar`](#homeshiftsync_calendar)
@@ -35,6 +36,7 @@ Automatic day-mode and thermostat-mode management for Home Assistant, driven by 
   - [🗓️ Scheduler Integration](#️-scheduler-integration)
     - [Thermostat Tags](#thermostat-tags)
   - [🗓️ Daily Cover Schedule](#️-daily-cover-schedule)
+    - [When the Covers Close](#when-the-covers-close)
     - [Individual Covers](#individual-covers)
   - [☀️ Cover Heat Protection](#️-cover-heat-protection)
     - [Reactive Close](#reactive-close)
@@ -155,11 +157,44 @@ Shows the cover opening time computed for today by the Daily Cover Schedule feat
 - **Only registered** when at least one cover is listed under **Individual Covers**.
 
 ### `sensor.cover_close_time`
-Shows the daily cover closing time computed for today (today's sunset + offset) by the Daily Cover Schedule feature.
+Shows the estimated daily cover closing time for today, computed by the Daily Cover Schedule feature from the [configured sun elevation](#when-the-covers-close).
 
 - **Type:** Sensor (text)
 - **Value:** `HH:MM` string (e.g. `21:40`), or `unknown` if not configured or not yet computed.
+- **Attributes:**
+  - `sun_elevation` — the configured elevation the time was computed from
+  - `trigger` — `elevation` normally, `sunset` on a day the sun never reached it and the fallback stepped in
 - **Only registered** when at least one cover is listed under **Individual Covers**.
+
+### `binary_sensor.covers_left_open`
+Warns that tonight's close had to leave covers up, and names them.
+
+- **Type:** Binary sensor (`device_class: problem`)
+- **Value:** `on` when at least one cover was skipped by the evening close, `off` otherwise.
+- **Attributes:**
+  - `covers` — the entity ids left open, e.g. `["cover.volet_chambre"]`
+  - `window_sensors` — the sensor that blocked each one, e.g. `{"cover.volet_chambre": "binary_sensor.fenetre_chambre"}`
+  - `count`, `checked_on` — how many, and the day the close ran
+- **Clears** when the next calendar day's schedule is computed, **not** when the window is closed — the cover stays up either way until someone acts on it.
+- **Only registered** when at least one cover is listed under **Individual Covers**.
+- **Survives a restart:** the list is persisted with the rest of the day's cover state.
+
+A notification automation can read the list straight out of the attributes:
+
+```yaml
+automation:
+  - alias: Volets restés ouverts
+    triggers:
+      - trigger: state
+        entity_id: binary_sensor.covers_left_open
+        to: "on"
+    actions:
+      - action: notify.persistent_notification
+        data:
+          message: >
+            Volets non fermés ce soir :
+            {{ state_attr('binary_sensor.covers_left_open', 'covers') | join(', ') }}
+```
 
 ---
 
@@ -201,7 +236,7 @@ All parameters can be changed at any time via **Settings → Devices & Services 
 | **Individual Covers**     | —                               | The covers opened and closed daily, added one at a time, each with an optional window sensor and an optional My position button (separate from Cover Entities above); Cover Heat Protection's active window is derived from this schedule |
 | **Open Time — *(per day mode)*** | `08:30`                  | One field per day mode: `sunrise`, `skip`, or a custom `HH:MM` value |
 | **Earliest Open Time**    | `07:00`                         | Floor time used when a day mode's Open Time is `sunrise`      |
-| **Close Offset From Sunset** | `10 min`                     | Covers close this many minutes relative to sunset, every day, for every mode. Positive = after sunset, negative = before (e.g. `-10` = 10 min before sunset) |
+| **Sun Elevation At Closing** | `-2°`                        | Covers close when the descending sun reaches this many degrees above the horizon, every day, for every mode — the same scale as `{{ state_attr('sun.sun', 'elevation') }}`. `0°` is sunset, negative is below the horizon |
 
 ---
 
@@ -287,11 +322,41 @@ Once per day, shortly after midnight, HomeShift computes:
   - a custom `HH:MM` value — a fixed clock time
   
   Day modes sharing the same value effectively form a batch (e.g. both `Work` and `Remote` set to `sunrise`). A day mode with no value configured falls back to `08:30`. There's no separate "skip modes" list — set a mode's Open Time to `skip` directly.
-- **Close time** — today's sunset plus/minus **Close Offset From Sunset**, always, for every day mode (closing is not mode-dependent)
+- **Close time** — when the setting sun reaches the configured elevation, always, for every day mode (closing is not mode-dependent): see below.
 
 A one-shot timer fires the open/close action at the exact scheduled minute; the periodic coordinator poll (5 minutes by default) acts as a fallback in case the timer is missed (e.g. a HA restart). Each action fires at most once per calendar day.
 
 **`sensor.cover_open_time`** and **`sensor.cover_close_time`** reflect today's computed times, so you can display them on your dashboard.
+
+### When the Covers Close
+
+The covers close when the descending sun reaches **Sun Elevation At Closing** degrees above the horizon — the value you would read from `{{ state_attr('sun.sun', 'elevation') }}`, on the same scale. You are setting a **light level**, not a delay:
+
+| Elevation | Roughly | Light |
+| --------- | ------- | ----- |
+| `+2°`     | Sunset − ~15 min | The sun is still up |
+| `0°`      | Sunset  | The sun touches the horizon |
+| `-2°` *(default)* | Sunset + ~10 min | Dusk, still easy to see outside |
+| `-4°`     | Sunset + ~20-25 min | Room is dark |
+| `-6°`     | Sunset + ~35-40 min | End of civil twilight, artificial light needed |
+
+The "roughly" column is a mid-latitude approximation: the delay an elevation works out to shifts a little with latitude and season, which is the point — the light level does not.
+
+Degrees say nothing about when your covers will actually move, so the *Daily Cover Schedule* form turns the value into tonight's time, computed from your own location:
+
+```
+At -2°, that is 21:41 tonight.
+```
+
+`-2°` is the default because it is where the retired "sunset + 10 minutes" setting used to land, at every season. Pick `-4°` to wait until the room is genuinely dark (about a quarter of an hour later), or a positive value to close before the sun is down.
+
+The form refuses an elevation the sun never reaches at your location — a positive value that the midwinter sun stays below, or any value above the polar circle in June. At mid-latitude nothing in the range can be refused: the sun sweeps all of it every day of the year. Should it become unreachable anyway (a home that moved, an entry restored elsewhere), the covers close at plain sunset rather than staying up all night:
+
+```
+WARNING ... Daily cover schedule: the sun never reaches 8.0° on 2026-06-21 — closing at sunset instead
+```
+
+> **Upgrading from 1.7.x:** the evening close used to be "sunset ± N minutes". That setting is gone; the entry migration converts your offset into the elevation it was landing on, so the covers keep moving at the time they moved before. The conversion is logged.
 
 ### Individual Covers
 
@@ -364,7 +429,9 @@ Whether the cover has already been closed by this automation today, and when the
 | Manual override with timeout                |   ✅   | `number.override_duration`                                         |
 | Native daily cover open/close (no Scheduler entity needed) | ✅ | See [Daily Cover Schedule](#️-daily-cover-schedule)                |
 | Daily cover schedule state survives HA restart |  ✅  | Persisted alongside the heat-protection cover state                |
+| Evening close driven by the sun's elevation | ✅ | See [When the Covers Close](#when-the-covers-close) |
 | Skip the evening close when a window is open |  ✅  | See [Individual Covers](#individual-covers) |
+| Warning entity listing the covers left open |  ✅  | `binary_sensor.covers_left_open` |
 | Per-cover My position instead of a full close |  ✅  | See [Individual Covers](#individual-covers) |
 | Cover reactive heat close                   |   ✅   | See [Reactive Close](#reactive-close); active window derived from Daily Cover Schedule; never reopens itself |
 | Cover proactive forecast-based close        |   ✅   | See [Proactive Forecast-Based Close](#proactive-forecast-based-close) |

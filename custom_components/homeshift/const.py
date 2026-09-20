@@ -59,10 +59,12 @@ CONF_SUNRISE_EARLIEST = "sunrise_earliest"
 
 DEFAULT_SUNRISE_EARLIEST = "07:00:00"
 
-# Daily cover schedule — native open/close of a cover group (e.g. a whole-house
-# volet group), replacing a pair of external Scheduler-integration entities.
-# Kept separate from CONF_COVER_ENTITIES (heat protection), which targets a
-# single cover — the daily schedule is meant for a group entity instead.
+# Daily cover schedule — native open/close of the configured covers, replacing
+# a pair of external Scheduler-integration entities. Kept separate from
+# CONF_COVER_ENTITIES (heat protection), which targets a single cover.
+# CONF_DAILY_COVER_ENTITIES is the legacy flat entity list; it was merged into
+# CONF_DAILY_COVER_ITEMS (below) by the v2 -> v3 entry migration and is only
+# referenced by that migration.
 CONF_DAILY_COVER_ENTITIES = "daily_cover_entities"
 # CONF_DAILY_COVER_OPEN_TIME_MAP format: "ModeKey:Value, ..." — Value is either
 # 'sunrise' (floored at CONF_SUNRISE_EARLIEST), 'skip' (never opens
@@ -71,6 +73,21 @@ CONF_DAILY_COVER_ENTITIES = "daily_cover_entities"
 CONF_DAILY_COVER_OPEN_TIME_MAP = "daily_cover_open_time_map"
 # Minutes relative to sunset — negative closes before sunset, positive after.
 CONF_DAILY_COVER_CLOSE_OFFSET_MINUTES = "daily_cover_close_offset_minutes"
+# The covers driven by the daily schedule, added one at a time from the config
+# flow. Stored as a list of dicts: each pairs one cover with an optional
+# window/opening sensor (so the evening close can skip a cover whose window is
+# still open) and an optional My position button. A cover group entity is a
+# cover like any other, so a whole-house group is simply one entry.
+CONF_DAILY_COVER_ITEMS = "daily_cover_items"
+CONF_ITEM_COVER = "cover"
+CONF_ITEM_WINDOW_SENSOR = "window_sensor"
+# Optional per-cover "My" position button (Somfy RTS & co): when set, the
+# evening close presses this button instead of sending close_cover, so a
+# cover that must not close fully stops at its recorded favourite position.
+CONF_ITEM_MY_BUTTON = "my_button"
+# Window-sensor states that mean "the window is open" — a binary_sensor uses
+# 'on'; 'open' covers a field pointed at a door/window entity instead.
+WINDOW_OPEN_STATES = frozenset({"on", "open"})
 
 DEFAULT_DAILY_COVER_OPEN_TIME = "08:30"
 DEFAULT_DAILY_COVER_CLOSE_OFFSET_MINUTES = 10
@@ -128,6 +145,28 @@ LOCALIZED_DEFAULTS: dict[str, dict] = {
         CONF_THERMOSTAT_MODE_MAP: "off:Eteint, heating:Chauffage, cooling:Climatisation, ventilation:Ventilation",
     },
 }
+
+
+def parse_key_value_map(raw: str, *, lower_keys: bool = False) -> dict[str, str]:
+    """Parse a 'Key:Value, Key:Value, ...' configuration string.
+
+    Used by every mapping option of the integration: day modes, thermostat
+    modes, event keywords and the per-mode cover open times. Entries with no
+    colon, an empty key or an empty value are skipped; only the first colon
+    separates a pair, so a value may contain one ('work:08:30').
+    Pass lower_keys=True for case-insensitive lookups (event keywords).
+    """
+    mapping: dict[str, str] = {}
+    if not raw:
+        return mapping
+    for pair in raw.split(","):
+        key, separator, value = pair.partition(":")
+        if not separator:
+            continue
+        key, value = key.strip(), value.strip()
+        if key and value:
+            mapping[key.lower() if lower_keys else key] = value
+    return mapping
 
 
 def get_localized_defaults(hass) -> dict:

@@ -40,7 +40,10 @@ from .const import (
     CONF_COVER_WEATHER_ENTITY,
     CONF_COVER_FORECAST_THRESHOLD,
     DEFAULT_COVER_FORECAST_THRESHOLD,
-    CONF_DAILY_COVER_ENTITIES,
+    CONF_DAILY_COVER_ITEMS,
+    CONF_ITEM_COVER,
+    CONF_ITEM_WINDOW_SENSOR,
+    CONF_ITEM_MY_BUTTON,
     CONF_DAILY_COVER_OPEN_TIME_MAP,
     CONF_DAILY_COVER_CLOSE_OFFSET_MINUTES,
     DEFAULT_DAILY_COVER_OPEN_TIME,
@@ -49,6 +52,7 @@ from .const import (
     DEFAULT_SUNRISE_EARLIEST,
     LOCALIZED_DEFAULTS,
     get_localized_defaults,
+    parse_key_value_map,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -63,19 +67,32 @@ _get_localized_defaults = get_localized_defaults
 # ---------------------------------------------------------------------------
 
 
+def _entity_marker(key: str, value: Any, *, required: bool = False) -> vol.Marker:
+    """Return a schema marker for an entity field that may currently be empty.
+
+    An EntitySelector validates its value as an entity id, so a field carrying
+    default="" renders with "Entity is neither a valid entity ID nor a valid
+    UUID" before the user has touched anything. A stored value is offered as a
+    suggestion instead — the frontend prefills it, but an untouched or cleared
+    field simply stays out of the submitted data.
+    """
+    marker = vol.Required if required else vol.Optional
+    if value:
+        return marker(key, description={"suggested_value": value})
+    return marker(key)
+
+
 def _calendars_schema(data: dict[str, Any]) -> vol.Schema:
     """Build the calendars & schedule form schema."""
     return vol.Schema(
         {
-            vol.Required(
-                CONF_CALENDAR_ENTITY,
-                default=data.get(CONF_CALENDAR_ENTITY, ""),
+            _entity_marker(
+                CONF_CALENDAR_ENTITY, data.get(CONF_CALENDAR_ENTITY), required=True
             ): selector.EntitySelector(
                 selector.EntitySelectorConfig(domain="calendar"),
             ),
-            vol.Required(
-                CONF_HOLIDAY_CALENDAR,
-                default=data.get(CONF_HOLIDAY_CALENDAR, ""),
+            _entity_marker(
+                CONF_HOLIDAY_CALENDAR, data.get(CONF_HOLIDAY_CALENDAR), required=True
             ): selector.EntitySelector(
                 selector.EntitySelectorConfig(domain="calendar"),
             ),
@@ -85,13 +102,7 @@ def _calendars_schema(data: dict[str, Any]) -> vol.Schema:
 
 def _parse_day_mode_map(map_str: str) -> dict[str, str]:
     """Parse 'Key:Display, ...' string into an ordered dict."""
-    result: dict[str, str] = {}
-    for pair in map_str.split(","):
-        pair = pair.strip()
-        if ":" in pair:
-            key, _, display = pair.partition(":")
-            result[key.strip()] = display.strip()
-    return result
+    return parse_key_value_map(map_str)
 
 
 def _day_mode_display_fields(data: dict[str, Any]) -> dict:
@@ -122,13 +133,7 @@ def _rebuild_day_mode_map(user_input: dict[str, Any], data: dict[str, Any]) -> s
 
 def _parse_thermostat_map(map_str: str) -> dict[str, str]:
     """Parse 'Key:Display, ...' string into an ordered dict."""
-    result: dict[str, str] = {}
-    for pair in map_str.split(","):
-        pair = pair.strip()
-        if ":" in pair:
-            key, _, display = pair.partition(":")
-            result[key.strip()] = display.strip()
-    return result
+    return parse_key_value_map(map_str)
 
 
 def _thermostat_display_fields(data: dict[str, Any]) -> dict:
@@ -286,6 +291,21 @@ def _extract_schedulers(user_input: dict[str, Any], data: dict[str, Any]) -> dic
     return result
 
 
+# Optional entity fields of the cover step: a cleared one is absent from the
+# submitted data, so it has to be written back as "" rather than left at its
+# previous value.
+_CLEARABLE_COVER_ENTITIES = (
+    CONF_COVER_TEMP_SENSOR,
+    CONF_COVER_MY_BUTTON,
+    CONF_COVER_WEATHER_ENTITY,
+)
+
+
+def _apply_covers_input(user_input: dict[str, Any]) -> dict[str, Any]:
+    """Return the cover-step input with cleared entity fields set to empty."""
+    return {key: user_input.get(key, "") for key in _CLEARABLE_COVER_ENTITIES} | user_input
+
+
 def _covers_schema(hass, data: dict[str, Any]) -> vol.Schema:
     """Build the cover heat-control form schema."""
     raw_lang = getattr(hass.config, "language", "en") if hasattr(hass, "config") else "en"
@@ -298,9 +318,8 @@ def _covers_schema(hass, data: dict[str, Any]) -> vol.Schema:
                 CONF_COVER_ENTITIES,
                 default=data.get(CONF_COVER_ENTITIES, []),
             ): selector.EntitySelector(selector.EntitySelectorConfig(domain="cover", multiple=True)),
-            vol.Optional(
-                CONF_COVER_TEMP_SENSOR,
-                default=data.get(CONF_COVER_TEMP_SENSOR, ""),
+            _entity_marker(
+                CONF_COVER_TEMP_SENSOR, data.get(CONF_COVER_TEMP_SENSOR)
             ): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
             vol.Optional(
                 CONF_COVER_TEMP_THRESHOLD,
@@ -313,9 +332,8 @@ def _covers_schema(hass, data: dict[str, Any]) -> vol.Schema:
                     mode=selector.NumberSelectorMode.BOX,
                 )
             ),
-            vol.Optional(
-                CONF_COVER_MY_BUTTON,
-                default=data.get(CONF_COVER_MY_BUTTON, ""),
+            _entity_marker(
+                CONF_COVER_MY_BUTTON, data.get(CONF_COVER_MY_BUTTON)
             ): selector.EntitySelector(selector.EntitySelectorConfig(domain="button")),
             vol.Optional(
                 CONF_COVER_ACTION,
@@ -329,9 +347,8 @@ def _covers_schema(hass, data: dict[str, Any]) -> vol.Schema:
                     mode=selector.SelectSelectorMode.DROPDOWN,
                 )
             ),
-            vol.Optional(
-                CONF_COVER_WEATHER_ENTITY,
-                default=data.get(CONF_COVER_WEATHER_ENTITY, ""),
+            _entity_marker(
+                CONF_COVER_WEATHER_ENTITY, data.get(CONF_COVER_WEATHER_ENTITY)
             ): selector.EntitySelector(selector.EntitySelectorConfig(domain="weather")),
             vol.Optional(
                 CONF_COVER_FORECAST_THRESHOLD,
@@ -395,10 +412,6 @@ def _daily_cover_schema(hass, data: dict[str, Any]) -> vol.Schema:
     """Build the native daily cover open/close schedule form schema."""
     schema_dict: dict = {
         vol.Optional(
-            CONF_DAILY_COVER_ENTITIES,
-            default=data.get(CONF_DAILY_COVER_ENTITIES, []),
-        ): selector.EntitySelector(selector.EntitySelectorConfig(domain="cover", multiple=True)),
-        vol.Optional(
             CONF_SUNRISE_EARLIEST,
             default=data.get(CONF_SUNRISE_EARLIEST, DEFAULT_SUNRISE_EARLIEST),
         ): selector.TimeSelector(),
@@ -419,6 +432,108 @@ def _daily_cover_schema(hass, data: dict[str, Any]) -> vol.Schema:
 
 
 # ---------------------------------------------------------------------------
+# Individual covers (one cover + an optional window sensor, added one by one)
+# ---------------------------------------------------------------------------
+
+
+def _cover_items(data: dict[str, Any]) -> list[dict[str, str]]:
+    """Return the configured individual covers, dropping malformed entries."""
+    raw = data.get(CONF_DAILY_COVER_ITEMS, []) or []
+    return [item for item in raw if isinstance(item, dict) and item.get(CONF_ITEM_COVER)]
+
+
+def _cover_items_summary(data: dict[str, Any]) -> str:
+    """Return a human-readable list of the configured covers, for the menu description."""
+    items = _cover_items(data)
+    if not items:
+        return "—"
+    lines = []
+    for item in items:
+        sensor = item.get(CONF_ITEM_WINDOW_SENSOR, "")
+        button = item.get(CONF_ITEM_MY_BUTTON, "")
+        suffix = f" ← {sensor}" if sensor else ""
+        if button:
+            suffix += f" (My: {button})"
+        lines.append(f"- {item[CONF_ITEM_COVER]}{suffix}")
+    return "\n".join(lines)
+
+
+def _cover_items_menu_options(data: dict[str, Any]) -> list[str]:
+    """Return the individual-cover menu options ('remove' only once there's something to remove)."""
+    options = ["cover_item_add"]
+    if _cover_items(data):
+        options.append("cover_item_remove")
+    options.append("menu")
+    return options
+
+
+def _cover_item_add_schema() -> vol.Schema:
+    """Build the add/update-one-cover form schema."""
+    return vol.Schema(
+        {
+            vol.Required(CONF_ITEM_COVER): selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="cover"),
+            ),
+            vol.Optional(CONF_ITEM_WINDOW_SENSOR): selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="binary_sensor"),
+            ),
+            vol.Optional(CONF_ITEM_MY_BUTTON): selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="button"),
+            ),
+        }
+    )
+
+
+def _apply_cover_item_add(user_input: dict[str, Any], data: dict[str, Any]) -> list[dict[str, str]]:
+    """Return the cover list with the submitted cover added, or updated in place.
+
+    Re-adding an already-configured cover updates its window sensor and My
+    button rather than duplicating it, so the add form doubles as the edit form.
+    """
+    cover = user_input.get(CONF_ITEM_COVER, "")
+    sensor = user_input.get(CONF_ITEM_WINDOW_SENSOR, "") or ""
+    button = user_input.get(CONF_ITEM_MY_BUTTON, "") or ""
+    items = [dict(item) for item in _cover_items(data)]
+    for item in items:
+        if item[CONF_ITEM_COVER] == cover:
+            item[CONF_ITEM_WINDOW_SENSOR] = sensor
+            item[CONF_ITEM_MY_BUTTON] = button
+            return items
+    items.append(
+        {CONF_ITEM_COVER: cover, CONF_ITEM_WINDOW_SENSOR: sensor, CONF_ITEM_MY_BUTTON: button}
+    )
+    return items
+
+
+def _cover_item_remove_schema(data: dict[str, Any]) -> vol.Schema:
+    """Build the remove-covers form schema (multi-select over configured covers)."""
+    options = []
+    for item in _cover_items(data):
+        sensor = item.get(CONF_ITEM_WINDOW_SENSOR, "")
+        cover = item[CONF_ITEM_COVER]
+        options.append({"value": cover, "label": f"{cover} ({sensor})" if sensor else cover})
+    return vol.Schema(
+        {
+            vol.Optional("remove_covers", default=[]): selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=options,
+                    multiple=True,
+                    mode=selector.SelectSelectorMode.LIST,
+                )
+            ),
+        }
+    )
+
+
+def _apply_cover_item_remove(user_input: dict[str, Any], data: dict[str, Any]) -> list[dict[str, str]]:
+    """Return the cover list without the covers selected for removal."""
+    removed = user_input.get("remove_covers", []) or []
+    if isinstance(removed, str):
+        removed = [removed]
+    return [item for item in _cover_items(data) if item[CONF_ITEM_COVER] not in removed]
+
+
+# ---------------------------------------------------------------------------
 # Config flow (initial setup) – menu-based
 # ---------------------------------------------------------------------------
 
@@ -426,7 +541,7 @@ def _daily_cover_schema(hass, data: dict[str, Any]) -> vol.Schema:
 class HomeShiftConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for HomeShift."""
 
-    VERSION = 2
+    VERSION = 3
 
     def __init__(self) -> None:
         """Initialise the config flow."""
@@ -452,7 +567,13 @@ class HomeShiftConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self,
         _user_input: dict[str, Any] | None = None,
     ) -> config_entries.ConfigFlowResult:
-        """Entry point – redirect to the menu."""
+        """Entry point – redirect to the menu, unless HomeShift is already set up.
+
+        A second entry would mean a second coordinator driving the same covers
+        and schedulers, each unaware of the other.
+        """
+        if self._async_current_entries():
+            return self.async_abort(reason="single_instance_allowed")
         return await self.async_step_menu()
 
     # -- menu --------------------------------------------------------------
@@ -462,7 +583,7 @@ class HomeShiftConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         _user_input: dict[str, Any] | None = None,
     ) -> config_entries.ConfigFlowResult:
         """Show the configuration menu."""
-        menu_options = ["calendars", "mapping", "schedulers", "covers", "daily_cover_schedule"]
+        menu_options = ["calendars", "mapping", "schedulers", "covers", "daily_cover_schedule", "cover_items"]
         if self._is_config_complete():
             menu_options.append("finalize")
         return self.async_show_menu(step_id="menu", menu_options=menu_options)
@@ -536,7 +657,7 @@ class HomeShiftConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     ) -> config_entries.ConfigFlowResult:
         """Configure cover heat-control settings."""
         if user_input is not None:
-            self._data.update(user_input)
+            self._data.update(_apply_covers_input(user_input))
             return await self.async_step_menu()
 
         return self.async_show_form(
@@ -561,6 +682,47 @@ class HomeShiftConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id="daily_cover_schedule",
             data_schema=_daily_cover_schema(self.hass, self._effective_data()),
+        )
+
+    # -- individual covers ---------------------------------------------------
+
+    async def async_step_cover_items(
+        self,
+        _user_input: dict[str, Any] | None = None,
+    ) -> config_entries.ConfigFlowResult:
+        """Show the individual-cover menu (add one, remove some, or go back)."""
+        return self.async_show_menu(
+            step_id="cover_items",
+            menu_options=_cover_items_menu_options(self._data),
+            description_placeholders={"covers": _cover_items_summary(self._data)},
+        )
+
+    async def async_step_cover_item_add(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> config_entries.ConfigFlowResult:
+        """Add one cover — or update the window sensor of one already configured."""
+        if user_input is not None:
+            self._data[CONF_DAILY_COVER_ITEMS] = _apply_cover_item_add(user_input, self._data)
+            return await self.async_step_cover_items()
+
+        return self.async_show_form(
+            step_id="cover_item_add",
+            data_schema=_cover_item_add_schema(),
+        )
+
+    async def async_step_cover_item_remove(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> config_entries.ConfigFlowResult:
+        """Remove individually-configured covers."""
+        if user_input is not None:
+            self._data[CONF_DAILY_COVER_ITEMS] = _apply_cover_item_remove(user_input, self._data)
+            return await self.async_step_cover_items()
+
+        return self.async_show_form(
+            step_id="cover_item_remove",
+            data_schema=_cover_item_remove_schema(self._data),
         )
 
     # -- finalize ----------------------------------------------------------
@@ -622,7 +784,7 @@ class HomeShiftOptionsFlow(config_entries.OptionsFlow):
         _user_input: dict[str, Any] | None = None,
     ) -> config_entries.ConfigFlowResult:
         """Show the options menu."""
-        menu_options = ["calendars", "mapping", "schedulers", "covers", "daily_cover_schedule"]
+        menu_options = ["calendars", "mapping", "schedulers", "covers", "daily_cover_schedule", "cover_items"]
         if self._is_config_complete():
             menu_options.append("finalize")
         return self.async_show_menu(step_id="menu", menu_options=menu_options)
@@ -696,7 +858,7 @@ class HomeShiftOptionsFlow(config_entries.OptionsFlow):
     ) -> config_entries.ConfigFlowResult:
         """Configure cover heat-control settings."""
         if user_input is not None:
-            self._data.update(user_input)
+            self._data.update(_apply_covers_input(user_input))
             return await self.async_step_menu()
 
         return self.async_show_form(
@@ -721,6 +883,47 @@ class HomeShiftOptionsFlow(config_entries.OptionsFlow):
         return self.async_show_form(
             step_id="daily_cover_schedule",
             data_schema=_daily_cover_schema(self.hass, self._effective_data()),
+        )
+
+    # -- individual covers ---------------------------------------------------
+
+    async def async_step_cover_items(
+        self,
+        _user_input: dict[str, Any] | None = None,
+    ) -> config_entries.ConfigFlowResult:
+        """Show the individual-cover menu (add one, remove some, or go back)."""
+        return self.async_show_menu(
+            step_id="cover_items",
+            menu_options=_cover_items_menu_options(self._data),
+            description_placeholders={"covers": _cover_items_summary(self._data)},
+        )
+
+    async def async_step_cover_item_add(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> config_entries.ConfigFlowResult:
+        """Add one cover — or update the window sensor of one already configured."""
+        if user_input is not None:
+            self._data[CONF_DAILY_COVER_ITEMS] = _apply_cover_item_add(user_input, self._data)
+            return await self.async_step_cover_items()
+
+        return self.async_show_form(
+            step_id="cover_item_add",
+            data_schema=_cover_item_add_schema(),
+        )
+
+    async def async_step_cover_item_remove(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> config_entries.ConfigFlowResult:
+        """Remove individually-configured covers."""
+        if user_input is not None:
+            self._data[CONF_DAILY_COVER_ITEMS] = _apply_cover_item_remove(user_input, self._data)
+            return await self.async_step_cover_items()
+
+        return self.async_show_form(
+            step_id="cover_item_remove",
+            data_schema=_cover_item_remove_schema(self._data),
         )
 
     # -- finalize ----------------------------------------------------------

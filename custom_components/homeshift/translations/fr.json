@@ -10,6 +10,7 @@
           "schedulers": "Schedulers",
           "covers": "Contrôle des volets (chaleur)",
           "daily_cover_schedule": "Planning quotidien des volets",
+          "cover_items": "Volets individuels",
           "finalize": "Enregistrer la configuration"
         }
       },
@@ -44,10 +45,13 @@
             "name": "Assignations de modes par défaut",
             "data": {
               "mode_default": "Mode par défaut (jour ouvré)",
-              "mode_absence": "Mode absence (bloque la mise à jour auto)",
+              "mode_absence": "Mode Absence (met en pause l'auto-update s'il est choisi à la main)",
               "mode_weekend": "Mode week-end",
               "mode_holiday": "Mode jour férié",
               "event_mode_map": "Mapping événement vers mode (MotClé:CléMode, ...)"
+            },
+            "data_description": {
+              "mode_absence": "Choisir ce mode vous-même met en pause les mises à jour automatiques jusqu'à ce que vous en sortiez. Un événement de calendrier associé à ce mode ne met rien en pause."
             }
           },
           "thermostat_section": {
@@ -95,9 +99,8 @@
       },
       "daily_cover_schedule": {
         "title": "Planning quotidien des volets",
-        "description": "Ouvre et ferme un groupe de volets tous les jours nativement, sans passer par une entité Scheduler séparée. Reste indépendant du Contrôle des volets (chaleur), qui cible un volet unitaire. Pour chaque mode de journée ci-dessous, définissez 'sunrise', 'skip', ou une heure personnalisée 'HH:MM' — les modes partageant la même valeur forment un lot. La fermeture a toujours lieu une fois par jour, pour tous les modes, au coucher du soleil + le décalage ci-dessous.",
+        "description": "Ouvre et ferme vos volets tous les jours nativement, sans passer par une entité Scheduler séparée. Les volets concernés se définissent dans Volets individuels ; cette section règle les horaires. Reste indépendant du Contrôle des volets (chaleur), qui cible un volet unitaire. Pour chaque mode de journée ci-dessous, définissez 'sunrise', 'skip', ou une heure personnalisée 'HH:MM' — les modes partageant la même valeur forment un lot. La fermeture a toujours lieu une fois par jour, pour tous les modes, au coucher du soleil + le décalage ci-dessous.",
         "data": {
-          "daily_cover_entities": "Entités volets (planning quotidien)",
           "sunrise_earliest": "Heure d'ouverture minimale",
           "daily_cover_close_offset_minutes": "Décalage de fermeture par rapport au coucher du soleil (minutes)",
           "daily_open_time_home": "Heure d'ouverture — Maison",
@@ -106,7 +109,6 @@
           "daily_open_time_away": "Heure d'ouverture — Absence"
         },
         "data_description": {
-          "daily_cover_entities": "Entités volets (par exemple un groupe) à ouvrir et fermer selon le planning ci-dessous.",
           "sunrise_earliest": "L'heure d'ouverture au lever du soleil sera la plus tardive entre le lever réel et cette valeur.",
           "daily_cover_close_offset_minutes": "Les volets se ferment ce nombre de minutes par rapport au coucher du soleil, tous les jours, quel que soit le mode. Positif = après le coucher, négatif = avant (ex: -10 = 10 min avant le coucher du soleil).",
           "daily_open_time_home": "Heure d'ouverture pour le mode Maison : 'sunrise', 'skip', ou une valeur personnalisée 'HH:MM'.",
@@ -114,13 +116,44 @@
           "daily_open_time_remote": "Heure d'ouverture pour le mode Télétravail : 'sunrise', 'skip', ou une valeur personnalisée 'HH:MM'.",
           "daily_open_time_away": "Heure d'ouverture pour le mode Absence : 'sunrise', 'skip', ou une valeur personnalisée 'HH:MM'."
         }
+      },
+      "cover_items": {
+        "title": "Volets individuels",
+        "description": "Les volets ouverts et fermés par le Planning quotidien des volets, ajoutés un par un — un groupe de volets compte pour un volet. Chacun peut recevoir un capteur d'ouverture optionnel et un bouton de position favorite optionnel. Lors de la fermeture du soir, un volet dont le capteur signale la fenêtre ouverte n'est pas fermé : un avertissement est journalisé à la place.\n\nActuellement configurés :\n{covers}",
+        "menu_options": {
+          "cover_item_add": "➕ Ajouter un volet",
+          "cover_item_remove": "Supprimer des volets",
+          "menu": "← Retour au menu principal"
+        }
+      },
+      "cover_item_add": {
+        "title": "Ajouter un volet",
+        "description": "Choisissez le volet et, si vous le souhaitez, le capteur indiquant si sa fenêtre est ouverte. Sélectionner un volet déjà présent dans la liste met à jour son capteur au lieu de l'ajouter en double. Un volet avec un bouton de position favorite se place à cette position au lieu de se fermer entièrement.",
+        "data": {
+          "cover": "Volet",
+          "window_sensor": "Capteur d'ouverture de la fenêtre (optionnel)",
+          "my_button": "Bouton position favorite My (optionnel)"
+        },
+        "data_description": {
+          "cover": "Le volet à ouvrir et fermer selon le planning quotidien.",
+          "window_sensor": "Capteur binaire à 'on' quand la fenêtre est ouverte. S'il signale une fenêtre ouverte lors de la fermeture du soir, ce volet n'est pas fermé et un avertissement est journalisé.",
+          "my_button": "Bouton envoyant ce volet à sa position favorite (My) — pour un volet qui ne doit pas se fermer entièrement. S'il est renseigné, la fermeture du soir appuie sur ce bouton au lieu d'envoyer une commande de fermeture."
+        }
+      },
+      "cover_item_remove": {
+        "title": "Supprimer des volets",
+        "description": "Sélectionnez les volets à retirer de la liste individuelle. Le groupe de volets configuré dans le Planning quotidien des volets n'est pas affecté.",
+        "data": {
+          "remove_covers": "Volets à supprimer"
+        }
       }
     },
     "error": {
       "invalid_calendar": "L'entité calendrier spécifiée n'existe pas"
     },
     "abort": {
-      "already_configured": "HomeShift est déjà configuré"
+      "already_configured": "HomeShift est déjà configuré",
+      "single_instance_allowed": "HomeShift est déjà configuré — une seule instance est prise en charge."
     }
   },
   "options": {
@@ -134,6 +167,7 @@
           "schedulers": "Schedulers",
           "covers": "Contrôle des volets (chaleur)",
           "daily_cover_schedule": "Planning quotidien des volets",
+          "cover_items": "Volets individuels",
           "finalize": "Enregistrer la configuration"
         }
       },
@@ -168,10 +202,13 @@
             "name": "Assignations de modes par défaut",
             "data": {
               "mode_default": "Mode par défaut (jour ouvré)",
-              "mode_absence": "Mode absence (bloque la mise à jour auto)",
+              "mode_absence": "Mode Absence (met en pause l'auto-update s'il est choisi à la main)",
               "mode_weekend": "Mode week-end",
               "mode_holiday": "Mode jour férié",
               "event_mode_map": "Mapping événement vers mode (MotClé:CléMode, ...)"
+            },
+            "data_description": {
+              "mode_absence": "Choisir ce mode vous-même met en pause les mises à jour automatiques jusqu'à ce que vous en sortiez. Un événement de calendrier associé à ce mode ne met rien en pause."
             }
           },
           "thermostat_section": {
@@ -225,9 +262,8 @@
       },
       "daily_cover_schedule": {
         "title": "Planning quotidien des volets",
-        "description": "Ouvre et ferme un groupe de volets tous les jours nativement, sans passer par une entité Scheduler séparée. Reste indépendant du Contrôle des volets (chaleur), qui cible un volet unitaire. Pour chaque mode de journée ci-dessous, définissez 'sunrise', 'skip', ou une heure personnalisée 'HH:MM' — les modes partageant la même valeur forment un lot. La fermeture a toujours lieu une fois par jour, pour tous les modes, au coucher du soleil + le décalage ci-dessous.",
+        "description": "Ouvre et ferme vos volets tous les jours nativement, sans passer par une entité Scheduler séparée. Les volets concernés se définissent dans Volets individuels ; cette section règle les horaires. Reste indépendant du Contrôle des volets (chaleur), qui cible un volet unitaire. Pour chaque mode de journée ci-dessous, définissez 'sunrise', 'skip', ou une heure personnalisée 'HH:MM' — les modes partageant la même valeur forment un lot. La fermeture a toujours lieu une fois par jour, pour tous les modes, au coucher du soleil + le décalage ci-dessous.",
         "data": {
-          "daily_cover_entities": "Entités volets (planning quotidien)",
           "sunrise_earliest": "Heure d'ouverture minimale",
           "daily_cover_close_offset_minutes": "Décalage de fermeture par rapport au coucher du soleil (minutes)",
           "daily_open_time_home": "Heure d'ouverture — Maison",
@@ -236,13 +272,42 @@
           "daily_open_time_away": "Heure d'ouverture — Absence"
         },
         "data_description": {
-          "daily_cover_entities": "Entités volets (par exemple un groupe) à ouvrir et fermer selon le planning ci-dessous.",
           "sunrise_earliest": "L'heure d'ouverture au lever du soleil sera la plus tardive entre le lever réel et cette valeur.",
           "daily_cover_close_offset_minutes": "Les volets se ferment ce nombre de minutes par rapport au coucher du soleil, tous les jours, quel que soit le mode. Positif = après le coucher, négatif = avant (ex: -10 = 10 min avant le coucher du soleil).",
           "daily_open_time_home": "Heure d'ouverture pour le mode Maison : 'sunrise', 'skip', ou une valeur personnalisée 'HH:MM'.",
           "daily_open_time_work": "Heure d'ouverture pour le mode Travail : 'sunrise', 'skip', ou une valeur personnalisée 'HH:MM'.",
           "daily_open_time_remote": "Heure d'ouverture pour le mode Télétravail : 'sunrise', 'skip', ou une valeur personnalisée 'HH:MM'.",
           "daily_open_time_away": "Heure d'ouverture pour le mode Absence : 'sunrise', 'skip', ou une valeur personnalisée 'HH:MM'."
+        }
+      },
+      "cover_items": {
+        "title": "Volets individuels",
+        "description": "Les volets ouverts et fermés par le Planning quotidien des volets, ajoutés un par un — un groupe de volets compte pour un volet. Chacun peut recevoir un capteur d'ouverture optionnel et un bouton de position favorite optionnel. Lors de la fermeture du soir, un volet dont le capteur signale la fenêtre ouverte n'est pas fermé : un avertissement est journalisé à la place.\n\nActuellement configurés :\n{covers}",
+        "menu_options": {
+          "cover_item_add": "➕ Ajouter un volet",
+          "cover_item_remove": "Supprimer des volets",
+          "menu": "← Retour au menu principal"
+        }
+      },
+      "cover_item_add": {
+        "title": "Ajouter un volet",
+        "description": "Choisissez le volet et, si vous le souhaitez, le capteur indiquant si sa fenêtre est ouverte. Sélectionner un volet déjà présent dans la liste met à jour son capteur au lieu de l'ajouter en double. Un volet avec un bouton de position favorite se place à cette position au lieu de se fermer entièrement.",
+        "data": {
+          "cover": "Volet",
+          "window_sensor": "Capteur d'ouverture de la fenêtre (optionnel)",
+          "my_button": "Bouton position favorite My (optionnel)"
+        },
+        "data_description": {
+          "cover": "Le volet à ouvrir et fermer selon le planning quotidien.",
+          "window_sensor": "Capteur binaire à 'on' quand la fenêtre est ouverte. S'il signale une fenêtre ouverte lors de la fermeture du soir, ce volet n'est pas fermé et un avertissement est journalisé.",
+          "my_button": "Bouton envoyant ce volet à sa position favorite (My) — pour un volet qui ne doit pas se fermer entièrement. S'il est renseigné, la fermeture du soir appuie sur ce bouton au lieu d'envoyer une commande de fermeture."
+        }
+      },
+      "cover_item_remove": {
+        "title": "Supprimer des volets",
+        "description": "Sélectionnez les volets à retirer de la liste individuelle. Le groupe de volets configuré dans le Planning quotidien des volets n'est pas affecté.",
+        "data": {
+          "remove_covers": "Volets à supprimer"
         }
       }
     }

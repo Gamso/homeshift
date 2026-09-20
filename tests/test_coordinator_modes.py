@@ -3,10 +3,10 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime
-from unittest.mock import patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from custom_components.homeshift.coordinator import HomeShiftCoordinator
-from custom_components.homeshift.const import CONF_DAY_MODE_MAP
+from custom_components.homeshift.const import CONF_DAY_MODE_MAP, CONF_EVENT_MODE_MAP
 
 from .conftest import (
     EVENT_NONE,
@@ -427,8 +427,14 @@ class TestConfigurableAbsenceMode:
             asyncio.get_event_loop().run_until_complete(coordinator.async_update_data())
         assert coordinator.day_mode == DEFAULT_MODE_DEFAULT
 
-    def test_absence_skips_sync_calendar(self):
-        """Absence skips check next day."""
+    def test_absence_still_refreshes_on_sync_calendar(self):
+        """Absence blocks the mode change, not the refresh itself.
+
+        _async_update_data already leaves the day mode alone in absence mode;
+        skipping the whole refresh also skipped the cover schedule, the
+        next-mode prediction and the data broadcast, and made the
+        homeshift.sync_calendar service silently do nothing.
+        """
         from unittest.mock import AsyncMock
         hass = make_mock_hass()
         entry = make_mock_entry()
@@ -437,7 +443,7 @@ class TestConfigurableAbsenceMode:
         coordinator.async_refresh = AsyncMock()
 
         asyncio.get_event_loop().run_until_complete(coordinator.async_sync_calendar())
-        coordinator.async_refresh.assert_not_called()
+        coordinator.async_refresh.assert_called_once()
 
     def test_non_absence_runs_sync_calendar(self):
         """Non absence runs check next day."""
@@ -618,3 +624,102 @@ class TestTodayTypePersistence:
                 mock_dt.now.return_value = datetime(2026, 3, 4, hour, 0, 0)
                 result = loop.run_until_complete(coordinator.async_update_data())
             assert result["today_type"] == EVENT_NONE
+class TestCalendarDrivenAbsenceDoesNotFreezeTheIntegration:
+    """Absence freezes automatic updates only when it was selected by hand.
+
+    Mapping a calendar keyword to the absence mode used to be a one-way door:
+    the event set the mode automatically, and from then on every automatic
+    update was skipped — including the one that should have restored the
+    normal mode once the event ended.
+    """
+
+    def _entry(self):
+        entry = make_mock_entry(mode_absence="away", mode_default="work")
+        entry.data[CONF_DAY_MODE_MAP] = "work:Travail, home:Maison, away:Absence, remote:Télétravail"
+        entry.data[CONF_EVENT_MODE_MAP] = "Congés:away"
+        return entry
+
+    def _run(self, coordinator, now):
+        with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
+            mock_dt.now.return_value = now
+            asyncio.get_event_loop().run_until_complete(coordinator.async_update_data())
+
+    def test_event_sets_absence_then_the_end_of_the_event_restores_the_mode(self):
+        hass = make_mock_hass()
+        # Wednesday, an all-day "Congés" event is running
+        hass.states.get.return_value = make_calendar_state(
+            state="on", message="Congés",
+            start_time="2026-03-04 00:00:00", end_time="2026-03-05 00:00:00",
+        )
+        coordinator = HomeShiftCoordinator(hass, self._entry())
+        coordinator.day_mode = "Travail"
+
+        self._run(coordinator, datetime(2026, 3, 4, 10, 0, 0))
+        assert coordinator.day_mode == "Absence"  # set by the calendar
+
+        # The event is over — the mode must be free to move again
+        hass.states.get.return_value = make_calendar_state(state="off")
+        self._run(coordinator, datetime(2026, 3, 5, 10, 0, 0))
+        assert coordinator.day_mode == "Travail"
+
+    def test_manual_absence_still_blocks_automatic_updates(self):
+        hass = make_mock_hass()
+        hass.states.get.return_value = make_calendar_state(state="off")
+        coordinator = HomeShiftCoordinator(hass, self._entry())
+        coordinator.async_refresh_schedulers = AsyncMock()
+        coordinator._async_save_state = AsyncMock()
+        coordinator.async_set_updated_data = MagicMock()
+
+        with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
+            mock_dt.now.return_value = datetime(2026, 3, 4, 9, 0, 0)
+            asyncio.get_event_loop().run_until_complete(coordinator.async_set_day_mode("Absence"))
+
+        assert coordinator._absence_is_manual is True
+        self._run(coordinator, datetime(2026, 3, 4, 10, 0, 0))
+        assert coordinator.day_mode == "Absence"
+
+    def test_leaving_absence_by_hand_clears_the_flag(self):
+        hass = make_mock_hass()
+        hass.states.get.return_value = make_calendar_state(state="off")
+        coordinator = HomeShiftCoordinator(hass, self._entry())
+        coordinator.async_refresh_schedulers = AsyncMock()
+        coordinator._async_save_state = AsyncMock()
+        coordinator.async_set_updated_data = MagicMock()
+        coordinator.day_mode = "Absence"
+
+        with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
+            mock_dt.now.return_value = datetime(2026, 3, 4, 9, 0, 0)
+            asyncio.get_event_loop().run_until_complete(coordinator.async_set_day_mode("Maison"))
+
+        assert coordinator._absence_is_manual is False
+
+    def test_flag_survives_a_restart(self):
+        hass = make_mock_hass()
+        coordinator = HomeShiftCoordinator(hass, self._entry())
+        coordinator._store.async_load = AsyncMock(
+            return_value={"day_mode_key": "away", "absence_is_manual": True}
+        )
+
+        asyncio.get_event_loop().run_until_complete(coordinator.async_restore_state())
+
+        assert coordinator.day_mode == "Absence"
+        assert coordinator._absence_is_manual is True
+
+    def test_legacy_payload_treats_persisted_absence_as_manual(self):
+        """Before the flag existed, only a hand-picked absence could persist."""
+        hass = make_mock_hass()
+        coordinator = HomeShiftCoordinator(hass, self._entry())
+        coordinator._store.async_load = AsyncMock(return_value={"day_mode_key": "away"})
+
+        asyncio.get_event_loop().run_until_complete(coordinator.async_restore_state())
+
+        assert coordinator._absence_is_manual is True
+
+    def test_legacy_payload_with_another_mode_leaves_the_flag_off(self):
+        hass = make_mock_hass()
+        coordinator = HomeShiftCoordinator(hass, self._entry())
+        coordinator._store.async_load = AsyncMock(return_value={"day_mode_key": "home"})
+
+        asyncio.get_event_loop().run_until_complete(coordinator.async_restore_state())
+
+        assert coordinator._absence_is_manual is False

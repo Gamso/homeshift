@@ -39,6 +39,7 @@ from .const import (
     EVENT_NONE,
     THERMOSTAT_OFF_KEY,
     get_localized_defaults,
+    parse_key_value_map,
 )
 
 from .cover_manager import CoverManager
@@ -86,6 +87,7 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
         super().__init__(
             hass,
             _LOGGER,
+            config_entry=entry,
             name=DOMAIN,
             update_interval=timedelta(minutes=SCAN_INTERVAL_MINUTES),
         )
@@ -117,9 +119,18 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
             self._early_switch_minutes = DEFAULT_EARLY_SWITCH_MINUTES
         # Manual override: blocks auto-update until this datetime
         self._override_until: datetime | None = None
+        # True when the absence mode currently active was picked by hand.
+        # Absence freezes automatic updates indefinitely, which is what you
+        # want from a manual "I'm away, don't touch anything" switch — but not
+        # from a calendar event mapped to absence, which would leave the
+        # integration frozen for good once the event ends.
+        self._absence_is_manual: bool = False
         # Predicted next automatic mode change
         self._next_mode: str | None = None
         self._next_mode_at: datetime | None = None
+        # Last prediction logged at INFO — the prediction is recomputed every
+        # poll, so only an actual change is worth a line in the log.
+        self._last_logged_prediction: tuple[str | None, datetime | None] | None = None
 
         # Parse thermostat mode map (InternalKey:DisplayValue, ...)
         thermostat_map_str = _config.get(CONF_THERMOSTAT_MODE_MAP, _loc.get(CONF_THERMOSTAT_MODE_MAP, DEFAULT_THERMOSTAT_MODE_MAP))
@@ -203,6 +214,13 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
             )
             self._day_mode = resolved
 
+        if "absence_is_manual" in stored:
+            self._absence_is_manual = bool(stored["absence_is_manual"])
+        else:
+            # Payload written before this flag existed: absence could only
+            # persist if it had been selected by hand, so assume it was.
+            self._absence_is_manual = self._day_mode == self._mode_absence
+
         thermostat_mode_key = stored.get("thermostat_mode_key")
         if thermostat_mode_key and thermostat_mode_key in self._thermostat_mode_map:
             resolved = self._thermostat_mode_map[thermostat_mode_key]
@@ -220,6 +238,7 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
                 {
                     "day_mode_key": self.day_mode_key,
                     "thermostat_mode_key": self.thermostat_mode_key,
+                    "absence_is_manual": self._absence_is_manual,
                 }
             )
         except Exception as err:  # noqa: BLE001
@@ -328,9 +347,18 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
             self._cancel_cover_close_timer = None
 
     def _log_next_mode_prediction(self, context: str) -> None:
-        """Log the currently computed next-mode prediction at INFO level."""
+        """Log the next-mode prediction: INFO when it changed, DEBUG otherwise.
+
+        This runs on every poll. Logging it at INFO each time buried the log
+        under ~300 identical lines a day; a prediction that moved is the part
+        worth seeing.
+        """
+        prediction = (self._next_mode, self._next_mode_at)
+        changed = prediction != self._last_logged_prediction
+        self._last_logged_prediction = prediction
         next_mode_at = self._next_mode_at.isoformat() if self._next_mode_at else None
-        _LOGGER.info(
+        log = _LOGGER.info if changed else _LOGGER.debug
+        log(
             "%s | next_mode=%s | next_mode_at=%s",
             context,
             self._next_mode,
@@ -372,21 +400,8 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
         """Parse 'Key1:Display1, Key2:Display2' into an ordered dict.
 
         Keys are internal English identifiers; values are display texts.
-        Identical to parse_thermostat_mode_map — kept as a named alias for clarity.
         """
-        mapping: dict[str, str] = {}
-        if not raw:
-            return mapping
-        for pair in raw.split(","):
-            pair = pair.strip()
-            if ":" not in pair:
-                continue
-            key, display = pair.split(":", 1)
-            key = key.strip()
-            display = display.strip()
-            if key and display:
-                mapping[key] = display
-        return mapping
+        return parse_key_value_map(raw)
 
     @staticmethod
     def parse_event_mode_map(raw: str) -> dict[str, str]:
@@ -394,19 +409,7 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
 
         Returns a case-insensitive-lookup dict (keys are lowered).
         """
-        mapping: dict[str, str] = {}
-        if not raw:
-            return mapping
-        for pair in raw.split(","):
-            pair = pair.strip()
-            if ":" not in pair:
-                continue
-            event_key, mode_value = pair.split(":", 1)
-            event_key = event_key.strip()
-            mode_value = mode_value.strip()
-            if event_key and mode_value:
-                mapping[event_key.lower()] = mode_value
-        return mapping
+        return parse_key_value_map(raw, lower_keys=True)
 
     @staticmethod
     def parse_thermostat_mode_map(raw: str) -> dict[str, str]:
@@ -415,19 +418,7 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
         Keys are internal English identifiers (case preserved).
         Values are display texts used in UI and as scheduler tags.
         """
-        mapping: dict[str, str] = {}
-        if not raw:
-            return mapping
-        for pair in raw.split(","):
-            pair = pair.strip()
-            if ":" not in pair:
-                continue
-            key, display = pair.split(":", 1)
-            key = key.strip()
-            display = display.strip()
-            if key and display:
-                mapping[key] = display
-        return mapping
+        return parse_key_value_map(raw)
 
     @property
     def day_mode_map(self) -> dict[str, str]:
@@ -467,8 +458,11 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
         """Set day mode directly (no override logic or scheduler refresh).
 
         Intended for test setup only. Use async_set_day_mode() at runtime.
+        Like a manual selection, this marks absence as hand-picked — the
+        automatic path is what clears that flag.
         """
         self._day_mode = value
+        self._absence_is_manual = value == self._mode_absence
 
     @property
     def thermostat_mode(self) -> str:
@@ -499,6 +493,11 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
     def next_mode_at(self) -> datetime | None:
         """Timestamp when the next automatic day mode change is expected."""
         return self._next_mode_at
+
+    @property
+    def cover_manager(self) -> CoverManager:
+        """The cover manager: heat protection and the daily open/close schedule."""
+        return self._cover_manager
 
     @property
     def cover_open_time(self) -> str | None:
@@ -572,6 +571,7 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
             return
         old_mode = self._day_mode
         self._day_mode = resolved
+        self._absence_is_manual = resolved == self._mode_absence
         # Activate override to block automatic changes for the configured duration
         override_minutes = self._override_duration_minutes
         if override_minutes > 0:
@@ -758,15 +758,16 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
                     )
                     break
 
-        # Auto-update mode (skip if absence mode or manual override is active)
-        if self._day_mode == self._mode_absence:
-            _LOGGER.info(
-                "Periodic check: auto-update skipped, absence mode active ('%s')",
+        # Auto-update mode (skip if absence was selected by hand, or a manual
+        # override is active)
+        if self._day_mode == self._mode_absence and self._absence_is_manual:
+            _LOGGER.debug(
+                "Periodic check: auto-update skipped, absence mode selected manually ('%s')",
                 self._day_mode,
             )
         elif self._override_until is not None and now < self._override_until:
             remaining = int((self._override_until - now).total_seconds() / 60) + 1
-            _LOGGER.info(
+            _LOGGER.debug(
                 "Periodic check: auto-update skipped, manual override active for ~%d more min",
                 remaining,
             )
@@ -777,7 +778,7 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
                     self._override_until.strftime("%H:%M:%S"),
                 )
                 self._override_until = None
-            new_mode = await self._determine_mode(today_type)
+            new_mode = self._determine_mode(today_type)
             if new_mode and new_mode != self._day_mode and new_mode in self._day_modes:
                 _LOGGER.info(
                     "Auto mode change: day_mode '%s' -> '%s' (event=%s)",
@@ -786,10 +787,13 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
                     self._current_event,
                 )
                 self._day_mode = new_mode
+                # Automatic absence (a calendar event mapped to it) must not
+                # freeze the integration the way a manual one does.
+                self._absence_is_manual = False
                 await self.async_refresh_schedulers()
                 await self._async_save_state()
             else:
-                _LOGGER.info(
+                _LOGGER.debug(
                     "Periodic check: day_mode unchanged ('%s') | event=%s",
                     self._day_mode,
                     self._current_event,
@@ -859,14 +863,17 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
                 events = entity_data.get("events", [])
                 if isinstance(events, list):
                     valid_events = [e for e in events if isinstance(e, dict)]
-                    _LOGGER.debug(
-                        "calendar.get_events returned %d event(s) for '%s' between %s and %s: %s",
-                        len(valid_events),
-                        calendar_entity,
-                        start.isoformat(),
-                        end.isoformat(),
-                        self._summarize_events_for_log(valid_events),
-                    )
+                    if _LOGGER.isEnabledFor(logging.DEBUG):
+                        # Summarizing builds a list per call — only worth it
+                        # when the record will actually be emitted.
+                        _LOGGER.debug(
+                            "calendar.get_events returned %d event(s) for '%s' between %s and %s: %s",
+                            len(valid_events),
+                            calendar_entity,
+                            start,
+                            end,
+                            self._summarize_events_for_log(valid_events),
+                        )
                     return valid_events
         except Exception as err:  # noqa: BLE001
             _LOGGER.debug("calendar.get_events failed for '%s': %s", calendar_entity, err)
@@ -885,110 +892,120 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
         """Strip tzinfo for mixed-timezone-safe comparisons."""
         return dt.replace(tzinfo=None) if dt.tzinfo is not None else dt
 
-    async def _mode_at_time(
+    def _prepare_events(self, events: list[dict], ref_tzinfo) -> list[tuple]:
+        """Parse each event once into (start_naive, end_naive, mode, all_day).
+
+        _mode_at_time() is evaluated for every inflection point of the next
+        seven days, so parsing the ISO strings and lowercasing the summaries
+        inside it meant redoing that work once per candidate per event.
+        `mode` is the day mode the event maps to, or None when its summary
+        matches no configured keyword.
+        """
+        prepared: list[tuple] = []
+        for event in events:
+            start_dt = _parse_event_dt(event.get("start", ""), ref_tzinfo)
+            end_dt = _parse_event_dt(event.get("end", ""), ref_tzinfo)
+            summary = str(event.get("summary", "")).lower()
+            mode = next(
+                (mode for kw, mode in self._event_mode_map.items() if kw in summary),
+                None,
+            )
+            prepared.append(
+                (
+                    self._to_naive(start_dt) if start_dt is not None else None,
+                    self._to_naive(end_dt) if end_dt is not None else None,
+                    mode,
+                    self._is_all_day_event(event),
+                )
+            )
+        return prepared
+
+    def _prepare_active_event(self, state) -> tuple[datetime, datetime, str | None] | None:
+        """Parse a calendar entity's running event once: (start, end, mode).
+
+        Returns None when the calendar is off or its window is unparseable.
+        Times are naive, as reported by the calendar entity's attributes.
+        """
+        if state is None or state.state != "on":
+            return None
+        try:
+            start = datetime.strptime(state.attributes.get("start_time", ""), "%Y-%m-%d %H:%M:%S")
+            end = datetime.strptime(state.attributes.get("end_time", ""), "%Y-%m-%d %H:%M:%S")
+        except (ValueError, TypeError):
+            return None
+        message = str(state.attributes.get("message", "")).lower()
+        mode = next(
+            (mode for kw, mode in self._event_mode_map.items() if kw in message),
+            None,
+        )
+        return start, end, mode
+
+    def _mode_at_time(
         self,
         at: datetime,
-        upcoming_events: list[dict],
-        active_calendar_state,
-        holiday_events: list[dict],
-        active_holiday_state,
-        ref_tzinfo,
+        prepared_events: list[tuple],
+        active_event: tuple[datetime, datetime, str | None] | None,
+        prepared_holidays: list[tuple],
+        active_holiday: tuple[datetime, datetime, str | None] | None,
     ) -> str | None:
         """Determine what day mode would be active at `at`.
 
-        Checks (in priority order):
-        1. Upcoming events (from get_events) that are active at `at`
-        2. Currently active calendar event (from calendar_state) if it still covers `at`
-        3. Weekend / holiday / default fallback
+        Takes the pre-parsed views built by _prepare_events() /
+        _prepare_active_event(), and checks (in priority order):
+        1. Events (from get_events) that are active at `at`
+        2. The currently running calendar event, if it still covers `at`
+        3. Early switch — a timed event starting just after `at`
+        4. Weekend / holiday / default fallback
         """
         at_naive = self._to_naive(at)
 
-        # 1. Scan events returned by get_events
-        for event in upcoming_events:
-            start_dt = _parse_event_dt(event.get("start", ""), ref_tzinfo)
-            end_dt = _parse_event_dt(event.get("end", ""), ref_tzinfo)
-            if start_dt is None or end_dt is None:
+        # 1. Events returned by get_events
+        for start, end, mode, _all_day in prepared_events:
+            if start is None or end is None:
                 continue
-            if self._to_naive(start_dt) <= at_naive < self._to_naive(end_dt):
-                summary = event.get("summary", "")
-                for kw, mode in self._event_mode_map.items():
-                    if kw in summary.lower():
-                        return mode
+            if start <= at_naive < end and mode is not None:
+                return mode
 
-        # 2. Currently active event (may not appear in upcoming_events when
-        #    get_events returns only future starts)
-        if active_calendar_state is not None and active_calendar_state.state == "on":
-            start_str = active_calendar_state.attributes.get("start_time", "")
-            end_str = active_calendar_state.attributes.get("end_time", "")
-            try:
-                s = datetime.strptime(start_str, "%Y-%m-%d %H:%M:%S")
-                e = datetime.strptime(end_str, "%Y-%m-%d %H:%M:%S")
-                if s <= at_naive < e:
-                    message = active_calendar_state.attributes.get("message", "")
-                    for kw, mode in self._event_mode_map.items():
-                        if kw in message.lower():
-                            return mode
-            except (ValueError, TypeError):
-                pass
+        # 2. Currently running event (may not appear in the get_events response,
+        #    which can return only future starts)
+        if active_event is not None:
+            start, end, mode = active_event
+            if start <= at_naive < end and mode is not None:
+                return mode
 
         # 3. Early switch — timed event starts within early_switch_minutes after `at`
         if self._early_switch_minutes > 0:
             early_delta = timedelta(minutes=self._early_switch_minutes)
-            for event in upcoming_events:
-                if self._is_all_day_event(event):
+            for start, _end, mode, all_day in prepared_events:
+                if all_day or start is None or mode is None:
                     continue
-                start_dt = _parse_event_dt(event.get("start", ""), ref_tzinfo)
-                if start_dt is None:
-                    continue
-                start_naive = self._to_naive(start_dt)
-                if start_naive - early_delta <= at_naive < start_naive:
-                    summary = event.get("summary", "")
-                    for kw, mode in self._event_mode_map.items():
-                        if kw in summary.lower():
-                            return mode
+                if start - early_delta <= at_naive < start:
+                    return mode
 
         # 4. No active mapped event → weekend / holiday / default
-        is_holiday = self._is_calendar_active_at_time(
-            at,
-            holiday_events,
-            active_holiday_state,
-            ref_tzinfo,
-        )
-        return await self._determine_mode(EVENT_NONE, at_time=at, is_holiday=is_holiday)
+        is_holiday = self._is_calendar_active_at_time(at_naive, prepared_holidays, active_holiday)
+        return self._determine_mode(EVENT_NONE, at_time=at, is_holiday=is_holiday)
 
     def _is_calendar_active_at_time(
         self,
-        at: datetime,
-        events: list[dict],
-        active_state,
-        ref_tzinfo,
+        at_naive: datetime,
+        prepared_events: list[tuple],
+        active_event: tuple[datetime, datetime, str | None] | None,
     ) -> bool:
-        """Return True when a calendar is active at `at`.
+        """Return True when a calendar is active at `at_naive`.
 
-        This is used for future-mode prediction. It combines the currently active
-        calendar entity state with future events fetched via calendar.get_events.
+        Used for future-mode prediction: combines the calendar entity's running
+        event with the future events fetched via calendar.get_events.
         """
-        at_naive = self._to_naive(at)
+        if active_event is not None:
+            start, end, _mode = active_event
+            if start <= at_naive < end:
+                return True
 
-        # If the calendar entity is currently on, it may cover `at` even when the
-        # service response only includes events that start in the future.
-        if active_state is not None and active_state.state == "on":
-            start_str = active_state.attributes.get("start_time", "")
-            end_str = active_state.attributes.get("end_time", "")
-            try:
-                start_dt = datetime.strptime(start_str, "%Y-%m-%d %H:%M:%S")
-                end_dt = datetime.strptime(end_str, "%Y-%m-%d %H:%M:%S")
-                if start_dt <= at_naive < end_dt:
-                    return True
-            except (ValueError, TypeError):
-                pass
-
-        for event in events:
-            start_dt = _parse_event_dt(event.get("start", ""), ref_tzinfo)
-            end_dt = _parse_event_dt(event.get("end", ""), ref_tzinfo)
-            if start_dt is None or end_dt is None:
+        for start, end, _mode, _all_day in prepared_events:
+            if start is None or end is None:
                 continue
-            if self._to_naive(start_dt) <= at_naive < self._to_naive(end_dt):
+            if start <= at_naive < end:
                 return True
 
         return False
@@ -1018,7 +1035,7 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
         )
         _LOGGER.debug(
             "Predicting next mode from now=%s | current_mode=%s | work_events=%d | holiday_calendar=%s | holiday_state=%s | holiday_events=%d | early_switch=%d",
-            now.isoformat(),
+            now,
             self._day_mode,
             len(upcoming),
             holiday_calendar or None,
@@ -1088,35 +1105,41 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
                     if self._to_naive(early_dt) > now_naive:
                         candidates.add(early_dt)
 
+        # Parse every event once instead of once per candidate below
+        prepared_events = self._prepare_events(upcoming, now.tzinfo)
+        prepared_holidays = self._prepare_events(holiday_upcoming, now.tzinfo)
+        active_event = self._prepare_active_event(calendar_state)
+        active_holiday = self._prepare_active_event(holiday_state)
+
         # Sort chronologically using naive times to avoid tz comparison errors
         sorted_candidates = sorted(candidates, key=self._to_naive)
-        _LOGGER.debug(
-            "Next-mode candidates (%d): %s",
-            len(sorted_candidates),
-            [candidate.isoformat() for candidate in sorted_candidates],
-        )
+        if _LOGGER.isEnabledFor(logging.DEBUG):
+            _LOGGER.debug(
+                "Next-mode candidates (%d): %s",
+                len(sorted_candidates),
+                [candidate.isoformat() for candidate in sorted_candidates],
+            )
 
         # Walk candidates and return the first that produces a different mode
         current_mode = self._day_mode
         for candidate in sorted_candidates:
-            mode_at = await self._mode_at_time(
+            mode_at = self._mode_at_time(
                 candidate,
-                upcoming,
-                calendar_state,
-                holiday_upcoming,
-                holiday_state,
-                now.tzinfo,
+                prepared_events,
+                active_event,
+                prepared_holidays,
+                active_holiday,
             )
             _LOGGER.debug(
                 "Next-mode candidate %s -> mode=%s (current_mode=%s)",
-                candidate.isoformat(),
+                candidate,
                 mode_at,
                 current_mode,
             )
             if mode_at != current_mode:
                 _LOGGER.debug(
                     "Next-mode first change found at %s -> %s",
-                    candidate.isoformat(),
+                    candidate,
                     mode_at,
                 )
                 return mode_at, candidate
@@ -1130,7 +1153,7 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
         )
         return current_mode, None
 
-    async def _determine_mode(
+    def _determine_mode(
         self,
         today_type: str,
         at_time: datetime | None = None,
@@ -1181,12 +1204,13 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
 
         This is the daily check entry point. It triggers a full refresh which
         in turn calls _async_update_data and auto-determines the mode.
+        Absence mode is not short-circuited here: _async_update_data already
+        leaves the day mode alone in that case, and skipping the whole refresh
+        also skipped the cover schedule, the next-mode prediction and the data
+        broadcast — and made the homeshift.sync_calendar service silently do
+        nothing.
         """
-        if self._day_mode == self._mode_absence:
-            _LOGGER.info("Mode is %s, skipping automatic check", self._mode_absence)
-            return
-
-        _LOGGER.info("Running scheduled day type check")
+        _LOGGER.debug("Running scheduled day type check")
         await self.async_refresh()
 
     async def async_refresh_schedulers(self) -> None:

@@ -1,12 +1,14 @@
 """Cover manager for HomeShift integration.
 
 Handles cover heat-protection (closing covers when it gets too hot) and
-the native daily open/close schedule for a cover group. Heat protection's
+the native daily open/close schedule for a cover group and/or individually
+configured covers (each optionally paired with a window sensor). Heat protection's
 active window is fully derived from the daily schedule's computed open/close
 times, so it is inert until the daily schedule is configured.
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import date, datetime, time as dt_time, timedelta
 from typing import TYPE_CHECKING, Callable
@@ -28,13 +30,18 @@ from .const import (
     CONF_COVER_WEATHER_ENTITY,
     CONF_COVER_FORECAST_THRESHOLD,
     DEFAULT_COVER_FORECAST_THRESHOLD,
-    CONF_DAILY_COVER_ENTITIES,
+    CONF_DAILY_COVER_ITEMS,
+    CONF_ITEM_COVER,
+    CONF_ITEM_WINDOW_SENSOR,
+    CONF_ITEM_MY_BUTTON,
+    WINDOW_OPEN_STATES,
     CONF_DAILY_COVER_OPEN_TIME_MAP,
     CONF_DAILY_COVER_CLOSE_OFFSET_MINUTES,
     DEFAULT_DAILY_COVER_OPEN_TIME,
     DEFAULT_DAILY_COVER_CLOSE_OFFSET_MINUTES,
     CONF_SUNRISE_EARLIEST,
     DEFAULT_SUNRISE_EARLIEST,
+    parse_key_value_map,
 )
 
 if TYPE_CHECKING:
@@ -73,17 +80,6 @@ def _parse_stored_date(value: str | None) -> date | None:
         return None
 
 
-def _parse_mode_map(raw: str) -> dict[str, str]:
-    """Parse a 'Key:Value, Key:Value, ...' string into a dict."""
-    result: dict[str, str] = {}
-    for pair in raw.split(","):
-        pair = pair.strip()
-        if ":" in pair:
-            key, _, value = pair.partition(":")
-            result[key.strip()] = value.strip()
-    return result
-
-
 class CoverManager:
     """Manages cover heat-protection and the native daily open/close schedule."""
 
@@ -104,7 +100,19 @@ class CoverManager:
         # (separate cover group from heat protection).
         self._daily_opened_date: date | None = None
         self._daily_closed_date: date | None = None
+        # Calendar day the schedule was last computed for. Persisted so that a
+        # same-day recomputation (an HA restart re-runs the "new day" path with
+        # an empty in-memory date) doesn't wrongly rearm heat protection.
+        self._schedule_computed_date: date | None = None
         self._store: Store = Store(hass, STORAGE_VERSION, f"{STORAGE_KEY}.{entry.entry_id}")
+        # Serializes the once-per-day actions. They are triggered from several
+        # places at once — the precise open/close timers, the periodic poll and
+        # every temperature-sensor change — and each guard ("already done
+        # today") is only updated after the service call is awaited. Without
+        # this lock two overlapping runs both pass the guard and send the
+        # command twice: harmless for close_cover, not for stop_cover or a My
+        # position button, which would move the cover a second time.
+        self._action_lock = asyncio.Lock()
 
     @property
     def _config(self) -> dict:
@@ -132,6 +140,7 @@ class CoverManager:
         self._proactive_checked_date = _parse_stored_date(stored.get("proactive_checked_date"))
         self._daily_opened_date = _parse_stored_date(stored.get("daily_opened_date"))
         self._daily_closed_date = _parse_stored_date(stored.get("daily_closed_date"))
+        self._schedule_computed_date = _parse_stored_date(stored.get("schedule_computed_date"))
 
     async def _async_save_state(self) -> None:
         """Persist cover-automation state to storage."""
@@ -142,6 +151,7 @@ class CoverManager:
                     "proactive_checked_date": self._proactive_checked_date.isoformat() if self._proactive_checked_date else None,
                     "daily_opened_date": self._daily_opened_date.isoformat() if self._daily_opened_date else None,
                     "daily_closed_date": self._daily_closed_date.isoformat() if self._daily_closed_date else None,
+                    "schedule_computed_date": self._schedule_computed_date.isoformat() if self._schedule_computed_date else None,
                 }
             )
         except Exception as err:  # noqa: BLE001 - defensive around storage I/O
@@ -201,8 +211,9 @@ class CoverManager:
             )
             return
 
-        await self._async_check_proactive_close(now, cover_entities)
-        await self._async_check_reactive_close(now, cover_entities, temp_sensor)
+        async with self._action_lock:
+            await self._async_check_proactive_close(now, cover_entities)
+            await self._async_check_reactive_close(now, cover_entities, temp_sensor)
 
     async def _async_apply_cover_action(self, cover_entities: list[str]) -> None:
         """Press the configured My button, or call the configured cover service."""
@@ -386,6 +397,93 @@ class CoverManager:
 
         return _parse_time_str(local_dt.strftime("%H:%M"))
 
+    # -- daily-schedule targets -------------------------------------------
+
+    def _daily_cover_items(self) -> list[dict]:
+        """Return the individually-configured covers, each a {cover, window_sensor} dict.
+
+        Entries without a cover entity are dropped — the window sensor is
+        optional, the cover it belongs to is not.
+        """
+        raw = self._config.get(CONF_DAILY_COVER_ITEMS, []) or []
+        return [item for item in raw if isinstance(item, dict) and item.get(CONF_ITEM_COVER)]
+
+    def _daily_cover_targets(self) -> list[str]:
+        """Return every cover the daily schedule drives, in configured order."""
+        targets: list[str] = []
+        for item in self._daily_cover_items():
+            cover = item.get(CONF_ITEM_COVER, "")
+            if cover and cover not in targets:
+                targets.append(cover)
+        return targets
+
+    def _covers_behind_an_open_window(self) -> set[str]:
+        """Return the individually-configured covers whose window is reported open.
+
+        Closing a cover over an open window traps the window (and can damage
+        the cover), so the evening close skips these and warns instead. A
+        sensor that is missing or unavailable can't establish that the window
+        is open, so the cover closes as usual — with a warning, since a
+        silently dead sensor would otherwise look like normal operation.
+        """
+        blocked: set[str] = set()
+        for item in self._daily_cover_items():
+            cover = item.get(CONF_ITEM_COVER, "")
+            sensor = item.get(CONF_ITEM_WINDOW_SENSOR, "")
+            if not sensor:
+                continue
+
+            state = self._hass.states.get(sensor)
+            raw_state = str(state.state).strip().lower() if state is not None else ""
+            if raw_state in ("", "unknown", "unavailable", "none"):
+                _LOGGER.warning(
+                    "Daily cover schedule: window sensor '%s' for cover '%s' is unavailable "
+                    "(state=%s) — closing the cover anyway",
+                    sensor,
+                    cover,
+                    raw_state or "missing",
+                )
+                continue
+
+            if raw_state in WINDOW_OPEN_STATES:
+                _LOGGER.warning(
+                    "Daily cover schedule: not closing cover '%s' — window sensor '%s' reports "
+                    "the window open",
+                    cover,
+                    sensor,
+                )
+                blocked.add(cover)
+        return blocked
+
+    def _covers_with_my_button(self) -> set[str]:
+        """Return every cover that closes to its My position instead of closing fully.
+
+        These are held back from the bulk close_cover — their button press
+        replaces it.
+        """
+        return {
+            item[CONF_ITEM_COVER]
+            for item in self._daily_cover_items()
+            if item.get(CONF_ITEM_MY_BUTTON)
+        }
+
+    def _my_button_presses(self, blocked: set[str]) -> list[tuple[str, str]]:
+        """Return the (cover, button) presses to send for the My position covers.
+
+        A cover configured with a My position button must not receive
+        close_cover — that would run it all the way down, which is exactly
+        what the favourite position exists to avoid. Its own button is
+        pressed instead. A cover behind an open window is skipped like any
+        other.
+        """
+        presses: list[tuple[str, str]] = []
+        for item in self._daily_cover_items():
+            cover = item.get(CONF_ITEM_COVER, "")
+            button = item.get(CONF_ITEM_MY_BUTTON, "")
+            if button and cover not in blocked:
+                presses.append((cover, button))
+        return presses
+
     async def async_compute_daily_schedule(self, now: datetime, day_mode_key: str | None) -> None:
         """Compute today's open/close times for the native daily cover schedule.
 
@@ -398,14 +496,22 @@ class CoverManager:
         — unlike opening, closing is not mode-dependent.
         Called once when a new calendar day is detected. Computed once per
         day — a day-mode change later that same day does not recompute the
-        open time. Also resets heat protection's closed state for the new day.
+        open time. Also resets heat protection's closed state, but only when
+        the calendar day actually changed: the coordinator's "new day" flag
+        lives in memory only, so an HA restart re-runs this for today, and
+        clearing the flag then would let heat protection close a cover a
+        second time — including one reopened by hand after the morning close.
         """
-        self._heat_closed = False
+        today = now.date()
+        if self._schedule_computed_date != today:
+            self._heat_closed = False
+            self._schedule_computed_date = today
+            await self._async_save_state()
 
-        if not self._config.get(CONF_DAILY_COVER_ENTITIES, []):
+        if not self._daily_cover_targets():
             return
 
-        open_time_map = _parse_mode_map(self._config.get(CONF_DAILY_COVER_OPEN_TIME_MAP, ""))
+        open_time_map = parse_key_value_map(self._config.get(CONF_DAILY_COVER_OPEN_TIME_MAP, ""))
         raw_value = open_time_map.get(day_mode_key or "", DEFAULT_DAILY_COVER_OPEN_TIME).strip().lower()
 
         if raw_value == "skip":
@@ -471,32 +577,52 @@ class CoverManager:
     async def async_check_daily_schedule(self, now: datetime) -> None:
         """Open covers at today's computed open time, close them at the computed close time.
 
-        Targets CONF_DAILY_COVER_ENTITIES (typically a cover group) — a
-        separate entity list from CONF_COVER_ENTITIES used by heat protection,
-        so a single unitary cover can stay under heat-protection's control
-        while the group follows the daily open/close schedule.
+        Targets the covers of CONF_DAILY_COVER_ITEMS — a list separate from
+        CONF_COVER_ENTITIES used by heat protection, so a single unitary cover
+        can stay under heat-protection's control while the rest follow the
+        daily open/close schedule.
         Each action fires at most once per calendar day. cover_open_time is
         None when today's mode resolved to 'skip' (see
         async_compute_daily_schedule), which naturally skips the open below.
-        Closing is unconditional — it always happens once per day regardless
-        of mode.
+        Closing is unconditional in time — it always happens once per day
+        regardless of mode — but skips any cover whose configured window
+        sensor reports its window open (see _covers_behind_an_open_window).
+        A skipped cover is not retried later that night: the warning is the
+        signal to close it by hand.
+        Covers configured with a My position button close to that position
+        (a button press) instead of receiving close_cover, so a cover that
+        must not close fully never does (see _my_button_presses).
+        Both rules apply to the entity ids configured here, which are not
+        looked inside: a cover reached through a group entity follows the
+        group's command, so list it individually to give it its own
+        window sensor or My position.
         """
-        daily_entities = self._config.get(CONF_DAILY_COVER_ENTITIES, [])
-        if not daily_entities:
+        targets = self._daily_cover_targets()
+        if not targets:
             return
 
         today = now.date()
 
+        async with self._action_lock:
+            await self._async_run_daily_actions(now, today, targets)
+
+    async def _async_run_daily_actions(self, now: datetime, today: date, targets: list[str]) -> None:
+        """Send today's open and close actions, at most once each.
+
+        Runs under _action_lock: each "already done today" guard below is only
+        written after its service call is awaited, so overlapping callers must
+        not interleave here.
+        """
         if self._daily_opened_date != today and self.cover_open_time:
             open_time = _parse_time_str(self.cover_open_time)
             if open_time is not None and now.time() >= open_time:
                 _LOGGER.info(
                     "Daily cover schedule: opening covers %s (open_time=%s)",
-                    daily_entities,
+                    targets,
                     self.cover_open_time,
                 )
                 await self._hass.services.async_call(
-                    "cover", "open_cover", {"entity_id": daily_entities}, blocking=True
+                    "cover", "open_cover", {"entity_id": targets}, blocking=True
                 )
                 self._daily_opened_date = today
                 await self._async_save_state()
@@ -504,13 +630,41 @@ class CoverManager:
         if self._daily_closed_date != today and self.daily_close_time:
             close_time = _parse_time_str(self.daily_close_time)
             if close_time is not None and now.time() >= close_time:
-                _LOGGER.info(
-                    "Daily cover schedule: closing covers %s (close_time=%s)",
-                    daily_entities,
-                    self.daily_close_time,
-                )
-                await self._hass.services.async_call(
-                    "cover", "close_cover", {"entity_id": daily_entities}, blocking=True
-                )
+                blocked = self._covers_behind_an_open_window()
+                presses = self._my_button_presses(blocked)
+                # Covers with an open window, or with their own My button, are
+                # handled separately — everything else gets one close_cover.
+                handled = blocked | self._covers_with_my_button()
+                close_targets = [entity_id for entity_id in targets if entity_id not in handled]
+
+                if close_targets:
+                    _LOGGER.info(
+                        "Daily cover schedule: closing covers %s (close_time=%s)",
+                        close_targets,
+                        self.daily_close_time,
+                    )
+                    await self._hass.services.async_call(
+                        "cover", "close_cover", {"entity_id": close_targets}, blocking=True
+                    )
+
+                for cover, button in presses:
+                    _LOGGER.info(
+                        "Daily cover schedule: pressing My position button '%s' for cover '%s' "
+                        "(close_time=%s)",
+                        button,
+                        cover,
+                        self.daily_close_time,
+                    )
+                    await self._hass.services.async_call(
+                        "button", "press", {"entity_id": button}, blocking=True
+                    )
+
+                if not close_targets and not presses:
+                    _LOGGER.warning(
+                        "Daily cover schedule: nothing closed at %s — every configured cover "
+                        "is behind an open window",
+                        self.daily_close_time,
+                    )
+
                 self._daily_closed_date = today
                 await self._async_save_state()

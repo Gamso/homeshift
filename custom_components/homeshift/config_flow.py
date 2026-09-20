@@ -471,11 +471,10 @@ def _validate_close_elevation(hass, user_input: dict[str, Any]) -> dict[str, str
 
 def _daily_cover_schema(hass, data: dict[str, Any]) -> vol.Schema:
     """Build the native daily cover open/close schedule form schema."""
+    # The evening close comes first, on its own; everything after it —
+    # the sunrise floor and the per-mode times — is about opening, so the
+    # two concerns read as two blocks instead of interleaving.
     schema_dict: dict = {
-        vol.Optional(
-            CONF_SUNRISE_EARLIEST,
-            default=data.get(CONF_SUNRISE_EARLIEST, DEFAULT_SUNRISE_EARLIEST),
-        ): selector.TimeSelector(),
         vol.Optional(
             CONF_DAILY_COVER_CLOSE_ELEVATION,
             default=_close_elevation(data),
@@ -488,6 +487,10 @@ def _daily_cover_schema(hass, data: dict[str, Any]) -> vol.Schema:
                 mode=selector.NumberSelectorMode.BOX,
             )
         ),
+        vol.Optional(
+            CONF_SUNRISE_EARLIEST,
+            default=data.get(CONF_SUNRISE_EARLIEST, DEFAULT_SUNRISE_EARLIEST),
+        ): selector.TimeSelector(),
     }
     schema_dict.update(_daily_open_time_fields(data))
     return vol.Schema(schema_dict)

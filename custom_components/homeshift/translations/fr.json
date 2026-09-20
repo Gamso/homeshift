@@ -101,16 +101,16 @@
         "title": "Planning quotidien des volets",
         "description": "Ouvre et ferme vos volets tous les jours nativement, sans passer par une entité Scheduler séparée. Les volets concernés se définissent dans Volets individuels ; cette section règle les horaires. Reste indépendant du Contrôle des volets (chaleur), qui cible un volet unitaire. Pour chaque mode de journée ci-dessous, définissez 'sunrise', 'skip', ou une heure personnalisée 'HH:MM' — les modes partageant la même valeur forment un lot. La fermeture a toujours lieu une fois par jour, pour tous les modes, quand le soleil descend sous l'élévation ci-dessous.\n\nÀ {close_elevation}°, ce sera {close_at_elevation} ce soir.",
         "data": {
-          "sunrise_earliest": "Heure d'ouverture minimale",
           "daily_cover_close_elevation": "Élévation du soleil à la fermeture",
+          "sunrise_earliest": "Heure d'ouverture minimale",
           "daily_open_time_home": "Heure d'ouverture — Maison",
           "daily_open_time_work": "Heure d'ouverture — Travail",
           "daily_open_time_remote": "Heure d'ouverture — Télétravail",
           "daily_open_time_away": "Heure d'ouverture — Absence"
         },
         "data_description": {
-          "sunrise_earliest": "L'heure d'ouverture au lever du soleil sera la plus tardive entre le lever réel et cette valeur.",
           "daily_cover_close_elevation": "Degrés au-dessus de l'horizon — l'attribut « elevation » de sun.sun, donc un niveau de lumière plutôt qu'un délai. 0° = coucher du soleil, -2° (recommandé) ≈ dix minutes plus tard, -4° ≈ vingt à vingt-cinq minutes plus tard, pièce déjà sombre, -6° = fin du crépuscule civil. Une valeur positive ferme alors que le soleil est encore levé.",
+          "sunrise_earliest": "L'heure d'ouverture au lever du soleil sera la plus tardive entre le lever réel et cette valeur.",
           "daily_open_time_home": "Heure d'ouverture pour le mode Maison : 'sunrise', 'skip', ou une valeur personnalisée 'HH:MM'.",
           "daily_open_time_work": "Heure d'ouverture pour le mode Travail : 'sunrise', 'skip', ou une valeur personnalisée 'HH:MM'.",
           "daily_open_time_remote": "Heure d'ouverture pour le mode Télétravail : 'sunrise', 'skip', ou une valeur personnalisée 'HH:MM'.",
@@ -265,16 +265,16 @@
         "title": "Planning quotidien des volets",
         "description": "Ouvre et ferme vos volets tous les jours nativement, sans passer par une entité Scheduler séparée. Les volets concernés se définissent dans Volets individuels ; cette section règle les horaires. Reste indépendant du Contrôle des volets (chaleur), qui cible un volet unitaire. Pour chaque mode de journée ci-dessous, définissez 'sunrise', 'skip', ou une heure personnalisée 'HH:MM' — les modes partageant la même valeur forment un lot. La fermeture a toujours lieu une fois par jour, pour tous les modes, quand le soleil descend sous l'élévation ci-dessous.\n\nÀ {close_elevation}°, ce sera {close_at_elevation} ce soir.",
         "data": {
-          "sunrise_earliest": "Heure d'ouverture minimale",
           "daily_cover_close_elevation": "Élévation du soleil à la fermeture",
+          "sunrise_earliest": "Heure d'ouverture minimale",
           "daily_open_time_home": "Heure d'ouverture — Maison",
           "daily_open_time_work": "Heure d'ouverture — Travail",
           "daily_open_time_remote": "Heure d'ouverture — Télétravail",
           "daily_open_time_away": "Heure d'ouverture — Absence"
         },
         "data_description": {
-          "sunrise_earliest": "L'heure d'ouverture au lever du soleil sera la plus tardive entre le lever réel et cette valeur.",
           "daily_cover_close_elevation": "Degrés au-dessus de l'horizon — l'attribut « elevation » de sun.sun, donc un niveau de lumière plutôt qu'un délai. 0° = coucher du soleil, -2° (recommandé) ≈ dix minutes plus tard, -4° ≈ vingt à vingt-cinq minutes plus tard, pièce déjà sombre, -6° = fin du crépuscule civil. Une valeur positive ferme alors que le soleil est encore levé.",
+          "sunrise_earliest": "L'heure d'ouverture au lever du soleil sera la plus tardive entre le lever réel et cette valeur.",
           "daily_open_time_home": "Heure d'ouverture pour le mode Maison : 'sunrise', 'skip', ou une valeur personnalisée 'HH:MM'.",
           "daily_open_time_work": "Heure d'ouverture pour le mode Travail : 'sunrise', 'skip', ou une valeur personnalisée 'HH:MM'.",
           "daily_open_time_remote": "Heure d'ouverture pour le mode Télétravail : 'sunrise', 'skip', ou une valeur personnalisée 'HH:MM'.",

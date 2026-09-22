@@ -11,7 +11,14 @@ from homeassistant.helpers.event import async_track_state_change_event
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import dt as dt_util
 
-from .const import BINARY_SENSOR_COVER_HEAT_ACTIVE, CONF_COVER_ENTITIES, CONF_COVER_TEMP_SENSOR, DOMAIN
+from .const import (
+    BINARY_SENSOR_COVER_HEAT_ACTIVE,
+    BINARY_SENSOR_COVERS_LEFT_OPEN,
+    CONF_COVER_ENTITIES,
+    CONF_COVER_TEMP_SENSOR,
+    CONF_DAILY_COVER_ITEMS,
+    DOMAIN,
+)
 from .coordinator import HomeShiftCoordinator
 
 _LOGGER = logging.getLogger(__name__)
@@ -28,6 +35,8 @@ async def async_setup_entry(
     entities = []
     if config.get(CONF_COVER_ENTITIES) and config.get(CONF_COVER_TEMP_SENSOR):
         entities.append(HomeShiftCoverHeatActiveSensor(coordinator, entry))
+    if config.get(CONF_DAILY_COVER_ITEMS):
+        entities.append(HomeShiftCoversLeftOpenSensor(coordinator, entry))
     async_add_entities(entities)
 
 
@@ -85,6 +94,55 @@ class HomeShiftCoverHeatActiveSensor(CoordinatorEntity[HomeShiftCoordinator], Bi
     def is_on(self) -> bool | None:
         """Return True when heat protection conditions are met."""
         return self.coordinator.is_heat_protection_active(dt_util.now())
+
+    @property
+    def device_info(self) -> dict:
+        """Return device information."""
+        return _device_info(self._entry)
+
+
+class HomeShiftCoversLeftOpenSensor(CoordinatorEntity[HomeShiftCoordinator], BinarySensorEntity):
+    """Problem sensor: on when tonight's close had to leave covers up.
+
+    A cover whose window sensor reports the window open is skipped by the
+    evening close and only warned about in the log — which nobody reads. This
+    entity raises the same warning where it can be seen and acted on, and
+    lists the covers concerned in its attributes so a notification can name
+    them.
+
+    Only registered when the daily schedule drives at least one cover
+    (CONF_DAILY_COVER_ITEMS). Stays on until the next calendar day's schedule
+    is computed: closing the window does not bring the cover down, so the
+    warning outlives the open window that caused it.
+    """
+
+    _attr_device_class = BinarySensorDeviceClass.PROBLEM
+    _attr_has_entity_name = True
+    _attr_name = "Covers Left Open"
+    _attr_icon = "mdi:window-open-variant"
+
+    def __init__(self, coordinator: HomeShiftCoordinator, entry: ConfigEntry) -> None:
+        """Initialize the binary sensor."""
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{entry.entry_id}_{BINARY_SENSOR_COVERS_LEFT_OPEN}"
+        self._entry = entry
+
+    @property
+    def is_on(self) -> bool:
+        """Return True when at least one cover was left open tonight."""
+        return bool(self.coordinator.covers_left_open)
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        """List the covers left open and the window sensor that blocked each."""
+        left_open = self.coordinator.covers_left_open
+        checked_on = self.coordinator.covers_left_open_date
+        return {
+            "count": len(left_open),
+            "covers": list(left_open),
+            "window_sensors": dict(left_open),
+            "checked_on": checked_on.isoformat() if checked_on else None,
+        }
 
     @property
     def device_info(self) -> dict:

@@ -13,6 +13,14 @@ import logging
 from datetime import date, datetime, time as dt_time, timedelta
 from typing import TYPE_CHECKING, Callable
 
+from astral import Observer
+from astral.sun import (
+    SunDirection,
+    elevation as astral_elevation,
+    sunset as astral_sunset,
+    time_at_elevation as astral_time_at_elevation,
+)
+
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.event import EventStateChangedData, async_track_state_change_event
@@ -36,9 +44,11 @@ from .const import (
     CONF_ITEM_MY_BUTTON,
     WINDOW_OPEN_STATES,
     CONF_DAILY_COVER_OPEN_TIME_MAP,
-    CONF_DAILY_COVER_CLOSE_OFFSET_MINUTES,
+    CONF_DAILY_COVER_CLOSE_ELEVATION,
+    CLOSE_TRIGGER_SUNSET,
+    CLOSE_TRIGGER_ELEVATION,
     DEFAULT_DAILY_COVER_OPEN_TIME,
-    DEFAULT_DAILY_COVER_CLOSE_OFFSET_MINUTES,
+    DEFAULT_DAILY_COVER_CLOSE_ELEVATION,
     CONF_SUNRISE_EARLIEST,
     DEFAULT_SUNRISE_EARLIEST,
     parse_key_value_map,
@@ -70,6 +80,93 @@ def _parse_time_str(time_str: str) -> dt_time | None:
     return None
 
 
+def _astral_observer(hass: HomeAssistant) -> Observer:
+    """Return an astral observer for the Home Assistant location.
+
+    Built here rather than taken from homeassistant.helpers.sun, which has
+    already moved this ground once: get_astral_location, still present, is
+    deprecated for removal in 2027.7 and logs a warning naming this
+    integration, and its replacement get_astral_observer is too recent to
+    exist everywhere. This is exactly what that replacement does, against
+    config attributes that have been stable for years.
+    """
+    return Observer(hass.config.latitude, hass.config.longitude, hass.config.elevation)
+
+
+def next_sun_datetime(hass: HomeAssistant, attr_name: str) -> datetime | None:
+    """Return a sun.sun 'next_*' attribute as a local datetime, or None."""
+    sun_state = hass.states.get("sun.sun")
+    if sun_state is None:
+        return None
+    raw = sun_state.attributes.get(attr_name)
+    if not raw:
+        return None
+    try:
+        return dt_util.as_local(datetime.fromisoformat(str(raw)))
+    except (ValueError, TypeError):
+        return None
+
+
+def sunset_time(hass: HomeAssistant) -> dt_time | None:
+    """Return the next sunset's local time-of-day, or None.
+
+    The fallback for the evening close when the configured elevation cannot
+    be reached. Reads sun.sun rather than astral so it still answers when the
+    location is not usable.
+    """
+    sunset = next_sun_datetime(hass, "next_setting")
+    return sunset.time() if sunset is not None else None
+
+
+def elevation_for_sunset_offset(hass: HomeAssistant, offset_minutes: int, year: int) -> float | None:
+    """Return the elevation a fixed sunset offset lands on, averaged over the year.
+
+    Used once, by the v3 -> v4 migration, to carry an entry's retired "close
+    N minutes around sunset" setting over to the elevation that reproduces
+    it. Averaged over the equinoxes and solstices because the two are not
+    exactly equivalent: the gap is under half a degree for the offsets people
+    actually use (+-30 min) and widens for the extremes. Rounded to the half
+    degree the config flow offers. Returns None when the location cannot be
+    resolved.
+    """
+    observer = _astral_observer(hass)
+    elevations: list[float] = []
+    for month, day in ((3, 21), (6, 21), (9, 21), (12, 21)):
+        try:
+            moment = astral_sunset(observer, date(year, month, day)) + timedelta(minutes=offset_minutes)
+            elevations.append(astral_elevation(observer, moment))
+        except (ValueError, TypeError, AttributeError) as err:
+            _LOGGER.debug("No sunset on %s-%s-%s: %s", year, month, day, err)
+    if not elevations:
+        return None
+    return round(sum(elevations) / len(elevations) * 2) / 2
+
+
+def sun_time_at_elevation(hass: HomeAssistant, elevation: float, on_date: date) -> dt_time | None:
+    """Return the local time the setting sun reaches `elevation` on `on_date`.
+
+    `elevation` is in degrees above the horizon, the same scale as the
+    'elevation' attribute of sun.sun: 0 is sunset, negative values are below
+    it. Returns None when the sun never reaches that elevation on its way
+    down that day (polar latitudes, or a positive threshold in mid-winter),
+    so callers can fall back to sunset + offset.
+
+    Lives at module level so the config flow can preview the resulting time
+    without building a CoverManager.
+    """
+    try:
+        event = astral_time_at_elevation(
+            _astral_observer(hass),
+            elevation,
+            date=on_date,
+            direction=SunDirection.SETTING,
+        )
+    except (ValueError, TypeError, AttributeError) as err:
+        _LOGGER.debug("No sun elevation of %s on %s: %s", elevation, on_date, err)
+        return None
+    return dt_util.as_local(event).time()
+
+
 def _parse_stored_date(value: str | None) -> date | None:
     """Parse an ISO 'YYYY-MM-DD' string into a date. Returns None if unparseable."""
     if not value:
@@ -88,6 +185,17 @@ class CoverManager:
         self._entry = entry
         self.cover_open_time: str | None = None
         self.daily_close_time: str | None = None
+        # Which trigger produced daily_close_time — CLOSE_TRIGGER_ELEVATION,
+        # or CLOSE_TRIGGER_SUNSET when the elevation turned out to be
+        # unreachable today. The Cover Close Time sensor reports it, so a
+        # fallback night is visible rather than silent.
+        self.daily_close_trigger: str | None = None
+        # The covers tonight's close had to leave up, as {cover: window sensor}.
+        # Persisted so the warning entity survives a restart, and reset when a
+        # new calendar day is computed — not when the window is closed, since
+        # the cover stays up either way until someone acts on it.
+        self.covers_left_open: dict[str, str] = {}
+        self.covers_left_open_date: date | None = None
         # Heat protection state — whether the heat-protected cover has been
         # closed by this automation today (proactively or reactively). Once
         # closed, it stays closed for the rest of the day: heat protection
@@ -141,6 +249,9 @@ class CoverManager:
         self._daily_opened_date = _parse_stored_date(stored.get("daily_opened_date"))
         self._daily_closed_date = _parse_stored_date(stored.get("daily_closed_date"))
         self._schedule_computed_date = _parse_stored_date(stored.get("schedule_computed_date"))
+        stored_left_open = stored.get("covers_left_open")
+        self.covers_left_open = dict(stored_left_open) if isinstance(stored_left_open, dict) else {}
+        self.covers_left_open_date = _parse_stored_date(stored.get("covers_left_open_date"))
 
     async def _async_save_state(self) -> None:
         """Persist cover-automation state to storage."""
@@ -152,6 +263,8 @@ class CoverManager:
                     "daily_opened_date": self._daily_opened_date.isoformat() if self._daily_opened_date else None,
                     "daily_closed_date": self._daily_closed_date.isoformat() if self._daily_closed_date else None,
                     "schedule_computed_date": self._schedule_computed_date.isoformat() if self._schedule_computed_date else None,
+                    "covers_left_open": self.covers_left_open,
+                    "covers_left_open_date": self.covers_left_open_date.isoformat() if self.covers_left_open_date else None,
                 }
             )
         except Exception as err:  # noqa: BLE001 - defensive around storage I/O
@@ -382,19 +495,9 @@ class CoverManager:
 
     def _get_next_sun_time(self, attr_name: str) -> dt_time | None:
         """Return the local time-of-day for a sun.sun 'next_*' attribute, or None."""
-        sun_state = self._hass.states.get("sun.sun")
-        if sun_state is None:
+        local_dt = next_sun_datetime(self._hass, attr_name)
+        if local_dt is None:
             return None
-
-        raw = sun_state.attributes.get(attr_name)
-        if not raw:
-            return None
-
-        try:
-            local_dt = dt_util.as_local(datetime.fromisoformat(str(raw)))
-        except (ValueError, TypeError):
-            return None
-
         return _parse_time_str(local_dt.strftime("%H:%M"))
 
     # -- daily-schedule targets -------------------------------------------
@@ -417,16 +520,18 @@ class CoverManager:
                 targets.append(cover)
         return targets
 
-    def _covers_behind_an_open_window(self) -> set[str]:
-        """Return the individually-configured covers whose window is reported open.
+    def _covers_behind_an_open_window(self) -> dict[str, str]:
+        """Return {cover: window sensor} for the covers whose window reads open.
 
         Closing a cover over an open window traps the window (and can damage
         the cover), so the evening close skips these and warns instead. A
         sensor that is missing or unavailable can't establish that the window
         is open, so the cover closes as usual — with a warning, since a
         silently dead sensor would otherwise look like normal operation.
+        Keyed by cover, carrying the sensor that blocked it, so the warning
+        entity can name both.
         """
-        blocked: set[str] = set()
+        blocked: dict[str, str] = {}
         for item in self._daily_cover_items():
             cover = item.get(CONF_ITEM_COVER, "")
             sensor = item.get(CONF_ITEM_WINDOW_SENSOR, "")
@@ -452,7 +557,7 @@ class CoverManager:
                     cover,
                     sensor,
                 )
-                blocked.add(cover)
+                blocked[cover] = sensor
         return blocked
 
     def _covers_with_my_button(self) -> set[str]:
@@ -467,7 +572,7 @@ class CoverManager:
             if item.get(CONF_ITEM_MY_BUTTON)
         }
 
-    def _my_button_presses(self, blocked: set[str]) -> list[tuple[str, str]]:
+    def _my_button_presses(self, blocked: dict[str, str]) -> list[tuple[str, str]]:
         """Return the (cover, button) presses to send for the My position covers.
 
         A cover configured with a My position button must not receive
@@ -484,6 +589,43 @@ class CoverManager:
                 presses.append((cover, button))
         return presses
 
+    # -- evening close time ------------------------------------------------
+
+    def _close_elevation(self) -> float:
+        """Return the configured close elevation in degrees, or its default."""
+        try:
+            return float(self._config.get(CONF_DAILY_COVER_CLOSE_ELEVATION, DEFAULT_DAILY_COVER_CLOSE_ELEVATION))
+        except (TypeError, ValueError):
+            return DEFAULT_DAILY_COVER_CLOSE_ELEVATION
+
+    def _resolve_close_time(self, now: datetime) -> dt_time | None:
+        """Return the time the descending sun reaches the configured elevation.
+
+        Falls back to plain sunset when the sun never gets there today, so a
+        threshold that has become unreachable cannot leave every cover open
+        all night. The config flow refuses an elevation outside the sun's
+        yearly range, so this is a safety net for what it cannot check — a
+        home whose latitude changed after setup, or an entry restored from
+        another location. Records which of the two won in
+        daily_close_trigger, so the sensor can report it.
+        """
+        elevation = self._close_elevation()
+        close_time = sun_time_at_elevation(self._hass, elevation, now.date())
+        if close_time is not None:
+            self.daily_close_trigger = CLOSE_TRIGGER_ELEVATION
+            return close_time
+
+        _LOGGER.warning(
+            "Daily cover schedule: the sun never reaches %s° on %s — closing at sunset instead",
+            elevation,
+            now.date(),
+        )
+        self.daily_close_trigger = CLOSE_TRIGGER_SUNSET
+        fallback = sunset_time(self._hass)
+        if fallback is None:
+            _LOGGER.warning("Daily cover schedule: could not determine sunset time either")
+        return fallback
+
     async def async_compute_daily_schedule(self, now: datetime, day_mode_key: str | None) -> None:
         """Compute today's open/close times for the native daily cover schedule.
 
@@ -492,8 +634,9 @@ class CoverManager:
         'skip' (no automatic opening today — sets cover_open_time to None),
         or a fixed 'HH:MM' time. A mode missing from the map falls back to
         DEFAULT_DAILY_COVER_OPEN_TIME.
-        Close time is always today's sunset plus CONF_DAILY_COVER_CLOSE_OFFSET_MINUTES
-        — unlike opening, closing is not mode-dependent.
+        Close time comes from _resolve_close_time(): the moment the setting
+        sun reaches CONF_DAILY_COVER_CLOSE_ELEVATION degrees above the
+        horizon. Unlike opening, closing is not mode-dependent.
         Called once when a new calendar day is detected. Computed once per
         day — a day-mode change later that same day does not recompute the
         open time. Also resets heat protection's closed state, but only when
@@ -506,6 +649,8 @@ class CoverManager:
         if self._schedule_computed_date != today:
             self._heat_closed = False
             self._schedule_computed_date = today
+            self.covers_left_open = {}
+            self.covers_left_open_date = None
             await self._async_save_state()
 
         if not self._daily_cover_targets():
@@ -535,19 +680,14 @@ class CoverManager:
                 )
                 self.cover_open_time = None
 
-        sunset_time = self._get_next_sun_time("next_setting")
-        if sunset_time is not None:
-            offset = int(self._config.get(CONF_DAILY_COVER_CLOSE_OFFSET_MINUTES, DEFAULT_DAILY_COVER_CLOSE_OFFSET_MINUTES))
-            close_dt = datetime.combine(now.date(), sunset_time) + timedelta(minutes=offset)
-            self.daily_close_time = close_dt.strftime("%H:%M")
-        else:
-            _LOGGER.warning("Daily cover schedule: could not determine sunset time")
-            self.daily_close_time = None
+        close_time = self._resolve_close_time(now)
+        self.daily_close_time = close_time.strftime("%H:%M") if close_time is not None else None
 
         _LOGGER.info(
-            "Daily cover schedule: open_time=%s, close_time=%s (day_mode=%s)",
+            "Daily cover schedule: open_time=%s, close_time=%s via %s (day_mode=%s)",
             self.cover_open_time,
             self.daily_close_time,
+            self.daily_close_trigger,
             day_mode_key,
         )
 
@@ -634,7 +774,7 @@ class CoverManager:
                 presses = self._my_button_presses(blocked)
                 # Covers with an open window, or with their own My button, are
                 # handled separately — everything else gets one close_cover.
-                handled = blocked | self._covers_with_my_button()
+                handled = set(blocked) | self._covers_with_my_button()
                 close_targets = [entity_id for entity_id in targets if entity_id not in handled]
 
                 if close_targets:
@@ -667,4 +807,6 @@ class CoverManager:
                     )
 
                 self._daily_closed_date = today
+                self.covers_left_open = blocked
+                self.covers_left_open_date = today
                 await self._async_save_state()

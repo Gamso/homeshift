@@ -753,3 +753,149 @@ class TestNextModeCrossDay:
         # Vacances keyword maps to 'home' → 'Maison'
         assert coordinator.next_mode_predicted == _fr_day_map["home"]
         assert coordinator.next_mode_at == datetime(2026, 3, 12, 0, 0, 0)
+
+
+# ---------------------------------------------------------------------------
+# Cover Close Time — the estimated closing time and the trigger behind it
+# ---------------------------------------------------------------------------
+
+class TestCoverCloseTimeSensor:
+    """The sensor reports tonight's estimate and how it was obtained."""
+
+    def _sensor(self, options, trigger=None, close_time="21:40"):
+        from custom_components.homeshift.sensor import HomeShiftCoverCloseTimeSensor
+
+        entry = make_mock_entry()
+        entry.options = options
+        coordinator = HomeShiftCoordinator(make_mock_hass(), entry)
+        coordinator._cover_manager.daily_close_time = close_time
+        coordinator._cover_manager.daily_close_trigger = trigger
+        return HomeShiftCoverCloseTimeSensor(coordinator, entry)
+
+    def test_native_value_is_the_estimated_time(self):
+        assert self._sensor({}).native_value == "21:40"
+
+    def test_the_attributes_report_the_configured_elevation(self):
+        from custom_components.homeshift.const import (
+            CLOSE_TRIGGER_ELEVATION,
+            CONF_DAILY_COVER_CLOSE_ELEVATION,
+        )
+
+        sensor = self._sensor(
+            {CONF_DAILY_COVER_CLOSE_ELEVATION: -3.5}, trigger=CLOSE_TRIGGER_ELEVATION
+        )
+
+        assert sensor.extra_state_attributes == {
+            "sun_elevation": -3.5,
+            "trigger": CLOSE_TRIGGER_ELEVATION,
+        }
+
+    def test_a_fallback_night_is_visible(self):
+        """The sun never reached the elevation, so tonight came from plain sunset."""
+        from custom_components.homeshift.const import (
+            CLOSE_TRIGGER_SUNSET,
+            CONF_DAILY_COVER_CLOSE_ELEVATION,
+        )
+
+        sensor = self._sensor(
+            {CONF_DAILY_COVER_CLOSE_ELEVATION: 8.0}, trigger=CLOSE_TRIGGER_SUNSET
+        )
+
+        assert sensor.extra_state_attributes["trigger"] == CLOSE_TRIGGER_SUNSET
+        assert sensor.extra_state_attributes["sun_elevation"] == 8.0
+
+    def test_an_untouched_entry_reports_the_default_elevation(self):
+        """Nothing has run yet and nothing was configured."""
+        from custom_components.homeshift.const import (
+            CLOSE_TRIGGER_ELEVATION,
+            DEFAULT_DAILY_COVER_CLOSE_ELEVATION,
+        )
+
+        sensor = self._sensor({}, trigger=None)
+
+        assert sensor.extra_state_attributes == {
+            "sun_elevation": DEFAULT_DAILY_COVER_CLOSE_ELEVATION,
+            "trigger": CLOSE_TRIGGER_ELEVATION,
+        }
+
+
+class TestCoversLeftOpenSensor:
+    """The problem sensor that names the covers the evening close skipped."""
+
+    def _sensor(self, left_open, on_day=None):
+        from custom_components.homeshift.binary_sensor import HomeShiftCoversLeftOpenSensor
+
+        entry = make_mock_entry()
+        entry.options = {}
+        coordinator = HomeShiftCoordinator(make_mock_hass(), entry)
+        coordinator._cover_manager.covers_left_open = left_open
+        coordinator._cover_manager.covers_left_open_date = on_day
+        return HomeShiftCoversLeftOpenSensor(coordinator, entry)
+
+    def test_off_when_every_cover_closed(self):
+        assert self._sensor({}).is_on is False
+
+    def test_on_when_a_cover_was_left_open(self):
+        assert self._sensor({"cover.chambre": "binary_sensor.f1"}).is_on is True
+
+    def test_it_is_a_problem_sensor(self):
+        """device_class problem is what makes it show up as a warning."""
+        from homeassistant.components.binary_sensor import BinarySensorDeviceClass
+
+        assert self._sensor({}).device_class == BinarySensorDeviceClass.PROBLEM
+
+    def test_the_attributes_list_the_covers_and_their_sensors(self):
+        from datetime import date as dt_date
+
+        sensor = self._sensor(
+            {"cover.chambre": "binary_sensor.f1", "cover.salon": "binary_sensor.f2"},
+            on_day=dt_date(2026, 7, 1),
+        )
+
+        assert sensor.extra_state_attributes == {
+            "count": 2,
+            "covers": ["cover.chambre", "cover.salon"],
+            "window_sensors": {
+                "cover.chambre": "binary_sensor.f1",
+                "cover.salon": "binary_sensor.f2",
+            },
+            "checked_on": "2026-07-01",
+        }
+
+    def test_the_attributes_are_empty_before_the_first_close(self):
+        sensor = self._sensor({})
+        assert sensor.extra_state_attributes == {
+            "count": 0,
+            "covers": [],
+            "window_sensors": {},
+            "checked_on": None,
+        }
+
+
+class TestCoversLeftOpenSensorRegistration:
+    """The sensor only exists where the daily schedule drives covers."""
+
+    def _added(self, options):
+        from custom_components.homeshift.binary_sensor import async_setup_entry
+        from custom_components.homeshift.const import DOMAIN
+
+        entry = make_mock_entry()
+        entry.options = options
+        hass = make_mock_hass()
+        coordinator = HomeShiftCoordinator(hass, entry)
+        hass.data = {DOMAIN: {entry.entry_id: coordinator}}
+        added = []
+        asyncio.get_event_loop().run_until_complete(
+            async_setup_entry(hass, entry, lambda entities: added.extend(entities))
+        )
+        return [type(entity).__name__ for entity in added]
+
+    def test_registered_when_daily_covers_are_configured(self):
+        from custom_components.homeshift.const import CONF_DAILY_COVER_ITEMS
+
+        names = self._added({CONF_DAILY_COVER_ITEMS: [{"cover": "cover.volets"}]})
+
+        assert "HomeShiftCoversLeftOpenSensor" in names
+
+    def test_not_registered_without_any_daily_cover(self):
+        assert self._added({}) == []

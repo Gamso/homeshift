@@ -7,23 +7,36 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EVENT_HOMEASSISTANT_STARTED, Platform
 from homeassistant.core import CoreState, Event, HomeAssistant, callback
 from homeassistant.helpers import entity_registry as er
+from homeassistant.util import dt as dt_util
 
 from .const import (
+    CLOSE_ELEVATION_MAX,
+    CLOSE_ELEVATION_MIN,
+    CONF_DAILY_COVER_CLOSE_ELEVATION,
+    CONF_DAILY_COVER_CLOSE_MODE,
+    CONF_DAILY_COVER_CLOSE_OFFSET_MINUTES,
     CONF_DAILY_COVER_ENTITIES,
     CONF_DAILY_COVER_ITEMS,
     CONF_ITEM_COVER,
     CONF_ITEM_MY_BUTTON,
     CONF_ITEM_WINDOW_SENSOR,
+    DEFAULT_DAILY_COVER_CLOSE_ELEVATION,
+    DEFAULT_DAILY_COVER_CLOSE_OFFSET_MINUTES,
     DOMAIN,
+    LEGACY_CLOSE_MODE_ELEVATION,
     SENSOR_NEXT_SCAN,
     SERVICE_REFRESH_SCHEDULERS,
     SERVICE_SYNC_CALENDAR,
 )
 from .coordinator import HomeShiftCoordinator
+from .cover_manager import elevation_for_sunset_offset
 
 _LOGGER = logging.getLogger(__name__)
 
 PLATFORMS: list[Platform] = [Platform.SELECT, Platform.NUMBER, Platform.SENSOR, Platform.BINARY_SENSOR]
+
+# Settings the v3 -> v4 migration folds into CONF_DAILY_COVER_CLOSE_ELEVATION.
+_RETIRED_CLOSE_KEYS = frozenset({CONF_DAILY_COVER_CLOSE_MODE, CONF_DAILY_COVER_CLOSE_OFFSET_MINUTES})
 
 
 async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -78,7 +91,73 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             len(items),
         )
 
+    if entry.version < 4:
+        # v3 -> v4: the evening close no longer takes a delay in minutes
+        # around sunset, only the sun elevation to close at. Convert the
+        # stored offset into the elevation it was landing on, so the covers
+        # keep moving at the time they moved yesterday.
+        merged = {**entry.data, **entry.options}
+        elevation = _migrated_close_elevation(hass, merged)
+
+        data = {k: v for k, v in entry.data.items() if k not in _RETIRED_CLOSE_KEYS}
+        options = {k: v for k, v in entry.options.items() if k not in _RETIRED_CLOSE_KEYS}
+        if elevation is not None:
+            options[CONF_DAILY_COVER_CLOSE_ELEVATION] = elevation
+
+        hass.config_entries.async_update_entry(entry, data=data, options=options, version=4)
+        _LOGGER.info(
+            "HomeShift config entry migrated to version 4 (covers now close at %s° of sun elevation)",
+            elevation,
+        )
+
     return True
+
+
+def _migrated_close_elevation(hass: HomeAssistant, merged: dict) -> float | None:
+    """Return the elevation a v3 entry should close at, or None to leave it unset.
+
+    An entry that already picked an elevation keeps it. Otherwise the stored
+    sunset offset — or the default the entry was silently running on — is
+    converted to the elevation it lands on, clamped to what the config flow
+    accepts. Returns None when the daily schedule drives no cover, so an
+    unused feature is not given a setting it never had.
+    """
+    if not merged.get(CONF_DAILY_COVER_ITEMS):
+        return None
+
+    if merged.get(CONF_DAILY_COVER_CLOSE_MODE) == LEGACY_CLOSE_MODE_ELEVATION:
+        try:
+            return float(merged[CONF_DAILY_COVER_CLOSE_ELEVATION])
+        except (KeyError, TypeError, ValueError):
+            pass
+
+    try:
+        offset = int(merged.get(CONF_DAILY_COVER_CLOSE_OFFSET_MINUTES, DEFAULT_DAILY_COVER_CLOSE_OFFSET_MINUTES))
+    except (TypeError, ValueError):
+        offset = DEFAULT_DAILY_COVER_CLOSE_OFFSET_MINUTES
+
+    elevation = elevation_for_sunset_offset(hass, offset, dt_util.now().year)
+    if elevation is None:
+        _LOGGER.warning(
+            "HomeShift: could not convert the %s min sunset offset to a sun elevation "
+            "(no usable location) — falling back to %s°",
+            offset,
+            DEFAULT_DAILY_COVER_CLOSE_ELEVATION,
+        )
+        return DEFAULT_DAILY_COVER_CLOSE_ELEVATION
+
+    clamped = min(max(elevation, CLOSE_ELEVATION_MIN), CLOSE_ELEVATION_MAX)
+    if clamped != elevation:
+        _LOGGER.warning(
+            "HomeShift: a %s min sunset offset works out to %s° of sun elevation, outside the "
+            "%s°..%s° the config flow accepts — clamped to %s°",
+            offset,
+            elevation,
+            CLOSE_ELEVATION_MIN,
+            CLOSE_ELEVATION_MAX,
+            clamped,
+        )
+    return clamped
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:

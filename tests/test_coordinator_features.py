@@ -1494,19 +1494,19 @@ class TestIsHeatProtectionActive:
 class TestDailyCoverScheduleCompute:
     """Verify async_compute_daily_schedule() sets cover_open_time / daily_close_time."""
 
-    def _make_entry(self, entities=None, open_time_map="", earliest="07:10:00", close_offset=10):
+    def _make_entry(self, entities=None, open_time_map="", earliest="07:10:00", elevation=-2.0):
         from custom_components.homeshift.const import (
             CONF_DAILY_COVER_ITEMS,
             CONF_DAILY_COVER_OPEN_TIME_MAP,
             CONF_SUNRISE_EARLIEST,
-            CONF_DAILY_COVER_CLOSE_OFFSET_MINUTES,
+            CONF_DAILY_COVER_CLOSE_ELEVATION,
         )
         entry = make_mock_entry()
         entry.options = {
             CONF_DAILY_COVER_ITEMS: _cover_items(*(entities if entities is not None else ["cover.volets"])),
             CONF_DAILY_COVER_OPEN_TIME_MAP: open_time_map,
             CONF_SUNRISE_EARLIEST: earliest,
-            CONF_DAILY_COVER_CLOSE_OFFSET_MINUTES: close_offset,
+            CONF_DAILY_COVER_CLOSE_ELEVATION: elevation,
         }
         return entry
 
@@ -1581,28 +1581,6 @@ class TestDailyCoverScheduleCompute:
         coordinator = self._run_compute(hass, entry, datetime(2026, 7, 1, 0, 5, 0), day_mode_key="away")
 
         assert coordinator._cover_manager.cover_open_time is None
-
-    def test_close_time_is_sunset_plus_offset(self):
-        """daily_close_time is today's sunset plus the configured offset, regardless of day mode."""
-        hass = make_mock_hass()
-        # sunset at 21:30 local (19:30 UTC + 2h)
-        hass.states.get.side_effect = lambda eid: self._sun_state(next_setting_iso="2026-07-01T19:30:00+00:00") if eid == "sun.sun" else None
-        entry = self._make_entry(open_time_map="away:skip", close_offset=10)
-
-        coordinator = self._run_compute(hass, entry, datetime(2026, 7, 1, 0, 5, 0), day_mode_key="away")
-
-        assert coordinator._cover_manager.daily_close_time == "21:40"
-
-    def test_close_time_supports_negative_offset_before_sunset(self):
-        """A negative offset closes covers before sunset instead of after."""
-        hass = make_mock_hass()
-        # sunset at 21:30 local (19:30 UTC + 2h)
-        hass.states.get.side_effect = lambda eid: self._sun_state(next_setting_iso="2026-07-01T19:30:00+00:00") if eid == "sun.sun" else None
-        entry = self._make_entry(open_time_map="away:skip", close_offset=-10)
-
-        coordinator = self._run_compute(hass, entry, datetime(2026, 7, 1, 0, 5, 0), day_mode_key="away")
-
-        assert coordinator._cover_manager.daily_close_time == "21:20"
 
     def test_noop_when_no_daily_cover_entities_configured(self):
         """Does nothing when no cover is configured."""
@@ -2317,7 +2295,8 @@ class TestDailyCoverIndividualCovers:
                 )
             )
 
-        assert coordinator._cover_manager.daily_close_time == "21:40"
+        # the exact minute depends on the location; that it was computed is the point
+        assert coordinator._cover_manager.daily_close_time is not None
 class TestDailyCoverMyPositionButton:
     """A cover configured with a My position button closes to that position
     (a button press) instead of receiving close_cover.
@@ -2507,7 +2486,7 @@ class TestHeatProtectionResetIsPerCalendarDay:
 
         assert manager._heat_closed is True
         # the times are still recomputed — they are not persisted
-        assert manager.daily_close_time == "21:40"
+        assert manager.daily_close_time is not None
 
     def test_new_day_recompute_clears_the_closed_flag(self):
         """Next morning: heat protection starts over."""
@@ -2803,3 +2782,353 @@ class TestPreparedEventViews:
         assert coordinator._prepare_active_event(
             make_calendar_state(state="on", message="x", start_time="nope", end_time="nope")
         ) is None
+
+
+# ---------------------------------------------------------------------------
+# Evening close on a sun elevation instead of sunset + offset
+# ---------------------------------------------------------------------------
+
+class TestDailyCoverCloseOnSunElevation:
+    """The evening close fires when the setting sun reaches the configured elevation."""
+
+    def _make_entry(self, elevation=None):
+        from custom_components.homeshift.const import (
+            CONF_DAILY_COVER_CLOSE_ELEVATION,
+            CONF_DAILY_COVER_ITEMS,
+            CONF_DAILY_COVER_OPEN_TIME_MAP,
+        )
+
+        entry = make_mock_entry()
+        options = {
+            CONF_DAILY_COVER_ITEMS: _cover_items("cover.volets"),
+            CONF_DAILY_COVER_OPEN_TIME_MAP: "away:skip",
+        }
+        if elevation is not None:
+            options[CONF_DAILY_COVER_CLOSE_ELEVATION] = elevation
+        entry.options = options
+        return entry
+
+    def _hass(self):
+        """A hass whose sun.sun sets at 21:30 local (19:30 UTC + 2h)."""
+        sun = MagicMock()
+        sun.attributes = {"next_setting": "2026-07-01T19:30:00+00:00"}
+        hass = make_mock_hass()
+        hass.states.get.side_effect = lambda eid: sun if eid == "sun.sun" else None
+        return hass
+
+    def _run(self, hass, entry, at_elevation):
+        """Compute the schedule with the astral elevation lookup stubbed out."""
+        from datetime import timedelta as tdelta, timezone
+
+        coordinator = HomeShiftCoordinator(hass, entry)
+        with patch("custom_components.homeshift.cover_manager.dt_util") as mock_dt:
+            tz_paris = timezone(tdelta(hours=2))
+            mock_dt.as_local.side_effect = lambda dt: dt.astimezone(tz_paris)
+            with patch(
+                "custom_components.homeshift.cover_manager.sun_time_at_elevation",
+                return_value=at_elevation,
+            ) as mock_at_elevation:
+                asyncio.get_event_loop().run_until_complete(
+                    coordinator._cover_manager.async_compute_daily_schedule(
+                        datetime(2026, 7, 1, 0, 5, 0), "away"
+                    )
+                )
+        return coordinator, mock_at_elevation
+
+    def test_the_close_time_is_when_the_sun_reaches_the_elevation(self):
+        from datetime import time as dt_time
+
+        from custom_components.homeshift.const import CLOSE_TRIGGER_ELEVATION
+
+        coordinator, mock_at_elevation = self._run(
+            self._hass(), self._make_entry(elevation=-4.0), at_elevation=dt_time(21, 52)
+        )
+
+        assert coordinator._cover_manager.daily_close_time == "21:52"
+        assert coordinator._cover_manager.daily_close_trigger == CLOSE_TRIGGER_ELEVATION
+        _hass_arg, elevation, on_date = mock_at_elevation.call_args.args
+        assert elevation == -4.0
+        assert on_date == date(2026, 7, 1)
+
+    def test_an_entry_without_the_setting_uses_the_recommended_default(self):
+        from datetime import time as dt_time
+
+        from custom_components.homeshift.const import DEFAULT_DAILY_COVER_CLOSE_ELEVATION
+
+        _coordinator, mock_at_elevation = self._run(
+            self._hass(), self._make_entry(), at_elevation=dt_time(21, 41)
+        )
+
+        assert mock_at_elevation.call_args.args[1] == DEFAULT_DAILY_COVER_CLOSE_ELEVATION
+
+    def test_an_unreachable_elevation_falls_back_to_sunset_and_warns(self, caplog):
+        """A threshold the sun never reaches must not leave the covers open all night."""
+        from custom_components.homeshift.const import CLOSE_TRIGGER_SUNSET
+
+        with caplog.at_level("WARNING"):
+            coordinator, _ = self._run(
+                self._hass(), self._make_entry(elevation=5.0), at_elevation=None
+            )
+
+        assert coordinator._cover_manager.daily_close_time == "21:30"
+        assert coordinator._cover_manager.daily_close_trigger == CLOSE_TRIGGER_SUNSET
+        assert "never reaches" in caplog.text
+
+    def test_an_unparseable_elevation_uses_the_recommended_default(self):
+        """A corrupted value must not crash the nightly close."""
+        from datetime import time as dt_time
+
+        from custom_components.homeshift.const import DEFAULT_DAILY_COVER_CLOSE_ELEVATION
+
+        _coordinator, mock_at_elevation = self._run(
+            self._hass(), self._make_entry(elevation="nonsense"), at_elevation=dt_time(21, 52)
+        )
+
+        assert mock_at_elevation.call_args.args[1] == DEFAULT_DAILY_COVER_CLOSE_ELEVATION
+
+    def test_the_close_timer_follows_the_elevation_time(self):
+        """close_datetime — and so the one-shot timer — uses the elevation time."""
+        from datetime import time as dt_time
+
+        coordinator, _ = self._run(
+            self._hass(), self._make_entry(elevation=-4.0), at_elevation=dt_time(21, 52)
+        )
+
+        close_at = coordinator._cover_manager.close_datetime(datetime(2026, 7, 1, 12, 0, 0))
+        assert close_at == datetime(2026, 7, 1, 21, 52, 0)
+
+    def test_no_sun_entity_leaves_the_close_time_unset(self):
+        """Without sun.sun neither the elevation nor the fallback can answer."""
+        hass = make_mock_hass()
+        hass.states.get.side_effect = lambda _eid: None
+
+        coordinator, _ = self._run(hass, self._make_entry(), at_elevation=None)
+
+        assert coordinator._cover_manager.daily_close_time is None
+
+
+class TestSunTimeAtElevation:
+    """sun_time_at_elevation(): the astral lookup behind the elevation trigger."""
+
+    def _hass(self, latitude=48.85, longitude=2.35, time_zone="Europe/Paris"):
+        """A hass carrying a real location, which is all the astral lookup reads."""
+        hass = make_mock_hass()
+        hass.data = {}
+        hass.config.latitude = latitude
+        hass.config.longitude = longitude
+        hass.config.time_zone = time_zone
+        hass.config.elevation = 0
+        return hass
+
+    def test_a_lower_elevation_gives_a_later_time(self):
+        """The sun keeps sinking, so -6° is always reached after -2°."""
+        from custom_components.homeshift.cover_manager import sun_time_at_elevation
+
+        hass = self._hass()
+        at_two = sun_time_at_elevation(hass, -2, date(2026, 6, 21))
+        at_six = sun_time_at_elevation(hass, -6, date(2026, 6, 21))
+
+        assert at_two is not None and at_six is not None
+        assert at_two < at_six
+
+    def test_the_time_is_recomputed_for_each_date(self):
+        """Twilight moves with the season: the lookup is not a cached constant."""
+        from custom_components.homeshift.cover_manager import sun_time_at_elevation
+
+        hass = self._hass()
+        june = sun_time_at_elevation(hass, -4, date(2026, 6, 21))
+        december = sun_time_at_elevation(hass, -4, date(2026, 12, 21))
+
+        assert june is not None and december is not None
+        assert june != december
+
+    def test_returns_none_when_the_sun_never_reaches_the_elevation(self):
+        """Polar summer: the sun stays up, so the caller must fall back."""
+        from custom_components.homeshift.cover_manager import sun_time_at_elevation
+
+        hass = self._hass(latitude=78.2, longitude=15.6, time_zone="Arctic/Longyearbyen")
+
+        assert sun_time_at_elevation(hass, -4, date(2026, 6, 21)) is None
+
+
+# ---------------------------------------------------------------------------
+# The covers the evening close had to leave up
+# ---------------------------------------------------------------------------
+
+class TestCoversLeftOpenState:
+    """The close records which covers it skipped, for the warning entity."""
+
+    def _make_entry(self, items):
+        from custom_components.homeshift.const import CONF_DAILY_COVER_ITEMS
+
+        entry = make_mock_entry()
+        entry.options = {CONF_DAILY_COVER_ITEMS: items}
+        return entry
+
+    def _hass(self, states: dict):
+        hass = make_mock_hass()
+        hass.services.async_call = AsyncMock()
+        hass.states.get.side_effect = lambda eid: states.get(eid)
+        return hass
+
+    def _state(self, value: str):
+        state = MagicMock()
+        state.state = value
+        state.attributes = {}
+        return state
+
+    def _manager(self, hass, entry, stored=None):
+        """A cover manager whose Store is mocked, so nothing touches the disk."""
+        manager = HomeShiftCoordinator(hass, entry)._cover_manager
+        store = MagicMock()
+        store.async_load = AsyncMock(return_value=stored)
+        store.async_save = AsyncMock()
+        manager._store = store
+        return manager
+
+    def _close(self, hass, entry, on_day=date(2026, 7, 1)):
+        manager = self._manager(hass, entry)
+        manager.cover_open_time = "08:30"
+        manager.daily_close_time = "21:40"
+        manager._daily_opened_date = on_day
+        asyncio.get_event_loop().run_until_complete(
+            manager.async_check_daily_schedule(
+                datetime(on_day.year, on_day.month, on_day.day, 21, 40, 0)
+            )
+        )
+        return manager
+
+    def test_a_skipped_cover_is_recorded_with_its_sensor(self):
+        """The entity must be able to name both the cover and why."""
+        hass = self._hass({"binary_sensor.fenetre_chambre": self._state("on")})
+        entry = self._make_entry(
+            [{"cover": "cover.chambre", "window_sensor": "binary_sensor.fenetre_chambre"}]
+        )
+
+        manager = self._close(hass, entry)
+
+        assert manager.covers_left_open == {"cover.chambre": "binary_sensor.fenetre_chambre"}
+        assert manager.covers_left_open_date == date(2026, 7, 1)
+
+    def test_only_the_blocked_covers_are_listed(self):
+        hass = self._hass(
+            {
+                "binary_sensor.f1": self._state("on"),
+                "binary_sensor.f2": self._state("off"),
+            }
+        )
+        entry = self._make_entry(
+            [
+                {"cover": "cover.chambre", "window_sensor": "binary_sensor.f1"},
+                {"cover": "cover.salon", "window_sensor": "binary_sensor.f2"},
+            ]
+        )
+
+        manager = self._close(hass, entry)
+
+        assert list(manager.covers_left_open) == ["cover.chambre"]
+
+    def test_a_clean_close_records_nothing(self):
+        hass = self._hass({"binary_sensor.f1": self._state("off")})
+        entry = self._make_entry([{"cover": "cover.chambre", "window_sensor": "binary_sensor.f1"}])
+
+        manager = self._close(hass, entry)
+
+        assert manager.covers_left_open == {}
+        assert manager.covers_left_open_date == date(2026, 7, 1)
+
+    def test_an_unavailable_sensor_is_not_a_left_open_cover(self):
+        """That cover was closed anyway, so it is not left up."""
+        hass = self._hass({"binary_sensor.f1": self._state("unavailable")})
+        entry = self._make_entry([{"cover": "cover.chambre", "window_sensor": "binary_sensor.f1"}])
+
+        manager = self._close(hass, entry)
+
+        assert manager.covers_left_open == {}
+
+    def test_a_my_position_cover_is_not_left_open(self):
+        """It was sent to its favourite position, which counts as handled."""
+        hass = self._hass({})
+        entry = self._make_entry(
+            [{"cover": "cover.salon", "window_sensor": "", "my_button": "button.my_salon"}]
+        )
+
+        manager = self._close(hass, entry)
+
+        assert manager.covers_left_open == {}
+
+    def test_the_list_is_persisted(self):
+        hass = self._hass({"binary_sensor.f1": self._state("on")})
+        entry = self._make_entry([{"cover": "cover.chambre", "window_sensor": "binary_sensor.f1"}])
+
+        manager = self._close(hass, entry)
+        saved = manager._store.async_save.call_args.args[0]
+
+        assert saved["covers_left_open"] == {"cover.chambre": "binary_sensor.f1"}
+        assert saved["covers_left_open_date"] == "2026-07-01"
+
+    def test_the_list_is_restored_after_a_restart(self):
+        """A reboot the same evening must not silence the warning."""
+        manager = self._manager(
+            make_mock_hass(),
+            self._make_entry([]),
+            stored={
+                "covers_left_open": {"cover.chambre": "binary_sensor.f1"},
+                "covers_left_open_date": "2026-07-01",
+            },
+        )
+
+        asyncio.get_event_loop().run_until_complete(manager.async_restore_state())
+
+        assert manager.covers_left_open == {"cover.chambre": "binary_sensor.f1"}
+        assert manager.covers_left_open_date == date(2026, 7, 1)
+
+    def test_a_corrupted_stored_list_is_ignored(self):
+        manager = self._manager(
+            make_mock_hass(), self._make_entry([]), stored={"covers_left_open": "junk"}
+        )
+
+        asyncio.get_event_loop().run_until_complete(manager.async_restore_state())
+
+        assert manager.covers_left_open == {}
+
+    def _compute(self, manager, on_day):
+        sun = MagicMock()
+        sun.attributes = {"next_setting": "2026-07-01T19:30:00+00:00"}
+        manager._hass.states.get.side_effect = lambda eid: sun if eid == "sun.sun" else None
+        asyncio.get_event_loop().run_until_complete(
+            manager.async_compute_daily_schedule(
+                datetime(on_day.year, on_day.month, on_day.day, 0, 5, 0), "home"
+            )
+        )
+
+    def test_a_new_day_clears_the_warning(self):
+        hass = self._hass({"binary_sensor.f1": self._state("on")})
+        entry = self._make_entry([{"cover": "cover.chambre", "window_sensor": "binary_sensor.f1"}])
+        manager = self._close(hass, entry)
+
+        self._compute(manager, date(2026, 7, 2))
+
+        assert manager.covers_left_open == {}
+        assert manager.covers_left_open_date is None
+
+    def test_a_same_day_recompute_keeps_the_warning(self):
+        """A restart re-runs the compute for today; the warning must survive it."""
+        hass = self._hass({"binary_sensor.f1": self._state("on")})
+        entry = self._make_entry([{"cover": "cover.chambre", "window_sensor": "binary_sensor.f1"}])
+        manager = self._close(hass, entry)
+        manager._schedule_computed_date = date(2026, 7, 1)
+
+        self._compute(manager, date(2026, 7, 1))
+
+        assert manager.covers_left_open == {"cover.chambre": "binary_sensor.f1"}
+
+    def test_the_entities_are_refreshed_right_after_a_timer_close(self):
+        """The timers fire between polls — the warning must not wait for one."""
+        hass = self._hass({})
+        coordinator = HomeShiftCoordinator(hass, self._make_entry([]))
+        coordinator.async_update_listeners = MagicMock()
+
+        asyncio.get_event_loop().run_until_complete(coordinator._async_run_cover_checks())
+
+        coordinator.async_update_listeners.assert_called_once()

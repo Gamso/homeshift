@@ -1,19 +1,23 @@
 """Tests for HomeShift's config_flow: schema builders, map (de)serialization, and step wiring."""
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+import re
+from datetime import datetime
+from unittest.mock import MagicMock, patch
 
 import pytest
 import voluptuous as vol
 
 import custom_components.homeshift.config_flow as cf
 from custom_components.homeshift.const import (
+    CLOSE_ELEVATION_MAX,
+    CLOSE_ELEVATION_MIN,
     CONF_CALENDAR_ENTITY,
     CONF_COVER_ACTION,
     CONF_COVER_ENTITIES,
     CONF_COVER_TEMP_SENSOR,
     CONF_COVER_TEMP_THRESHOLD,
-    CONF_DAILY_COVER_CLOSE_OFFSET_MINUTES,
+    CONF_DAILY_COVER_CLOSE_ELEVATION,
     CONF_DAILY_COVER_ITEMS,
     CONF_ITEM_COVER,
     CONF_DAILY_COVER_OPEN_TIME_MAP,
@@ -21,6 +25,7 @@ from custom_components.homeshift.const import (
     CONF_HOLIDAY_CALENDAR,
     CONF_SCHEDULERS_PER_MODE,
     CONF_SUNRISE_EARLIEST,
+    DEFAULT_DAILY_COVER_CLOSE_ELEVATION,
     DEFAULT_DAILY_COVER_OPEN_TIME,
     DEFAULT_DAY_MODE_MAP,
 )
@@ -219,7 +224,7 @@ class TestDailyCoverSchema:
         field_names = {marker.schema for marker in schema.schema}
         assert {
             CONF_SUNRISE_EARLIEST,
-            CONF_DAILY_COVER_CLOSE_OFFSET_MINUTES,
+            CONF_DAILY_COVER_CLOSE_ELEVATION,
             "daily_open_time_home",
             "daily_open_time_work",
             "daily_open_time_remote",
@@ -835,3 +840,224 @@ class TestClearingAnOptionalEntityField:
         assert flow._data[CONF_DAILY_COVER_ITEMS] == [
             {"cover": "cover.chambre", "window_sensor": "", "my_button": ""}
         ]
+
+
+class TestCloseTimePreview:
+    """_close_time_preview: the two candidate closing times shown in the form."""
+
+    def _hass(self, latitude=48.85, longitude=2.35):
+        hass = _make_hass()
+        hass.data = {}
+        hass.config.latitude = latitude
+        hass.config.longitude = longitude
+        hass.config.time_zone = "Europe/Paris"
+        hass.config.elevation = 0
+        sun = MagicMock()
+        sun.attributes = {"next_setting": "2026-07-01T19:30:00+00:00"}
+        hass.states.get.side_effect = lambda eid: sun if eid == "sun.sun" else MagicMock()
+        return hass
+
+    def test_the_time_is_rendered_as_hh_mm(self):
+        preview = cf._close_time_preview(self._hass(), {})
+        assert re.fullmatch(r"\d{2}:\d{2}", preview["close_at_elevation"])
+
+    def test_the_configured_elevation_is_echoed_back(self):
+        """The form text names the value the time was computed from."""
+        preview = cf._close_time_preview(
+            self._hass(), {CONF_DAILY_COVER_CLOSE_ELEVATION: -2.5}
+        )
+        assert preview["close_elevation"] == "-2.5"
+
+    def test_an_unreachable_elevation_renders_a_placeholder(self):
+        """Polar summer: no time to show, but the form must still render."""
+        hass = self._hass(latitude=78.2, longitude=15.6)
+        with patch("custom_components.homeshift.config_flow.dt_util") as mock_dt:
+            mock_dt.now.return_value = datetime(2026, 6, 21, 12, 0, 0)
+            preview = cf._close_time_preview(hass, {})
+        assert preview["close_at_elevation"] == "--:--"
+
+    def test_a_corrupted_setting_falls_back_to_the_default(self):
+        preview = cf._close_time_preview(
+            self._hass(), {CONF_DAILY_COVER_CLOSE_ELEVATION: "y"}
+        )
+        assert preview["close_elevation"] == f"{DEFAULT_DAILY_COVER_CLOSE_ELEVATION:g}"
+
+
+class TestCloseElevationField:
+    """The evening close is configured by one field and one field only."""
+
+    def _marker(self, data):
+        schema = cf._daily_cover_schema(_make_hass(), data)
+        return next(m for m in schema.schema if m.schema == CONF_DAILY_COVER_CLOSE_ELEVATION)
+
+    def test_the_retired_settings_are_gone_from_the_form(self):
+        """The minute offset and the trigger choice no longer exist."""
+        schema = cf._daily_cover_schema(_make_hass(), {CONF_DAY_MODE_MAP: DEFAULT_DAY_MODE_MAP})
+        field_names = {marker.schema for marker in schema.schema}
+
+        assert "daily_cover_close_offset_minutes" not in field_names
+        assert "daily_cover_close_mode" not in field_names
+
+    def test_it_defaults_to_the_recommended_value(self):
+        assert self._marker({}).default() == DEFAULT_DAILY_COVER_CLOSE_ELEVATION
+
+    def test_the_stored_value_is_preselected(self):
+        assert self._marker({CONF_DAILY_COVER_CLOSE_ELEVATION: -4.5}).default() == -4.5
+
+    def test_the_range_covers_every_retired_offset(self):
+        """+-120 min around sunset spans roughly +21..-22° at mid latitude."""
+        schema = cf._daily_cover_schema(_make_hass(), {})
+        config = next(
+            validator
+            for marker, validator in schema.schema.items()
+            if marker.schema == CONF_DAILY_COVER_CLOSE_ELEVATION
+        ).config
+
+        assert config["min"] == CLOSE_ELEVATION_MIN <= -22
+        assert config["max"] == CLOSE_ELEVATION_MAX >= 21
+
+
+class TestDailyCoverScheduleStepShowsThePreview:
+    """Both flows hand the estimated closing times to the form description."""
+
+    async def test_config_flow_passes_the_placeholders(self):
+        flow = cf.HomeShiftConfigFlow()
+        flow.hass = _make_hass()
+        result = await flow.async_step_daily_cover_schedule()
+        assert set(result["description_placeholders"]) == {
+            "close_elevation",
+            "close_at_elevation",
+        }
+
+    async def test_options_flow_passes_the_placeholders(self):
+        flow = _make_options_flow({CONF_DAY_MODE_MAP: "home:Home"})
+        await flow.async_step_init()
+        result = await flow.async_step_daily_cover_schedule()
+        assert "close_at_elevation" in result["description_placeholders"]
+
+    async def test_the_chosen_elevation_is_stored(self):
+        flow = cf.HomeShiftConfigFlow()
+        flow.hass = _make_hass()
+        flow._data[CONF_DAY_MODE_MAP] = "home:Home"
+        await flow.async_step_daily_cover_schedule(
+            {
+                CONF_DAILY_COVER_CLOSE_ELEVATION: -3.5,
+                "daily_open_time_home": "08:30",
+            }
+        )
+        assert flow._data[CONF_DAILY_COVER_CLOSE_ELEVATION] == -3.5
+
+
+def _located_hass(latitude: float, longitude: float, time_zone: str = "Europe/Paris") -> MagicMock:
+    """A hass carrying a real location, for the astral-backed helpers."""
+    hass = _make_hass()
+    hass.data = {}
+    hass.config.latitude = latitude
+    hass.config.longitude = longitude
+    hass.config.time_zone = time_zone
+    hass.config.elevation = 0
+    return hass
+
+
+class TestValidateCloseElevation:
+    """An elevation outside the sun's yearly range is caught in the form."""
+
+    def _errors(self, hass, elevation):
+        return cf._validate_close_elevation(
+            hass, {CONF_DAILY_COVER_CLOSE_ELEVATION: elevation}
+        )
+
+    def test_every_offered_value_is_valid_at_mid_latitude(self):
+        """At 43°N the sun sweeps the whole selector range every day of the year."""
+        hass = _located_hass(43.45, 5.47)
+        for elevation in (-18, -6, -2, 0, 2, 10):
+            assert self._errors(hass, elevation) == {}, elevation
+
+    def test_a_high_positive_value_is_rejected_further_north(self):
+        """At 60°N the midwinter sun never climbs to 10°."""
+        errors = self._errors(_located_hass(59.9, 10.75, "Europe/Oslo"), 10)
+
+        assert errors == {CONF_DAILY_COVER_CLOSE_ELEVATION: "elevation_unreachable"}
+
+    def test_the_polar_day_rejects_a_below_horizon_value(self):
+        """Above the polar circle the June sun never sets at all."""
+        errors = self._errors(_located_hass(78.2, 15.6, "Arctic/Longyearbyen"), -2)
+
+        assert errors == {CONF_DAILY_COVER_CLOSE_ELEVATION: "elevation_unreachable"}
+
+    def test_a_submission_without_the_field_is_not_validated(self):
+        """Another step's input must not be judged on a value it never sent."""
+        hass = _located_hass(78.2, 15.6, "Arctic/Longyearbyen")
+
+        assert cf._validate_close_elevation(hass, {"daily_open_time_home": "sunrise"}) == {}
+
+
+class TestDailyCoverScheduleStepRejectsAnUnreachableElevation:
+    """Both flows surface the error on the field instead of storing the value."""
+
+    def _polar_hass(self):
+        return _located_hass(78.2, 15.6, "Arctic/Longyearbyen")
+
+    def _input(self):
+        return {
+            CONF_DAILY_COVER_CLOSE_ELEVATION: -2.0,
+            "daily_open_time_home": "sunrise",
+        }
+
+    async def test_the_form_comes_back_with_the_error(self):
+        flow = cf.HomeShiftConfigFlow()
+        flow.hass = self._polar_hass()
+        flow._data[CONF_DAY_MODE_MAP] = "home:Home"
+
+        result = await flow.async_step_daily_cover_schedule(self._input())
+
+        assert result["step_id"] == "daily_cover_schedule"
+        assert result["errors"] == {CONF_DAILY_COVER_CLOSE_ELEVATION: "elevation_unreachable"}
+
+    async def test_nothing_is_stored(self):
+        flow = cf.HomeShiftConfigFlow()
+        flow.hass = self._polar_hass()
+        flow._data[CONF_DAY_MODE_MAP] = "home:Home"
+
+        await flow.async_step_daily_cover_schedule(self._input())
+
+        assert CONF_DAILY_COVER_CLOSE_ELEVATION not in flow._data
+        assert CONF_DAILY_COVER_OPEN_TIME_MAP not in flow._data
+
+    async def test_the_rejected_form_still_shows_what_was_typed(self):
+        """Re-rendering from the stored data would wipe the whole screen."""
+        flow = cf.HomeShiftConfigFlow()
+        flow.hass = self._polar_hass()
+        flow._data[CONF_DAY_MODE_MAP] = "home:Home"
+
+        result = await flow.async_step_daily_cover_schedule(self._input())
+
+        defaults = {
+            marker.schema: marker.default()
+            for marker in result["data_schema"].schema
+            if marker.default is not vol.UNDEFINED
+        }
+        assert defaults[CONF_DAILY_COVER_CLOSE_ELEVATION] == -2.0
+        assert defaults["daily_open_time_home"] == "sunrise"
+
+    async def test_a_valid_elevation_goes_through(self):
+        flow = cf.HomeShiftConfigFlow()
+        flow.hass = _located_hass(43.45, 5.47)
+        flow._data[CONF_DAY_MODE_MAP] = "home:Home"
+
+        result = await flow.async_step_daily_cover_schedule(self._input())
+
+        assert result["step_id"] == "menu"
+        assert flow._data[CONF_DAILY_COVER_CLOSE_ELEVATION] == -2.0
+
+    async def test_the_options_flow_validates_too(self):
+        flow = _make_options_flow({CONF_DAY_MODE_MAP: "home:Home"})
+        flow.hass = self._polar_hass()
+        flow.hass.config_entries.async_get_known_entry.return_value = MagicMock(
+            data={CONF_DAY_MODE_MAP: "home:Home"}, options={}
+        )
+        await flow.async_step_init()
+
+        result = await flow.async_step_daily_cover_schedule(self._input())
+
+        assert result["errors"] == {CONF_DAILY_COVER_CLOSE_ELEVATION: "elevation_unreachable"}

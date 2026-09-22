@@ -99,18 +99,18 @@
       },
       "daily_cover_schedule": {
         "title": "Daily Cover Schedule",
-        "description": "Natively open and close your covers every day, without a separate Scheduler-integration entity. Which covers are driven is set under Individual Covers; this section sets the times. Kept independent from Cover Heat Control, which targets a single cover. For each day mode below, set 'sunrise', 'skip', or a custom 'HH:MM' opening time — modes sharing the same value form a batch. Closing always happens once per day, for every mode, at sunset + the offset below.",
+        "description": "Natively open and close your covers every day, without a separate Scheduler-integration entity. Which covers are driven is set under Individual Covers; this section sets the times. Kept independent from Cover Heat Control, which targets a single cover. For each day mode below, set 'sunrise', 'skip', or a custom 'HH:MM' opening time — modes sharing the same value form a batch. Closing always happens once per day, for every mode, when the setting sun drops past the elevation below.\n\nAt {close_elevation}°, that is {close_at_elevation} tonight.",
         "data": {
+          "daily_cover_close_elevation": "Sun elevation at closing",
           "sunrise_earliest": "Earliest Allowed Opening Time",
-          "daily_cover_close_offset_minutes": "Close Offset From Sunset (minutes)",
           "daily_open_time_home": "Open Time — Home",
           "daily_open_time_work": "Open Time — Work",
           "daily_open_time_remote": "Open Time — Remote",
           "daily_open_time_away": "Open Time — Away"
         },
         "data_description": {
+          "daily_cover_close_elevation": "Degrees above the horizon — the 'elevation' attribute of sun.sun, so a light level rather than a delay. 0° is sunset, -2° (recommended) is about ten minutes later, -4° is twenty to twenty-five minutes later with the room already dark, -6° is the end of civil twilight. Positive values close while the sun is still up.",
           "sunrise_earliest": "The sunrise-based opening time will be the later of actual sunrise and this value.",
-          "daily_cover_close_offset_minutes": "Covers close this many minutes relative to sunset, every day, regardless of day mode. Positive closes after sunset, negative closes before (e.g. -10 = 10 min before sunset).",
           "daily_open_time_home": "Opening time for the Home day mode: 'sunrise', 'skip', or a custom 'HH:MM' value.",
           "daily_open_time_work": "Opening time for the Work day mode: 'sunrise', 'skip', or a custom 'HH:MM' value.",
           "daily_open_time_remote": "Opening time for the Remote day mode: 'sunrise', 'skip', or a custom 'HH:MM' value.",
@@ -149,7 +149,8 @@
       }
     },
     "error": {
-      "invalid_calendar": "The specified calendar entity does not exist"
+      "invalid_calendar": "The specified calendar entity does not exist",
+      "elevation_unreachable": "The sun does not reach this elevation every day of the year at your location. Pick a value inside the sun's yearly range — 0° is sunset, negative values are below the horizon."
     },
     "abort": {
       "already_configured": "HomeShift is already configured",
@@ -262,18 +263,18 @@
       },
       "daily_cover_schedule": {
         "title": "Daily Cover Schedule",
-        "description": "Natively open and close your covers every day, without a separate Scheduler-integration entity. Which covers are driven is set under Individual Covers; this section sets the times. Kept independent from Cover Heat Control, which targets a single cover. For each day mode below, set 'sunrise', 'skip', or a custom 'HH:MM' opening time — modes sharing the same value form a batch. Closing always happens once per day, for every mode, at sunset + the offset below.",
+        "description": "Natively open and close your covers every day, without a separate Scheduler-integration entity. Which covers are driven is set under Individual Covers; this section sets the times. Kept independent from Cover Heat Control, which targets a single cover. For each day mode below, set 'sunrise', 'skip', or a custom 'HH:MM' opening time — modes sharing the same value form a batch. Closing always happens once per day, for every mode, when the setting sun drops past the elevation below.\n\nAt {close_elevation}°, that is {close_at_elevation} tonight.",
         "data": {
+          "daily_cover_close_elevation": "Sun elevation at closing",
           "sunrise_earliest": "Earliest Allowed Opening Time",
-          "daily_cover_close_offset_minutes": "Close Offset From Sunset (minutes)",
           "daily_open_time_home": "Open Time — Home",
           "daily_open_time_work": "Open Time — Work",
           "daily_open_time_remote": "Open Time — Remote",
           "daily_open_time_away": "Open Time — Away"
         },
         "data_description": {
+          "daily_cover_close_elevation": "Degrees above the horizon — the 'elevation' attribute of sun.sun, so a light level rather than a delay. 0° is sunset, -2° (recommended) is about ten minutes later, -4° is twenty to twenty-five minutes later with the room already dark, -6° is the end of civil twilight. Positive values close while the sun is still up.",
           "sunrise_earliest": "The sunrise-based opening time will be the later of actual sunrise and this value.",
-          "daily_cover_close_offset_minutes": "Covers close this many minutes relative to sunset, every day, regardless of day mode. Positive closes after sunset, negative closes before (e.g. -10 = 10 min before sunset).",
           "daily_open_time_home": "Opening time for the Home day mode: 'sunrise', 'skip', or a custom 'HH:MM' value.",
           "daily_open_time_work": "Opening time for the Work day mode: 'sunrise', 'skip', or a custom 'HH:MM' value.",
           "daily_open_time_remote": "Opening time for the Remote day mode: 'sunrise', 'skip', or a custom 'HH:MM' value.",
@@ -310,6 +311,9 @@
           "remove_covers": "Covers to remove"
         }
       }
+    },
+    "error": {
+      "elevation_unreachable": "The sun does not reach this elevation every day of the year at your location. Pick a value inside the sun's yearly range — 0° is sunset, negative values are below the horizon."
     }
   },
   "entity": {
@@ -343,6 +347,9 @@
     "binary_sensor": {
       "cover_heat_active": {
         "name": "Cover Heat Active"
+      },
+      "covers_left_open": {
+        "name": "Covers Left Open"
       }
     }
   },

@@ -240,6 +240,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     # Create coordinator
     coordinator = HomeShiftCoordinator(hass, entry)
+
+    # The first refresh arms the next-mode and cover timers. Register their
+    # cancellation first: if that refresh fails (ConfigEntryNotReady), HA
+    # runs the unload callbacks registered so far and retries with a new
+    # coordinator; registered afterwards, the orphan's timers would still
+    # fire and drive real switches and covers.
+    entry.async_on_unload(coordinator.async_cancel_next_mode_timer)
+    entry.async_on_unload(coordinator.async_cancel_cover_timers)
+
     await coordinator.async_restore_state()
     await coordinator.cover_manager.async_restore_state()
     await coordinator.async_config_entry_first_refresh()
@@ -251,12 +260,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     # Register services
     async_setup_services(hass)
-
-    # Cancel the next-mode timer when the entry is unloaded
-    entry.async_on_unload(coordinator.async_cancel_next_mode_timer)
-
-    # Cancel the cover open/close timers when the entry is unloaded
-    entry.async_on_unload(coordinator.async_cancel_cover_timers)
 
     # React immediately when the temperature sensor changes (no need to wait for the poll)
     entry.async_on_unload(coordinator.cover_manager.async_setup_listeners())

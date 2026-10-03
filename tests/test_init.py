@@ -56,6 +56,33 @@ def _make_entry_with_options(base_entry: MagicMock | None = None) -> MagicMock:
 # Tests
 # ---------------------------------------------------------------------------
 
+class TestTimersAreCancelledWhenTheFirstRefreshFails:
+    """The timer cancellations are registered before the first refresh (audit P2)."""
+
+    async def test_cancellations_registered_before_a_failing_first_refresh(self):
+        from homeassistant.exceptions import ConfigEntryNotReady
+
+        hass = _make_hass(state=CoreState.running)
+        entry = _make_entry_with_options()
+
+        with patch("custom_components.homeshift.HomeShiftCoordinator") as MockCoord:
+            coord = MagicMock()
+            coord.async_restore_state = AsyncMock()
+            coord.cover_manager.async_restore_state = AsyncMock()
+            coord.async_config_entry_first_refresh = AsyncMock(side_effect=ConfigEntryNotReady)
+            MockCoord.return_value = coord
+
+            try:
+                await async_setup_entry(hass, entry)
+            except ConfigEntryNotReady:
+                pass
+            else:
+                raise AssertionError("the failing first refresh must propagate")
+
+        assert coord.async_cancel_next_mode_timer in entry._unloaders
+        assert coord.async_cancel_cover_timers in entry._unloaders
+
+
 class TestStartupCalendarSync:
     """Verify that async_setup_entry schedules a post-startup calendar sync."""
 

@@ -281,14 +281,14 @@ class TestSchedulerHelpers:
 
     def test_extract_schedulers_normalizes_single_string_to_list(self):
         data = {CONF_DAY_MODE_MAP: "home:Home, work:Work"}
-        user_input = {"Home": "switch.a", "Work": ["switch.b", "switch.c"]}
+        user_input = {"schedulers_home": "switch.a", "schedulers_work": ["switch.b", "switch.c"]}
         result = cf._extract_schedulers(user_input, data)
-        assert result == {"Home": ["switch.a"], "Work": ["switch.b", "switch.c"]}
+        assert result == {"home": ["switch.a"], "work": ["switch.b", "switch.c"]}
 
     def test_extract_schedulers_defaults_missing_mode_to_empty_list(self):
         data = {CONF_DAY_MODE_MAP: "home:Home, work:Work"}
         result = cf._extract_schedulers({}, data)
-        assert result == {"Home": [], "Work": []}
+        assert result == {"home": [], "work": []}
 
     def test_scheduler_selector_uses_select_when_matches_found(self):
         matching = MagicMock()
@@ -464,9 +464,45 @@ class TestConfigFlowSchedulersStep:
         flow = cf.HomeShiftConfigFlow()
         flow.hass = _make_hass()
         flow._data[CONF_DAY_MODE_MAP] = "home:Home"
-        result = await flow.async_step_schedulers({"Home": "switch.a"})
+        result = await flow.async_step_schedulers({"schedulers_home": "switch.a"})
         assert result["step_id"] == "menu"
-        assert flow._data[CONF_SCHEDULERS_PER_MODE] == {"Home": ["switch.a"]}
+        assert flow._data[CONF_SCHEDULERS_PER_MODE] == {"home": ["switch.a"]}
+
+
+class TestSchedulersAreKeyedByModeKey:
+    """Schedulers are stored per day mode key, whatever the language or labels."""
+
+    async def test_french_instance_without_visiting_mapping(self):
+        """The form lists the modes the coordinator runs on, keyed by mode key.
+
+        Before, a French instance that skipped the Mapping step got a form
+        built on the English labels and stored {"Work": [...]}, which the
+        coordinator (running on "Travail") never matched.
+        """
+        flow = cf.HomeShiftConfigFlow()
+        flow.hass = _make_hass(language="fr")
+        form = await flow.async_step_schedulers()
+        fields = [str(marker) for marker in form["data_schema"].schema]
+        assert fields == ["schedulers_home", "schedulers_work", "schedulers_remote", "schedulers_away"]
+
+        await flow.async_step_schedulers({"schedulers_work": ["switch.bureau"]})
+        assert flow._data[CONF_SCHEDULERS_PER_MODE] == {
+            "home": [],
+            "work": ["switch.bureau"],
+            "remote": [],
+            "away": [],
+        }
+
+    async def test_renaming_a_mode_keeps_its_schedulers(self):
+        flow = cf.HomeShiftConfigFlow()
+        flow.hass = _make_hass(language="fr")
+        flow._data[CONF_SCHEDULERS_PER_MODE] = {"work": ["switch.bureau"]}
+        await flow.async_step_mapping(
+            {"day_modes_section": {"day_display_work": "Bureau"}, "defaults_section": {}, "thermostat_section": {}}
+        )
+        form = await flow.async_step_schedulers()
+        defaults = {str(marker): marker.default() for marker in form["data_schema"].schema}
+        assert defaults["schedulers_work"] == ["switch.bureau"]
 
 
 class TestConfigFlowFinalize:
@@ -574,9 +610,9 @@ class TestOptionsFlowShowForms:
         await flow.async_step_init()
         form = await flow.async_step_schedulers()
         assert form["step_id"] == "schedulers"
-        result = await flow.async_step_schedulers({"Home": "switch.a"})
+        result = await flow.async_step_schedulers({"schedulers_home": "switch.a"})
         assert result["step_id"] == "menu"
-        assert flow._data[CONF_SCHEDULERS_PER_MODE] == {"Home": ["switch.a"]}
+        assert flow._data[CONF_SCHEDULERS_PER_MODE] == {"home": ["switch.a"]}
 
     async def test_covers_shows_form_and_accepts_input(self):
         flow = _make_options_flow({})

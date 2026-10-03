@@ -73,7 +73,13 @@
       },
       "schedulers": {
         "title": "Schedulers",
-        "description": "Assignez les schedulers à chaque mode jour."
+        "description": "Assignez les schedulers à chaque mode jour. Ceux du mode actif sont allumés, ceux de tous les autres modes sont éteints.",
+        "data": {
+          "schedulers_home": "Schedulers — Maison",
+          "schedulers_work": "Schedulers — Travail",
+          "schedulers_remote": "Schedulers — Télétravail",
+          "schedulers_away": "Schedulers — Absence"
+        }
       },
       "covers": {
         "title": "Contrôle des volets (chaleur)",
@@ -231,12 +237,12 @@
       },
       "schedulers": {
         "title": "Schedulers",
-        "description": "Assignez les schedulers à chaque mode jour.",
+        "description": "Assignez les schedulers à chaque mode jour. Ceux du mode actif sont allumés, ceux de tous les autres modes sont éteints.",
         "data": {
-          "schedulers_off": "Schedulers pour le mode 'Off' (Eteint)",
-          "schedulers_heating": "Schedulers pour le mode 'Heating' (Chauffage)",
-          "schedulers_cooling": "Schedulers pour le mode 'Cooling' (Climatisation)",
-          "schedulers_ventilation": "Schedulers pour le mode 'Ventilation'"
+          "schedulers_home": "Schedulers — Maison",
+          "schedulers_work": "Schedulers — Travail",
+          "schedulers_remote": "Schedulers — Télétravail",
+          "schedulers_away": "Schedulers — Absence"
         }
       },
       "covers": {

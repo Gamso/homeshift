@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import logging
 
-from homeassistant.components.select import SelectEntity
+from homeassistant.components.select import DOMAIN as SELECT_DOMAIN, SelectEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -11,6 +11,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN, SELECT_DAY_MODE, SELECT_THERMOSTAT_MODE
 from .coordinator import HomeShiftCoordinator
+from .entity import setup_entity
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -34,13 +35,10 @@ async def async_setup_entry(
 class HomeShiftSelect(CoordinatorEntity[HomeShiftCoordinator], SelectEntity):
     """Representation of Day Mode select entity."""
 
-    _attr_has_entity_name = True
-    _attr_name = "Day Mode"
-
     def __init__(self, coordinator: HomeShiftCoordinator, entry: ConfigEntry) -> None:
         """Initialize the select entity."""
         super().__init__(coordinator)
-        self._attr_unique_id = f"{entry.entry_id}_{SELECT_DAY_MODE}"
+        setup_entity(self, entry, SELECT_DOMAIN, SELECT_DAY_MODE)
         self._attr_options = coordinator.day_modes
         self._entry = entry
 
@@ -66,27 +64,14 @@ class HomeShiftSelect(CoordinatorEntity[HomeShiftCoordinator], SelectEntity):
         """Change the selected option."""
         await self.coordinator.async_set_day_mode(option)
 
-    @property
-    def device_info(self):
-        """Return device information."""
-        return {
-            "identifiers": {(DOMAIN, self._entry.entry_id)},
-            "name": "HomeShift",
-            "manufacturer": "Gamso",
-            "model": "HomeShift",
-        }
-
 
 class HomeShiftThermostatSelect(CoordinatorEntity[HomeShiftCoordinator], SelectEntity):
     """Representation of Thermostat Mode select entity."""
 
-    _attr_has_entity_name = True
-    _attr_name = "Thermostat Mode"
-
     def __init__(self, coordinator: HomeShiftCoordinator, entry: ConfigEntry) -> None:
         """Initialize the select entity."""
         super().__init__(coordinator)
-        self._attr_unique_id = f"{entry.entry_id}_{SELECT_THERMOSTAT_MODE}"
+        setup_entity(self, entry, SELECT_DOMAIN, SELECT_THERMOSTAT_MODE)
         self._attr_options = coordinator.thermostat_modes
         self._entry = entry
 
@@ -111,13 +96,3 @@ class HomeShiftThermostatSelect(CoordinatorEntity[HomeShiftCoordinator], SelectE
     async def async_select_option(self, option: str) -> None:
         """Change the selected option."""
         await self.coordinator.async_set_thermostat_mode(option)
-
-    @property
-    def device_info(self):
-        """Return device information."""
-        return {
-            "identifiers": {(DOMAIN, self._entry.entry_id)},
-            "name": "HomeShift",
-            "manufacturer": "Gamso",
-            "model": "HomeShift",
-        }

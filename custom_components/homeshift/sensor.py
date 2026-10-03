@@ -4,7 +4,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime
 
-from homeassistant.components.sensor import SensorDeviceClass, SensorEntity
+from homeassistant.components.sensor import DOMAIN as SENSOR_DOMAIN, SensorDeviceClass, SensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -22,6 +22,7 @@ from .const import (
     SENSOR_NEXT_MODE_AT,
 )
 from .coordinator import HomeShiftCoordinator
+from .entity import setup_entity
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -49,27 +50,15 @@ def _daily_covers_configured(config: dict) -> bool:
     return bool(config.get(CONF_DAILY_COVER_ITEMS))
 
 
-def _device_info(entry: ConfigEntry) -> dict:
-    """Return shared device info dict."""
-    return {
-        "identifiers": {(DOMAIN, entry.entry_id)},
-        "name": "HomeShift",
-        "manufacturer": "Gamso",
-        "model": "HomeShift",
-    }
-
-
 class HomeShiftNextModeSensor(CoordinatorEntity[HomeShiftCoordinator], SensorEntity):
     """String sensor: the day mode predicted at the next automatic change."""
 
-    _attr_has_entity_name = True
-    _attr_name = "Next Mode"
     _attr_icon = "mdi:calendar-arrow-right"
 
     def __init__(self, coordinator: HomeShiftCoordinator, entry: ConfigEntry) -> None:
         """Initialize the sensor."""
         super().__init__(coordinator)
-        self._attr_unique_id = f"{entry.entry_id}_{SENSOR_NEXT_MODE}"
+        setup_entity(self, entry, SENSOR_DOMAIN, SENSOR_NEXT_MODE)
         self._entry = entry
 
     @property
@@ -77,35 +66,23 @@ class HomeShiftNextModeSensor(CoordinatorEntity[HomeShiftCoordinator], SensorEnt
         """Return the predicted mode at the next change."""
         return self.coordinator.next_mode_predicted
 
-    @property
-    def device_info(self) -> dict:
-        """Return device information."""
-        return _device_info(self._entry)
-
 
 class HomeShiftNextModeAtSensor(CoordinatorEntity[HomeShiftCoordinator], SensorEntity):
     """Timestamp sensor: when the next day mode change is expected."""
 
     _attr_device_class = SensorDeviceClass.TIMESTAMP
-    _attr_has_entity_name = True
-    _attr_name = "Next Mode At"
     _attr_icon = "mdi:calendar-clock"
 
     def __init__(self, coordinator: HomeShiftCoordinator, entry: ConfigEntry) -> None:
         """Initialize the sensor."""
         super().__init__(coordinator)
-        self._attr_unique_id = f"{entry.entry_id}_{SENSOR_NEXT_MODE_AT}"
+        setup_entity(self, entry, SENSOR_DOMAIN, SENSOR_NEXT_MODE_AT)
         self._entry = entry
 
     @property
     def native_value(self) -> datetime | None:
         """Return when the next mode change is expected."""
         return self.coordinator.next_mode_at
-
-    @property
-    def device_info(self) -> dict:
-        """Return device information."""
-        return _device_info(self._entry)
 
 
 class HomeShiftCoverOpenTimeSensor(CoordinatorEntity[HomeShiftCoordinator], SensorEntity):
@@ -116,25 +93,18 @@ class HomeShiftCoverOpenTimeSensor(CoordinatorEntity[HomeShiftCoordinator], Sens
     Updated each morning when async_compute_daily_schedule() runs.
     """
 
-    _attr_has_entity_name = True
-    _attr_name = "Cover Open Time"
     _attr_icon = "mdi:roller-shade"
 
     def __init__(self, coordinator: HomeShiftCoordinator, entry: ConfigEntry) -> None:
         """Initialize the sensor."""
         super().__init__(coordinator)
-        self._attr_unique_id = f"{entry.entry_id}_{SENSOR_COVER_OPEN_TIME}"
+        setup_entity(self, entry, SENSOR_DOMAIN, SENSOR_COVER_OPEN_TIME)
         self._entry = entry
 
     @property
     def native_value(self) -> str | None:
         """Return today's computed cover opening time (HH:MM)."""
         return self.coordinator.cover_open_time
-
-    @property
-    def device_info(self) -> dict:
-        """Return device information."""
-        return _device_info(self._entry)
 
 
 class HomeShiftCoverCloseTimeSensor(CoordinatorEntity[HomeShiftCoordinator], SensorEntity):
@@ -149,14 +119,12 @@ class HomeShiftCoverCloseTimeSensor(CoordinatorEntity[HomeShiftCoordinator], Sen
     that has to be visible rather than silent.
     """
 
-    _attr_has_entity_name = True
-    _attr_name = "Cover Close Time"
     _attr_icon = "mdi:roller-shade-closed"
 
     def __init__(self, coordinator: HomeShiftCoordinator, entry: ConfigEntry) -> None:
         """Initialize the sensor."""
         super().__init__(coordinator)
-        self._attr_unique_id = f"{entry.entry_id}_{SENSOR_COVER_CLOSE_TIME}"
+        setup_entity(self, entry, SENSOR_DOMAIN, SENSOR_COVER_CLOSE_TIME)
         self._entry = entry
 
     @property
@@ -174,8 +142,3 @@ class HomeShiftCoverCloseTimeSensor(CoordinatorEntity[HomeShiftCoordinator], Sen
             ),
             "trigger": self.coordinator.cover_close_trigger or CLOSE_TRIGGER_ELEVATION,
         }
-
-    @property
-    def device_info(self) -> dict:
-        """Return device information."""
-        return _device_info(self._entry)

@@ -346,6 +346,9 @@
       "next_mode_at": {
         "name": "Prochain changement à"
       },
+      "cover_open_time": {
+        "name": "Heure d'ouverture des volets"
+      },
       "cover_close_time": {
         "name": "Heure de fermeture des volets"
       }

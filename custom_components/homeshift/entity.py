@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 from homeassistant.helpers.entity import Entity
 
@@ -44,3 +46,19 @@ def setup_entity(entity: Entity, entry: ConfigEntry, platform: str, key: str) ->
     entity._attr_unique_id = f"{entry.entry_id}_{key}"
     entity._attr_device_info = device_info(entry)
     entity.entity_id = f"{platform}.{OBJECT_ID_PREFIX}_{key}"
+
+
+@callback
+def async_remove_stale_entities(hass: HomeAssistant, entry: ConfigEntry, platform: str, keys: list[str]) -> None:
+    """Drop the registry entries of conditional entities no longer created.
+
+    Some entities only exist while a feature is configured (the cover
+    sensors, the heat protection sensor). Once the feature is removed from
+    the options they are no longer added, but their registry entries stayed
+    behind as "restored", unavailable entities.
+    """
+    registry = er.async_get(hass)
+    for key in keys:
+        entity_id = registry.async_get_entity_id(platform, DOMAIN, f"{entry.entry_id}_{key}")
+        if entity_id is not None:
+            registry.async_remove(entity_id)

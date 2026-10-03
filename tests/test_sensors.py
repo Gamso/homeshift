@@ -23,7 +23,6 @@ from .conftest import (
     DEFAULT_MODE_DEFAULT,
     DEFAULT_MODE_HOLIDAY,
     DEFAULT_MODE_WEEKEND,
-    EVENT_REMOTE,
     make_mock_hass,
     make_mock_entry,
     make_calendar_state,
@@ -513,8 +512,7 @@ class TestNextModeUpcomingEvents:
             await coordinator.async_update_data()
 
         # The French locale maps "télétravail" keyword → "Télétravail" display
-        from .conftest import _fr_day_map, _FR
-        from custom_components.homeshift.const import CONF_DAY_MODE_MAP
+        from .conftest import _fr_day_map
 
         remote_display = _fr_day_map["remote"]  # "Télétravail"
         assert coordinator.next_mode_predicted == remote_display

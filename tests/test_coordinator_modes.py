@@ -74,7 +74,7 @@ class TestDefaultModeMapping:
 
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
             mock_dt.now.return_value = datetime(2026, 3, 4, 14, 0, 0)
-            result = await coordinator.async_update_data()
+            await coordinator.async_update_data()
 
         assert coordinator.day_mode == "Télétravail"
 
@@ -106,7 +106,7 @@ class TestDefaultModeMapping:
 
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
             mock_dt.now.return_value = datetime(2026, 3, 12, 10, 0, 0)
-            result = await coordinator.async_update_data()
+            await coordinator.async_update_data()
 
         assert coordinator.day_mode == "Télétravail"
 

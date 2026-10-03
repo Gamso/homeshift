@@ -5,7 +5,6 @@ import re
 from datetime import datetime
 from unittest.mock import MagicMock, patch
 
-import pytest
 import voluptuous as vol
 
 import custom_components.homeshift.config_flow as cf

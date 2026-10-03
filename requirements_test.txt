@@ -1,5 +1,5 @@
-# Development and Testing Requirements
-pytest
-pytest-asyncio
-pytest-homeassistant-custom-component
-icalendar>=5.0.0
+# Test requirements, pinned for reproducible runs.
+# pytest-homeassistant-custom-component pins homeassistant (here 2026.9.0, the
+# minimum version declared in hacs.json), pytest and pytest-asyncio.
+pytest-homeassistant-custom-component==0.13.363
+icalendar==7.3.0

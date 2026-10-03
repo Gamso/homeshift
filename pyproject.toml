@@ -2,7 +2,16 @@
 # Work !
 line-length = 180
 
+[tool.ruff]
+line-length = 180
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "B", "UP"]
+
+# The only pytest configuration of the repository.
 [tool.pytest.ini_options]
+testpaths = ["tests"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 pythonpath = ["."]

@@ -333,7 +333,7 @@
     },
     "select": {
       "day_mode": {
-        "name": "HomeShift"
+        "name": "Day Mode"
       },
       "thermostat_mode": {
         "name": "Thermostat Mode"
@@ -345,6 +345,9 @@
       },
       "next_mode_at": {
         "name": "Next Mode At"
+      },
+      "cover_open_time": {
+        "name": "Cover Open Time"
       },
       "cover_close_time": {
         "name": "Cover Close Time"

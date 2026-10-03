@@ -1,0 +1,46 @@
+"""Helpers shared by the HomeShift entities."""
+from __future__ import annotations
+
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
+from homeassistant.helpers.entity import Entity
+
+from .const import DOMAIN
+
+# Every entity id starts with this prefix, followed by the entity's
+# translation key: select.homeshift_day_mode, sensor.homeshift_next_mode...
+OBJECT_ID_PREFIX = "homeshift"
+
+
+def device_info(entry: ConfigEntry) -> DeviceInfo:
+    """Return the device grouping every HomeShift entity of an entry.
+
+    HomeShift drives other entities and has no hardware of its own, hence a
+    service device.
+    """
+    return DeviceInfo(
+        identifiers={(DOMAIN, entry.entry_id)},
+        name="HomeShift",
+        manufacturer="Gamso",
+        model="HomeShift",
+        entry_type=DeviceEntryType.SERVICE,
+    )
+
+
+def setup_entity(entity: Entity, entry: ConfigEntry, platform: str, key: str) -> None:
+    """Give an entity its unique id, translated name, device and entity id.
+
+    The name comes from the `entity` section of the translations
+    (translation_key), so it follows the instance language. Home Assistant
+    would then derive the entity id from the name in that language for the
+    languages it supports natively (French included), giving a French
+    install select.homeshift_mode_jour. The entity id is therefore pinned
+    to the English object id, the one the dashboards, the card and the
+    README rely on. It only applies when the entity is first registered: an
+    existing or renamed entity id is kept by the registry.
+    """
+    entity._attr_has_entity_name = True
+    entity._attr_translation_key = key
+    entity._attr_unique_id = f"{entry.entry_id}_{key}"
+    entity._attr_device_info = device_info(entry)
+    entity.entity_id = f"{platform}.{OBJECT_ID_PREFIX}_{key}"

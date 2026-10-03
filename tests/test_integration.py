@@ -157,3 +157,168 @@ async def test_entities_belong_to_one_service_device(hass: HomeAssistant) -> Non
     assert len(devices) == 1
     assert devices[0].entry_type is dr.DeviceEntryType.SERVICE
     assert devices[0].name == "HomeShift"
+
+
+# ---------------------------------------------------------------------------
+# Setup, unload and reload
+# ---------------------------------------------------------------------------
+
+
+async def test_setup_and_unload(hass: HomeAssistant) -> None:
+    from homeassistant.config_entries import ConfigEntryState
+    from homeassistant.const import STATE_UNAVAILABLE
+
+    entry = make_entry(options={CONF_DAILY_COVER_ITEMS: COVER_ITEMS})
+    await setup_entry(hass, entry)
+
+    assert entry.state is ConfigEntryState.LOADED
+    coordinator = hass.data[DOMAIN][entry.entry_id]
+    assert hass.services.has_service(DOMAIN, "sync_calendar")
+    assert hass.services.has_service(DOMAIN, "refresh_schedulers")
+
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert entry.state is ConfigEntryState.NOT_LOADED
+    assert DOMAIN not in hass.data
+    assert not hass.services.has_service(DOMAIN, "sync_calendar")
+    assert hass.states.get("select.homeshift_day_mode").state == STATE_UNAVAILABLE
+    # No timer of the unloaded coordinator may fire later.
+    assert coordinator._cancel_next_mode_timer is None
+    assert coordinator._cancel_cover_open_timer is None
+    assert coordinator._cancel_cover_close_timer is None
+
+
+async def test_saving_options_reloads_the_entry(hass: HomeAssistant) -> None:
+    from custom_components.homeshift.const import CONF_DAY_MODE_MAP
+
+    entry = make_entry()
+    await setup_entry(hass, entry)
+    first = hass.data[DOMAIN][entry.entry_id]
+
+    hass.config_entries.async_update_entry(
+        entry, options={CONF_DAY_MODE_MAP: "home:House, work:Office, remote:Remote, away:Away"}
+    )
+    await hass.async_block_till_done()
+
+    second = hass.data[DOMAIN][entry.entry_id]
+    assert second is not first
+    assert "Office" in hass.states.get("select.homeshift_day_mode").attributes["options"]
+
+
+async def test_a_failing_first_refresh_leaves_no_timer_behind(hass: HomeAssistant) -> None:
+    """ConfigEntryNotReady: the coordinator HA gives up on must not keep timers (audit P2)."""
+    from unittest.mock import patch
+
+    from homeassistant.config_entries import ConfigEntryState
+
+    from custom_components.homeshift.coordinator import HomeShiftCoordinator
+
+    built: list[HomeShiftCoordinator] = []
+    original = HomeShiftCoordinator._schedule_cover_timers
+
+    def _spy(self):
+        built.append(self)
+        original(self)
+
+    entry = make_entry(options={CONF_DAILY_COVER_ITEMS: COVER_ITEMS})
+    with (
+        patch.object(HomeShiftCoordinator, "_schedule_cover_timers", _spy),
+        patch(
+            "custom_components.homeshift.cover_manager.CoverManager.async_check_heat_protection",
+            side_effect=RuntimeError("boom"),
+        ),
+    ):
+        hass.states.async_set(WORK_CALENDAR, "off")
+        hass.states.async_set(HOLIDAY_CALENDAR, "off")
+        entry.add_to_hass(hass)
+        await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+
+    assert entry.state is ConfigEntryState.SETUP_RETRY
+    assert built, "the first refresh should have armed the cover timers"
+    for coordinator in built:
+        assert coordinator._cancel_cover_open_timer is None
+        assert coordinator._cancel_cover_close_timer is None
+        assert coordinator._cancel_next_mode_timer is None
+
+
+# ---------------------------------------------------------------------------
+# Calendar outage (audit B2)
+# ---------------------------------------------------------------------------
+
+
+async def test_an_unavailable_calendar_keeps_the_mode(hass: HomeAssistant, freezer) -> None:
+    """Remote day, then the calendar drops out: the mode stays on Remote."""
+    freezer.move_to("2026-03-03 18:00:00+00:00")  # Tuesday, 10:00 in the test time zone
+    entry = make_entry()
+    hass.states.async_set(
+        WORK_CALENDAR,
+        "on",
+        {"message": "Remote", "start_time": "2026-03-03 00:00:00", "end_time": "2026-03-04 00:00:00"},
+    )
+    hass.states.async_set(HOLIDAY_CALENDAR, "off")
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    assert hass.states.get("select.homeshift_day_mode").state == "Remote"
+
+    hass.states.async_set(WORK_CALENDAR, "unavailable")
+    await hass.services.async_call(DOMAIN, "sync_calendar", blocking=True)
+    await hass.async_block_till_done()
+
+    assert hass.states.get("select.homeshift_day_mode").state == "Remote"
+
+    hass.states.async_set(WORK_CALENDAR, "off")
+    await hass.services.async_call(DOMAIN, "sync_calendar", blocking=True)
+    await hass.async_block_till_done()
+
+    assert hass.states.get("select.homeshift_day_mode").state == "Work"
+
+
+# ---------------------------------------------------------------------------
+# Schedulers configured on a French instance (audit B1)
+# ---------------------------------------------------------------------------
+
+
+async def test_french_setup_without_the_mapping_step_drives_the_schedulers(hass: HomeAssistant, freezer) -> None:
+    """Calendars, then Schedulers, then Save — the Mapping step never opened.
+
+    The form used to offer Home/Work/... while the coordinator ran on
+    Maison/Travail, so the work-day scheduler was never turned on.
+    """
+    from homeassistant.data_entry_flow import FlowResultType
+    from pytest_homeassistant_custom_component.common import async_mock_service
+
+    freezer.move_to("2026-03-03 18:00:00+00:00")  # Tuesday: a work day
+    hass.config.language = "fr"
+    hass.states.async_set(WORK_CALENDAR, "off")
+    hass.states.async_set(HOLIDAY_CALENDAR, "off")
+    hass.states.async_set("switch.schedule_bureau", "off")
+    hass.states.async_set("switch.schedule_maison", "on")
+    turn_on = async_mock_service(hass, "switch", "turn_on")
+    turn_off = async_mock_service(hass, "switch", "turn_off")
+
+    flow = await hass.config_entries.flow.async_init(DOMAIN, context={"source": "user"})
+    flow = await hass.config_entries.flow.async_configure(flow["flow_id"], {"next_step_id": "calendars"})
+    flow = await hass.config_entries.flow.async_configure(
+        flow["flow_id"], {CONF_CALENDAR_ENTITY: WORK_CALENDAR, CONF_HOLIDAY_CALENDAR: HOLIDAY_CALENDAR}
+    )
+    flow = await hass.config_entries.flow.async_configure(flow["flow_id"], {"next_step_id": "schedulers"})
+    fields = [str(marker) for marker in flow["data_schema"].schema]
+    assert fields == ["schedulers_home", "schedulers_work", "schedulers_remote", "schedulers_away"]
+    flow = await hass.config_entries.flow.async_configure(
+        flow["flow_id"],
+        {"schedulers_work": ["switch.schedule_bureau"], "schedulers_home": ["switch.schedule_maison"]},
+    )
+    flow = await hass.config_entries.flow.async_configure(flow["flow_id"], {"next_step_id": "finalize"})
+    assert flow["type"] is FlowResultType.CREATE_ENTRY
+    assert flow["data"]["schedulers_per_mode"]["work"] == ["switch.schedule_bureau"]
+    await hass.async_block_till_done()
+
+    assert hass.states.get("select.homeshift_day_mode").state == "Travail"
+    turned_on = [entity for call in turn_on for entity in call.data["entity_id"]]
+    turned_off = [entity for call in turn_off for entity in call.data["entity_id"]]
+    assert "switch.schedule_bureau" in turned_on
+    assert "switch.schedule_maison" in turned_off
+    assert "switch.schedule_bureau" not in turned_off

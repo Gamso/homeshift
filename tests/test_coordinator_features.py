@@ -11,6 +11,7 @@ import pytest
 from custom_components.homeshift.coordinator import HomeShiftCoordinator, MIDDAY_HOUR
 
 from .conftest import (
+    set_day_mode,
     make_mock_hass,
     make_mock_entry,
     make_calendar_state,
@@ -353,7 +354,7 @@ class TestSchedulerRefresh:
         coordinator = HomeShiftCoordinator(
             hass, make_mock_entry(schedulers_per_mode=schedulers)
         )
-        coordinator.day_mode = "Travail"
+        set_day_mode(coordinator, "Travail")
 
         await coordinator.async_refresh_schedulers()
 
@@ -390,7 +391,7 @@ class TestSchedulerRefresh:
         coordinator = HomeShiftCoordinator(
             hass, make_mock_entry(schedulers_per_mode=schedulers)
         )
-        coordinator.day_mode = "Travail"
+        set_day_mode(coordinator, "Travail")
 
         await coordinator.async_refresh_schedulers()
 
@@ -416,7 +417,7 @@ class TestSchedulerRefresh:
         coordinator = HomeShiftCoordinator(
             hass, make_mock_entry(schedulers_per_mode=schedulers)
         )
-        coordinator.day_mode = "Travail"
+        set_day_mode(coordinator, "Travail")
 
         await coordinator.async_refresh_schedulers()
 
@@ -482,7 +483,7 @@ class TestSchedulerRefresh:
         hass.states.get.side_effect = _get_state
 
         coordinator = HomeShiftCoordinator(hass, make_mock_entry(schedulers_per_mode=schedulers))
-        coordinator.day_mode = "Travail"
+        set_day_mode(coordinator, "Travail")
         await coordinator.async_set_thermostat_mode("Chauffage")
         hass.services.async_call.reset_mock()
 
@@ -523,7 +524,7 @@ class TestSchedulerRefresh:
         hass.states.get.side_effect = _get_state
 
         coordinator = HomeShiftCoordinator(hass, make_mock_entry(schedulers_per_mode=schedulers))
-        coordinator.day_mode = "Travail"
+        set_day_mode(coordinator, "Travail")
         await coordinator.async_set_thermostat_mode("off")
         hass.services.async_call.reset_mock()
 
@@ -556,7 +557,7 @@ class TestSchedulerRefresh:
         hass.states.get.side_effect = lambda _: self._make_tagged_state([])
 
         coordinator = HomeShiftCoordinator(hass, make_mock_entry(schedulers_per_mode=schedulers))
-        coordinator.day_mode = "Travail"
+        set_day_mode(coordinator, "Travail")
         await coordinator.async_set_thermostat_mode("Chauffage")
         hass.services.async_call.reset_mock()
 
@@ -724,7 +725,7 @@ class TestStatePersistence:
             end_time="2026-03-05 00:00:00",
         )
         coordinator = HomeShiftCoordinator(hass, make_mock_entry())
-        coordinator.day_mode = "Maison"  # Start with a different mode
+        set_day_mode(coordinator, "Maison")  # Start with a different mode
         mock_store = MagicMock()
         mock_store.async_save = AsyncMock()
         coordinator._store = mock_store
@@ -1727,7 +1728,7 @@ class TestDailyCoverScheduleUsesTodaysDayMode:
         hass.states.get.side_effect = _states_get
 
         coordinator = HomeShiftCoordinator(hass, entry)
-        coordinator.day_mode = "Maison"  # Sunday's mode (weekend)
+        set_day_mode(coordinator, "Maison")  # Sunday's mode (weekend)
         coordinator._today_date = date(2026, 7, 19)  # Sunday
 
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt, \

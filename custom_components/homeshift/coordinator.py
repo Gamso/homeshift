@@ -477,17 +477,6 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
         """Return current day mode."""
         return self._day_mode
 
-    @day_mode.setter
-    def day_mode(self, value: str) -> None:
-        """Set day mode directly (no override logic or scheduler refresh).
-
-        Intended for test setup only. Use async_set_day_mode() at runtime.
-        Like a manual selection, this marks absence as hand-picked — the
-        automatic path is what clears that flag.
-        """
-        self._day_mode = value
-        self._absence_is_manual = value == self._mode_absence
-
     @property
     def thermostat_mode(self) -> str:
         """Return current thermostat mode."""

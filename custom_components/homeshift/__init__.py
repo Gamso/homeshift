@@ -17,16 +17,21 @@ from .const import (
     CONF_DAILY_COVER_CLOSE_OFFSET_MINUTES,
     CONF_DAILY_COVER_ENTITIES,
     CONF_DAILY_COVER_ITEMS,
+    CONF_DAY_MODE_MAP,
     CONF_ITEM_COVER,
     CONF_ITEM_MY_BUTTON,
     CONF_ITEM_WINDOW_SENSOR,
+    CONF_SCHEDULERS_PER_MODE,
     DEFAULT_DAILY_COVER_CLOSE_ELEVATION,
     DEFAULT_DAILY_COVER_CLOSE_OFFSET_MINUTES,
     DOMAIN,
     LEGACY_CLOSE_MODE_ELEVATION,
+    LOCALIZED_DEFAULTS,
     SENSOR_NEXT_SCAN,
     SERVICE_REFRESH_SCHEDULERS,
     SERVICE_SYNC_CALENDAR,
+    get_localized_defaults,
+    parse_key_value_map,
 )
 from .coordinator import HomeShiftCoordinator
 from .cover_manager import elevation_for_sunset_offset
@@ -110,7 +115,76 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             elevation,
         )
 
+    if entry.version < 5:
+        # v4 -> v5: schedulers were stored per day mode display label
+        # ("Maison", "Work", ...). The label depends on the instance language
+        # and on renames, and a form built without the localized defaults
+        # stored the English labels while the coordinator ran on the French
+        # ones — no scheduler ever matched. They are now stored per mode key.
+        merged = {**entry.data, **entry.options}
+        day_mode_map = parse_key_value_map(
+            merged.get(CONF_DAY_MODE_MAP) or get_localized_defaults(hass)[CONF_DAY_MODE_MAP]
+        )
+        data = dict(entry.data)
+        options = dict(entry.options)
+        for store in (data, options):
+            if store.get(CONF_SCHEDULERS_PER_MODE):
+                store[CONF_SCHEDULERS_PER_MODE] = schedulers_by_mode_key(
+                    store[CONF_SCHEDULERS_PER_MODE], day_mode_map
+                )
+
+        hass.config_entries.async_update_entry(entry, data=data, options=options, version=5)
+        _LOGGER.info("HomeShift config entry migrated to version 5 (schedulers keyed by day mode key)")
+
     return True
+
+
+def _mode_key_for_label(label: str, day_mode_map: dict[str, str]) -> str | None:
+    """Return the day mode key a stored scheduler label stands for, or None.
+
+    Tried in order: the label already is a key, it is the current display
+    name of a key, it is a key spelled with another case, or it is one of the
+    default display names of any supported language (what the form stored
+    when it was built without the localized defaults).
+    """
+    if label in day_mode_map:
+        return label
+    for key, display in day_mode_map.items():
+        if display == label:
+            return key
+    lowered = label.lower()
+    for key in day_mode_map:
+        if key.lower() == lowered:
+            return key
+    for defaults in LOCALIZED_DEFAULTS.values():
+        for key, display in parse_key_value_map(defaults[CONF_DAY_MODE_MAP]).items():
+            if display == label and key in day_mode_map:
+                return key
+    return None
+
+
+def schedulers_by_mode_key(schedulers: dict, day_mode_map: dict[str, str]) -> dict[str, list]:
+    """Re-key a {label: [switch, ...]} scheduler map by day mode key.
+
+    Two labels resolving to the same key have their switches merged, in
+    order and without duplicates. A label that matches no mode is kept as is
+    (and logged): dropping it would silently lose the user's assignment.
+    """
+    result: dict[str, list] = {}
+    for label, switches in schedulers.items():
+        key = _mode_key_for_label(str(label), day_mode_map)
+        if key is None:
+            _LOGGER.warning(
+                "HomeShift migration: schedulers stored under '%s' match no day mode (%s) — kept as is",
+                label,
+                day_mode_map,
+            )
+            key = str(label)
+        merged = result.setdefault(key, [])
+        for switch in switches or []:
+            if switch not in merged:
+                merged.append(switch)
+    return result
 
 
 def _migrated_close_elevation(hass: HomeAssistant, merged: dict) -> float | None:

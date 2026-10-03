@@ -1254,11 +1254,14 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
             self._thermostat_mode,
         )
 
-        # Build activate / deactivate sets
-        to_enable: set[str] = set(schedulers_per_mode.get(self._day_mode, []))
+        # Build activate / deactivate sets. Schedulers are stored per day mode
+        # KEY (home, work, ...): the display label depends on the language and
+        # can be renamed, so it cannot identify a mode.
+        mode_key = self.day_mode_key
+        to_enable: set[str] = set(schedulers_per_mode.get(mode_key, [])) if mode_key else set()
         to_disable: set[str] = set()
         for mode, switches in schedulers_per_mode.items():
-            if mode != self._day_mode:
+            if mode != mode_key:
                 for sw in switches:
                     if sw not in to_enable:  # never disable a shared switch
                         to_disable.add(sw)
@@ -1314,7 +1317,7 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
                 {"entity_id": sorted(to_enable)},
                 blocking=False,
             )
-        elif self._day_mode and schedulers_per_mode.get(self._day_mode) is not None:
+        elif mode_key and schedulers_per_mode.get(mode_key) is not None:
             _LOGGER.debug(
-                "No schedulers assigned to day_mode '%s'", self._day_mode
+                "No schedulers assigned to day_mode '%s' (key=%s)", self._day_mode, mode_key
             )

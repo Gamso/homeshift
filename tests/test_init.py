@@ -517,8 +517,71 @@ class TestMigrationToVersion4(_MigrationHarness):
 
     async def test_an_already_migrated_entry_is_left_alone(self):
         hass = self._hass()
-        entry = self._entry({}, {"daily_cover_items": self._covers()}, version=4)
+        entry = self._entry({}, {"daily_cover_items": self._covers()}, version=5)
 
         await self._run(hass, entry)
 
         hass.config_entries.async_update_entry.assert_not_called()
+
+
+class TestMigrationToVersion5(_MigrationHarness):
+    """v4 → v5 re-keys the schedulers from display labels to day mode keys."""
+
+    async def _migrate(self, data: dict, options: dict, language: str = "fr") -> dict:
+        hass = self._hass()
+        hass.config.language = language
+        entry = self._entry(data, options, version=4)
+        await self._run(hass, entry)
+        return self._writes(hass, 5)
+
+    async def test_current_labels_become_keys(self):
+        updated = await self._migrate(
+            {"day_mode_map": "home:Maison, work:Travail, remote:Télétravail, away:Absence"},
+            {"schedulers_per_mode": {"Maison": ["switch.a"], "Travail": ["switch.b"]}},
+        )
+
+        assert updated["version"] == 5
+        assert updated["options"]["schedulers_per_mode"] == {"home": ["switch.a"], "work": ["switch.b"]}
+
+    async def test_english_labels_stored_by_a_french_form_are_repaired(self):
+        """The B1 scenario: the form stored "Work" while the coordinator ran on "Travail"."""
+        updated = await self._migrate(
+            {"schedulers_per_mode": {"Home": ["switch.a"], "Work": ["switch.b"], "Remote": [], "Away": []}},
+            {},
+        )
+
+        assert updated["data"]["schedulers_per_mode"] == {
+            "home": ["switch.a"],
+            "work": ["switch.b"],
+            "remote": [],
+            "away": [],
+        }
+
+    async def test_a_renamed_mode_is_resolved_through_the_current_map(self):
+        updated = await self._migrate(
+            {"day_mode_map": "home:Maison, work:Bureau, remote:Télétravail, away:Absence"},
+            {"schedulers_per_mode": {"Bureau": ["switch.b"]}},
+        )
+
+        assert updated["options"]["schedulers_per_mode"] == {"work": ["switch.b"]}
+
+    async def test_labels_resolving_to_the_same_key_are_merged(self):
+        updated = await self._migrate(
+            {},
+            {"schedulers_per_mode": {"Work": ["switch.a", "switch.b"], "Travail": ["switch.b", "switch.c"]}},
+        )
+
+        assert updated["options"]["schedulers_per_mode"] == {"work": ["switch.a", "switch.b", "switch.c"]}
+
+    async def test_an_unknown_label_is_kept(self, caplog):
+        with caplog.at_level("WARNING"):
+            updated = await self._migrate({}, {"schedulers_per_mode": {"Vacances": ["switch.a"]}})
+
+        assert updated["options"]["schedulers_per_mode"] == {"Vacances": ["switch.a"]}
+        assert "match no day mode" in caplog.text
+
+    async def test_an_entry_without_schedulers_only_bumps_the_version(self):
+        updated = await self._migrate({"calendar_entity": "calendar.a"}, {})
+
+        assert updated["data"] == {"calendar_entity": "calendar.a"}
+        assert updated["options"] == {}

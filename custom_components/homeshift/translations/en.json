@@ -73,7 +73,13 @@
       },
       "schedulers": {
         "title": "Schedulers",
-        "description": "Assign scheduler switch entities to each day mode."
+        "description": "Assign scheduler switch entities to each day mode. The switches of the active mode are turned on, those of every other mode are turned off.",
+        "data": {
+          "schedulers_home": "Schedulers — Home",
+          "schedulers_work": "Schedulers — Work",
+          "schedulers_remote": "Schedulers — Remote",
+          "schedulers_away": "Schedulers — Away"
+        }
       },
       "covers": {
         "title": "Cover Heat Control",
@@ -231,12 +237,12 @@
       },
       "schedulers": {
         "title": "Schedulers",
-        "description": "Assign scheduler switch entities to each day mode.",
+        "description": "Assign scheduler switch entities to each day mode. The switches of the active mode are turned on, those of every other mode are turned off.",
         "data": {
-          "schedulers_off": "Schedulers for 'Off' mode",
-          "schedulers_heating": "Schedulers for 'Heating' mode",
-          "schedulers_cooling": "Schedulers for 'Cooling' mode",
-          "schedulers_ventilation": "Schedulers for 'Ventilation' mode"
+          "schedulers_home": "Schedulers — Home",
+          "schedulers_work": "Schedulers — Work",
+          "schedulers_remote": "Schedulers — Remote",
+          "schedulers_away": "Schedulers — Away"
         }
       },
       "covers": {

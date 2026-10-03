@@ -236,12 +236,6 @@ def _validate_calendars(hass, user_input: dict[str, Any]) -> dict[str, str]:
     return errors
 
 
-def _parse_day_modes(data: dict[str, Any]) -> list[str]:
-    """Return the list of configured day mode display values."""
-    raw = data.get(CONF_DAY_MODE_MAP, DEFAULT_DAY_MODE_MAP)
-    return [v.strip() for v in _parse_day_mode_map(raw).values()]
-
-
 def _get_scheduler_options(hass) -> list[selector.SelectOptionDict]:
     """Return SelectSelector options for scheduler-like switch entities."""
     options: list[selector.SelectOptionDict] = []
@@ -272,27 +266,39 @@ def _scheduler_selector(hass) -> selector.SelectSelector | selector.EntitySelect
     return selector.EntitySelector(selector.EntitySelectorConfig(domain="switch", multiple=True))
 
 
+def _scheduler_field(mode_key: str) -> str:
+    """Return the form field name holding the schedulers of one day mode."""
+    return f"schedulers_{mode_key.lower()}"
+
+
 def _schedulers_schema(hass, data: dict[str, Any]) -> vol.Schema:
-    """Build scheduler form schema – one multi-select per day mode."""
-    day_modes = _parse_day_modes(data)
-    current_schedulers: dict[str, list] = data.get(CONF_SCHEDULERS_PER_MODE, {})
+    """Build scheduler form schema – one multi-select per day mode.
+
+    Fields are named after the stable mode key (schedulers_home, ...), never
+    after the display label: the label depends on the instance language and
+    can be renamed, while the coordinator resolves schedulers by key. `data`
+    must be the effective data (localized defaults included) so the form
+    lists the modes the coordinator actually runs on.
+    """
+    day_mode_map = _parse_day_mode_map(data.get(CONF_DAY_MODE_MAP, DEFAULT_DAY_MODE_MAP))
+    current_schedulers: dict[str, list] = data.get(CONF_SCHEDULERS_PER_MODE, {}) or {}
     sel = _scheduler_selector(hass)
     schema_dict: dict = {}
-    for mode in day_modes:
-        current_value = current_schedulers.get(mode, [])
-        schema_dict[vol.Optional(mode, default=current_value)] = sel
+    for key in day_mode_map:
+        current_value = current_schedulers.get(key, [])
+        schema_dict[vol.Optional(_scheduler_field(key), default=current_value)] = sel
     return vol.Schema(schema_dict)
 
 
 def _extract_schedulers(user_input: dict[str, Any], data: dict[str, Any]) -> dict[str, list]:
-    """Extract scheduler assignments from form user_input."""
-    day_modes = _parse_day_modes(data)
+    """Extract scheduler assignments from form user_input, keyed by day mode key."""
+    day_mode_map = _parse_day_mode_map(data.get(CONF_DAY_MODE_MAP, DEFAULT_DAY_MODE_MAP))
     result: dict[str, list] = {}
-    for mode in day_modes:
-        value = user_input.get(mode, [])
+    for key in day_mode_map:
+        value = user_input.get(_scheduler_field(key), [])
         if isinstance(value, str):
             value = [value] if value else []
-        result[mode] = value
+        result[key] = list(value)
     return result
 
 
@@ -606,7 +612,7 @@ def _apply_cover_item_remove(user_input: dict[str, Any], data: dict[str, Any]) -
 class HomeShiftConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for HomeShift."""
 
-    VERSION = 4
+    VERSION = 5
 
     def __init__(self) -> None:
         """Initialise the config flow."""
@@ -706,12 +712,12 @@ class HomeShiftConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     ) -> config_entries.ConfigFlowResult:
         """Assign scheduler entities to each day mode."""
         if user_input is not None:
-            self._data[CONF_SCHEDULERS_PER_MODE] = _extract_schedulers(user_input, self._data)
+            self._data[CONF_SCHEDULERS_PER_MODE] = _extract_schedulers(user_input, self._effective_data())
             return await self.async_step_menu()
 
         return self.async_show_form(
             step_id="schedulers",
-            data_schema=_schedulers_schema(self.hass, self._data),
+            data_schema=_schedulers_schema(self.hass, self._effective_data()),
         )
 
     # -- covers ------------------------------------------------------------
@@ -918,12 +924,12 @@ class HomeShiftOptionsFlow(config_entries.OptionsFlow):
     ) -> config_entries.ConfigFlowResult:
         """Assign scheduler entities to each day mode."""
         if user_input is not None:
-            self._data[CONF_SCHEDULERS_PER_MODE] = _extract_schedulers(user_input, self._data)
+            self._data[CONF_SCHEDULERS_PER_MODE] = _extract_schedulers(user_input, self._effective_data())
             return await self.async_step_menu()
 
         return self.async_show_form(
             step_id="schedulers",
-            data_schema=_schedulers_schema(self.hass, self._data),
+            data_schema=_schedulers_schema(self.hass, self._effective_data()),
         )
 
     # -- covers ------------------------------------------------------------

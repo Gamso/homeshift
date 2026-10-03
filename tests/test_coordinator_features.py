@@ -345,9 +345,9 @@ class TestSchedulerRefresh:
     async def test_active_schedulers_turned_on_others_off(self):
         """Active schedulers turned on others off."""
         schedulers = {
-            "Maison": ["switch.sched_maison"],
-            "Travail": ["switch.sched_travail_a", "switch.sched_travail_b"],
-            "Télétravail": ["switch.sched_teletravail"],
+            "home": ["switch.sched_maison"],
+            "work": ["switch.sched_travail_a", "switch.sched_travail_b"],
+            "remote": ["switch.sched_teletravail"],
         }
         hass = self._hass()
         coordinator = HomeShiftCoordinator(
@@ -382,9 +382,9 @@ class TestSchedulerRefresh:
     async def test_active_mode_with_no_switches_only_turns_off_others(self):
         """Active mode with no switches only turns off others."""
         schedulers = {
-            "Maison": ["switch.sched_maison"],
-            "Travail": [],
-            "Télétravail": ["switch.sched_teletravail"],
+            "home": ["switch.sched_maison"],
+            "work": [],
+            "remote": ["switch.sched_teletravail"],
         }
         hass = self._hass()
         coordinator = HomeShiftCoordinator(
@@ -409,8 +409,8 @@ class TestSchedulerRefresh:
         """Shared switch not turned off."""
         shared = "switch.shared"
         schedulers = {
-            "Maison": [shared, "switch.maison_only"],
-            "Travail": [shared],
+            "home": [shared, "switch.maison_only"],
+            "work": [shared],
         }
         hass = self._hass()
         coordinator = HomeShiftCoordinator(
@@ -429,8 +429,8 @@ class TestSchedulerRefresh:
     async def test_mode_change_triggers_scheduler_refresh(self):
         """Mode change triggers scheduler refresh."""
         schedulers = {
-            "Maison": ["switch.sched_maison"],
-            "Télétravail": ["switch.sched_teletravail"],
+            "home": ["switch.sched_maison"],
+            "remote": ["switch.sched_teletravail"],
         }
         hass = self._hass()
         coordinator = HomeShiftCoordinator(
@@ -462,7 +462,7 @@ class TestSchedulerRefresh:
         # day_mode = Travail → all 3 schedulers are candidates for ON
         # Only the one tagged Climatisation should be forced OFF.
         schedulers = {
-            "Travail": [
+            "work": [
                 "switch.sched_clim",  # tagged Climatisation
                 "switch.sched_chauffage",  # tagged Chauffage
                 "switch.sched_volet",  # tagged Travail only (no thermostat tag)
@@ -503,7 +503,7 @@ class TestSchedulerRefresh:
     async def test_thermostat_off_disables_all_thermostat_tagged_schedulers(self):
         """When thermostat=Eteint, all schedulers with any thermostat tag are disabled."""
         schedulers = {
-            "Travail": [
+            "work": [
                 "switch.sched_clim",
                 "switch.sched_chauffage",
                 "switch.sched_volet",
@@ -546,8 +546,8 @@ class TestSchedulerRefresh:
         """A scheduler with no thermostat tag always follows day-mode rules regardless of
         the active thermostat mode."""
         schedulers = {
-            "Travail": ["switch.sched_presence"],
-            "Télétravail": ["switch.sched_teletravail"],
+            "work": ["switch.sched_presence"],
+            "remote": ["switch.sched_teletravail"],
         }
         hass = make_mock_hass()
         hass.services.async_call = AsyncMock()

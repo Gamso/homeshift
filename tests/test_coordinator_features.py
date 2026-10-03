@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import date, datetime
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -633,6 +633,45 @@ class TestStatePersistence:
         # Unknown day_mode_key is ignored; thermostat_mode key is still restored
         assert coordinator.day_mode == initial_day
         assert coordinator.thermostat_mode == "Eteint"
+
+    async def test_a_running_manual_override_survives_a_restart(self):
+        """Override 120 min then a restart: the first sync must not undo the manual choice."""
+        hass = make_mock_hass()
+        coordinator = HomeShiftCoordinator(hass, make_mock_entry(override_duration=120))
+        coordinator._store = self._make_store(None)
+        now = datetime(2026, 3, 4, 10, 0, 0, tzinfo=timezone.utc)  # Wednesday
+
+        with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
+            mock_dt.now.return_value = now
+            await coordinator.async_set_day_mode("Maison")
+        saved = coordinator._store.async_save.call_args.args[0]
+        assert saved["override_until"] == "2026-03-04T12:00:00+00:00"
+
+        restarted = HomeShiftCoordinator(hass, make_mock_entry(override_duration=120))
+        restarted._store = self._make_store(saved)
+        hass.states.get.return_value = make_calendar_state(state="off")
+        with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
+            mock_dt.now.return_value = now + timedelta(minutes=5)
+            mock_dt.parse_datetime.side_effect = datetime.fromisoformat
+            await restarted.async_restore_state()
+            await restarted.async_update_data()
+
+        assert restarted.override_until == datetime(2026, 3, 4, 12, 0, 0, tzinfo=timezone.utc)
+        assert restarted.day_mode == "Maison"
+
+    async def test_an_expired_override_is_not_restored(self):
+        hass = make_mock_hass()
+        coordinator = HomeShiftCoordinator(hass, make_mock_entry())
+        coordinator._store = self._make_store(
+            {"day_mode_key": "home", "override_until": "2026-03-04T12:00:00+00:00"}
+        )
+
+        with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
+            mock_dt.now.return_value = datetime(2026, 3, 4, 12, 30, 0, tzinfo=timezone.utc)
+            mock_dt.parse_datetime.side_effect = datetime.fromisoformat
+            await coordinator.async_restore_state()
+
+        assert coordinator.override_until is None
 
     async def test_restore_state_handles_load_error_gracefully(self):
         """async_restore_state() does not raise when storage load fails."""

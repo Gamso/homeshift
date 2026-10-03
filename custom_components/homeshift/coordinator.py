@@ -231,6 +231,13 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
             # persist if it had been selected by hand, so assume it was.
             self._absence_is_manual = self._day_mode == self._mode_absence
 
+        # A manual override survives a restart: without it, the first sync
+        # after the reboot would overwrite the mode picked by hand.
+        override_until = dt_util.parse_datetime(str(stored.get("override_until") or ""))
+        if override_until is not None and override_until > dt_util.now():
+            _LOGGER.info("Restoring manual override until %s", override_until.isoformat())
+            self._override_until = override_until
+
         thermostat_mode_key = stored.get("thermostat_mode_key")
         if thermostat_mode_key and thermostat_mode_key in self._thermostat_mode_map:
             resolved = self._thermostat_mode_map[thermostat_mode_key]
@@ -242,13 +249,14 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
             self._thermostat_mode = resolved
 
     async def _async_save_state(self) -> None:
-        """Persist current day_mode_key and thermostat_mode_key to storage."""
+        """Persist the current mode keys, the absence flag and the manual override."""
         try:
             await self._store.async_save(
                 {
                     "day_mode_key": self.day_mode_key,
                     "thermostat_mode_key": self.thermostat_mode_key,
                     "absence_is_manual": self._absence_is_manual,
+                    "override_until": self._override_until.isoformat() if self._override_until else None,
                 }
             )
         except Exception as err:  # noqa: BLE001

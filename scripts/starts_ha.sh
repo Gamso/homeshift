@@ -173,11 +173,34 @@ if [ ! -d ${PWD}/config/custom_components ]; then
     mkdir -p ${PWD}/config/custom_components
 fi
 
+# Downloads are pinned by version AND checked against a SHA-256: a release
+# asset can be replaced after its tag was published, and these files end up
+# executed inside Home Assistant (Python) or the browser (JS).
+# verify_sha256 <file> <expected sha256 or empty>
+verify_sha256() {
+    local file="$1" expected="$2" actual
+    actual="$(sha256sum "$file" | cut -d' ' -f1)"
+    if [ -z "$expected" ]; then
+        echo "   ⚠️  No checksum pinned for $(basename "$file") — got sha256 ${actual}"
+        echo "      Check it against the release and pin it in scripts/starts_ha.sh"
+        return 0
+    fi
+    if [ "$actual" != "$expected" ]; then
+        echo "   ❌ Checksum mismatch for $(basename "$file"): expected ${expected}, got ${actual}"
+        rm -f "$file"
+        return 1
+    fi
+    echo "   ✅ Checksum verified for $(basename "$file")"
+}
+
 
 echo ""
 echo "📦 Installing scheduler-component..."
 SCHEDULER_COMPONENT_VERSION="v3.3.8"
 SCHEDULER_COMPONENT_URL="https://github.com/nielsfaber/scheduler-component/releases/download/${SCHEDULER_COMPONENT_VERSION}/scheduler.zip"
+# GitHub publishes no digest for this (older) release asset: pin the value the
+# script prints on first install once checked against the release.
+SCHEDULER_COMPONENT_SHA256=""
 
 if [ ! -d ${PWD}/config/custom_components/scheduler ]; then
     # Install wget and unzip if not available
@@ -187,7 +210,8 @@ if [ ! -d ${PWD}/config/custom_components/scheduler ]; then
     fi
 
     echo "   Downloading scheduler-component ${SCHEDULER_COMPONENT_VERSION}..."
-    if wget -q ${SCHEDULER_COMPONENT_URL} -O /tmp/scheduler.zip; then
+    if wget -q ${SCHEDULER_COMPONENT_URL} -O /tmp/scheduler.zip \
+        && verify_sha256 /tmp/scheduler.zip "${SCHEDULER_COMPONENT_SHA256}"; then
         echo "   Extracting scheduler component..."
         # Extract to temporary location to handle different ZIP structures
         SCHEDULER_TEMP="/tmp/scheduler_temp_$$"
@@ -233,6 +257,8 @@ echo ""
 echo "📦 Installing scheduler-card..."
 SCHEDULER_CARD_VERSION="v4.0.11"
 SCHEDULER_CARD_URL="https://github.com/nielsfaber/scheduler-card/releases/download/${SCHEDULER_CARD_VERSION}/scheduler-card.js"
+# Digest published by GitHub for this release asset.
+SCHEDULER_CARD_SHA256="11d1ce1e5c78a39f4d84bee8646a34e401b2dcb3a7a49d25bf4dc0a3aa6bd37b"
 
 # Create scheduler-card directory
 mkdir -p ${PWD}/config/www/scheduler-card
@@ -245,7 +271,8 @@ if [ ! -f ${PWD}/config/www/scheduler-card/scheduler-card.js ]; then
     fi
 
     echo "   Downloading scheduler-card ${SCHEDULER_CARD_VERSION}..."
-    if wget -q ${SCHEDULER_CARD_URL} -O ${PWD}/config/www/scheduler-card/scheduler-card.js; then
+    if wget -q ${SCHEDULER_CARD_URL} -O ${PWD}/config/www/scheduler-card/scheduler-card.js \
+        && verify_sha256 ${PWD}/config/www/scheduler-card/scheduler-card.js "${SCHEDULER_CARD_SHA256}"; then
         echo "   ✅ Scheduler card installed!"
     else
         echo "   ⚠️  Failed to download scheduler card"

@@ -165,6 +165,27 @@ class TestRebuildDailyOpenTimeMap:
 # Schema builders
 # ---------------------------------------------------------------------------
 
+def _translations(lang: str) -> dict:
+    """Load one of the integration's translation files."""
+    import json
+    from pathlib import Path
+
+    path = Path(cf.__file__).parent / "translations" / f"{lang}.json"
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+class TestTranslationsMatchTheForms:
+    """Every generated field has a translated label (audit A2)."""
+
+    def test_day_mode_display_fields_are_translated(self):
+        fields = {str(marker) for marker in cf._day_mode_display_fields({CONF_DAY_MODE_MAP: DEFAULT_DAY_MODE_MAP})}
+        for lang in ("en", "fr"):
+            for flow in ("config", "options"):
+                section = _translations(lang)[flow]["step"]["mapping"]["sections"]["day_modes_section"]
+                assert fields <= set(section["data"]), (lang, flow)
+                assert fields <= set(section["data_description"]), (lang, flow)
+
+
 class TestCoversSchema:
     """_covers_schema: field set matches the close-only, native-schedule design."""
 
@@ -191,21 +212,25 @@ class TestCoversSchema:
         assert "cover_time_start" not in field_names
         assert "cover_time_end" not in field_names
 
-    def test_french_action_labels(self):
-        hass = _make_hass(language="fr")
-        schema = cf._covers_schema(hass, {})
+    def test_action_labels_come_from_the_translations(self):
+        """Labels are translated by the frontend, not picked in Python (audit A2)."""
+        schema = cf._covers_schema(_make_hass(language="fr"), {})
         action_marker = next(m for m in schema.schema if m.schema == CONF_COVER_ACTION)
-        action_selector = schema.schema[action_marker]
-        labels = {opt["label"] for opt in action_selector.config["options"]}
-        assert "Fermer les volets (close_cover)" in labels
+        config = schema.schema[action_marker].config
+        assert config["options"] == ["close_cover", "stop_cover"]
+        assert config["translation_key"] == CONF_COVER_ACTION
+        for lang in ("en", "fr"):
+            options = _translations(lang)["selector"][CONF_COVER_ACTION]["options"]
+            assert set(options) == {"close_cover", "stop_cover"}
 
-    def test_english_action_labels(self):
-        hass = _make_hass(language="en")
-        schema = cf._covers_schema(hass, {})
-        action_marker = next(m for m in schema.schema if m.schema == CONF_COVER_ACTION)
-        action_selector = schema.schema[action_marker]
-        labels = {opt["label"] for opt in action_selector.config["options"]}
-        assert "Close Cover (close_cover)" in labels
+    def test_open_time_labels_come_from_the_translations(self):
+        fields = cf._daily_open_time_fields({CONF_DAY_MODE_MAP: "home:Home"})
+        config = next(iter(fields.values())).config
+        assert config["options"] == ["sunrise", "skip"]
+        assert config["custom_value"] is True
+        for lang in ("en", "fr"):
+            options = _translations(lang)["selector"][config["translation_key"]]["options"]
+            assert set(options) == {"sunrise", "skip"}
 
     def test_defaults_pulled_from_existing_data(self):
         hass = _make_hass()

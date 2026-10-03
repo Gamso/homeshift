@@ -32,13 +32,13 @@
               "day_display_home": "Home",
               "day_display_work": "Work",
               "day_display_remote": "Remote",
-              "day_display_absence": "Absence"
+              "day_display_away": "Absence"
             },
             "data_description": {
               "day_display_home": "Nom affiché pour la clé home",
               "day_display_work": "Nom affiché pour la clé work",
               "day_display_remote": "Nom affiché pour la clé remote",
-              "day_display_absence": "Nom affiché pour la clé away"
+              "day_display_away": "Nom affiché pour la clé away"
             }
           },
           "defaults_section": {
@@ -196,13 +196,13 @@
               "day_display_home": "Home",
               "day_display_work": "Work",
               "day_display_remote": "Remote",
-              "day_display_absence": "Absence"
+              "day_display_away": "Absence"
             },
             "data_description": {
               "day_display_home": "Nom affiché pour la clé home",
               "day_display_work": "Nom affiché pour la clé work",
               "day_display_remote": "Nom affiché pour la clé remote",
-              "day_display_absence": "Nom affiché pour la clé away"
+              "day_display_away": "Nom affiché pour la clé away"
             }
           },
           "defaults_section": {
@@ -359,6 +359,20 @@
       },
       "covers_left_open": {
         "name": "Volets non fermés"
+      }
+    }
+  },
+  "selector": {
+    "cover_action": {
+      "options": {
+        "close_cover": "Fermer les volets (close_cover)",
+        "stop_cover": "Arrêter le mouvement (stop_cover)"
+      }
+    },
+    "daily_open_time": {
+      "options": {
+        "sunrise": "Lever du soleil (au plus tôt à l'heure d'ouverture minimale)",
+        "skip": "Ignorer (pas d'ouverture automatique)"
       }
     }
   },

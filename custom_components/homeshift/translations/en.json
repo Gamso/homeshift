@@ -32,13 +32,13 @@
               "day_display_home": "Home",
               "day_display_work": "Work",
               "day_display_remote": "Remote",
-              "day_display_absence": "Away"
+              "day_display_away": "Away"
             },
             "data_description": {
               "day_display_home": "Display name for key home",
               "day_display_work": "Display name for key work",
               "day_display_remote": "Display name for key remote",
-              "day_display_absence": "Display name for key away"
+              "day_display_away": "Display name for key away"
             }
           },
           "defaults_section": {
@@ -196,13 +196,13 @@
               "day_display_home": "Home",
               "day_display_work": "Work",
               "day_display_remote": "Remote",
-              "day_display_absence": "Away"
+              "day_display_away": "Away"
             },
             "data_description": {
               "day_display_home": "Display name for key home",
               "day_display_work": "Display name for key work",
               "day_display_remote": "Display name for key remote",
-              "day_display_absence": "Display name for key away"
+              "day_display_away": "Display name for key away"
             }
           },
           "defaults_section": {
@@ -359,6 +359,20 @@
       },
       "covers_left_open": {
         "name": "Covers Left Open"
+      }
+    }
+  },
+  "selector": {
+    "cover_action": {
+      "options": {
+        "close_cover": "Close the covers (close_cover)",
+        "stop_cover": "Stop the movement (stop_cover)"
+      }
+    },
+    "daily_open_time": {
+      "options": {
+        "sunrise": "Sunrise (floored at the earliest opening time)",
+        "skip": "Skip (do not open automatically)"
       }
     }
   },

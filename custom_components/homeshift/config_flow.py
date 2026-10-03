@@ -62,6 +62,9 @@ from .cover_manager import sun_time_at_elevation
 
 _LOGGER = logging.getLogger(__name__)
 
+# Translation key of the per-mode opening time selector ('sunrise', 'skip').
+DAILY_OPEN_TIME_SELECTOR = "daily_open_time"
+
 # Aliases for backwards compatibility
 _LOCALIZED_DEFAULTS = LOCALIZED_DEFAULTS
 _get_localized_defaults = get_localized_defaults
@@ -317,21 +320,11 @@ def _apply_covers_input(user_input: dict[str, Any]) -> dict[str, Any]:
     return {key: user_input.get(key, "") for key in _CLEARABLE_COVER_ENTITIES} | user_input
 
 
-def _ui_lang(hass) -> str:
-    """Return the HA instance language as a bare ISO 639-1 code.
-
-    Selector option labels are built in Python (the integration has no
-    'selector' translation section), so they need the language here.
-    """
-    raw_lang = getattr(hass.config, "language", "en") if hasattr(hass, "config") else "en"
-    return (raw_lang or "en").split("-")[0].lower()
-
-
 def _covers_schema(hass, data: dict[str, Any]) -> vol.Schema:
-    """Build the cover heat-control form schema."""
-    lang = _ui_lang(hass)
-    close_label = "Fermer les volets (close_cover)" if lang == "fr" else "Close Cover (close_cover)"
-    stop_label = "Arrêter le mouvement (stop_cover)" if lang == "fr" else "Stop movement (stop_cover)"
+    """Build the cover heat-control form schema.
+
+    Option labels come from the 'selector' section of the translations.
+    """
     return vol.Schema(
         {
             vol.Optional(
@@ -360,11 +353,9 @@ def _covers_schema(hass, data: dict[str, Any]) -> vol.Schema:
                 default=data.get(CONF_COVER_ACTION, DEFAULT_COVER_ACTION),
             ): selector.SelectSelector(
                 selector.SelectSelectorConfig(
-                    options=[
-                        {"value": "close_cover", "label": close_label},
-                        {"value": "stop_cover", "label": stop_label},
-                    ],
+                    options=["close_cover", "stop_cover"],
                     mode=selector.SelectSelectorMode.DROPDOWN,
+                    translation_key=CONF_COVER_ACTION,
                 )
             ),
             _entity_marker(
@@ -396,12 +387,10 @@ def _daily_open_time_fields(data: dict[str, Any]) -> dict:
     current_map = _parse_day_mode_map(data.get(CONF_DAILY_COVER_OPEN_TIME_MAP, ""))
     time_or_special_selector = selector.SelectSelector(
         selector.SelectSelectorConfig(
-            options=[
-                {"value": "sunrise", "label": "Sunrise (floored at Earliest Open Time)"},
-                {"value": "skip", "label": "Skip (do not open automatically)"},
-            ],
+            options=["sunrise", "skip"],
             custom_value=True,
             mode=selector.SelectSelectorMode.DROPDOWN,
+            translation_key=DAILY_OPEN_TIME_SELECTOR,
         )
     )
     fields: dict = {}

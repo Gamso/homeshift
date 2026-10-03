@@ -185,6 +185,12 @@ class CoverManager:
         self._entry = entry
         self.cover_open_time: str | None = None
         self.daily_close_time: str | None = None
+        # Start of heat protection's window on a day the covers do not open
+        # by themselves ('skip', or an open time that could not be resolved):
+        # the sunrise-based time. Heat protection must not depend on the
+        # opening: a skip day (Away) is precisely the day nobody is home to
+        # close a south-facing cover by hand.
+        self._heat_window_fallback: str | None = None
         # Which trigger produced daily_close_time — CLOSE_TRIGGER_ELEVATION,
         # or CLOSE_TRIGGER_SUNSET when the elevation turned out to be
         # unreachable today. The Cover Close Time sensor reports it, so a
@@ -288,11 +294,27 @@ class CoverManager:
         _LOGGER.debug("Cover heat protection: listening for changes on '%s'", temp_sensor)
         return async_track_state_change_event(self._hass, [temp_sensor], _on_temp_change)
 
+    @property
+    def heat_window_start(self) -> str | None:
+        """Start of today's heat protection window (HH:MM), or None.
+
+        The opening time when the covers open today, the sunrise-based time
+        otherwise ('skip' only suppresses the opening, not the protection).
+        """
+        return self.cover_open_time or self._heat_window_fallback
+
+    def heat_window_start_datetime(self, now: datetime) -> datetime | None:
+        """Return today's heat window start combined with now's date/tz, or None."""
+        start = _parse_time_str(self.heat_window_start) if self.heat_window_start else None
+        if start is None:
+            return None
+        return now.replace(hour=start.hour, minute=start.minute, second=0, microsecond=0)
+
     def _is_within_daily_window(self, now: datetime) -> bool:
-        """Return True when now falls between cover_open_time and daily_close_time."""
-        if self.cover_open_time is None or self.daily_close_time is None:
+        """Return True when now falls between the heat window start and daily_close_time."""
+        if self.heat_window_start is None or self.daily_close_time is None:
             return False
-        open_time = _parse_time_str(self.cover_open_time)
+        open_time = _parse_time_str(self.heat_window_start)
         close_time = _parse_time_str(self.daily_close_time)
         if open_time is None or close_time is None:
             return False
@@ -302,10 +324,11 @@ class CoverManager:
         """Run proactive and reactive heat protection for the configured cover.
 
         The active window is derived entirely from the Daily Cover Schedule's
-        computed cover_open_time/daily_close_time — heat protection does
+        computed times, from the opening time (or, on a 'skip' day, the
+        sunrise-based time) to daily_close_time, so heat protection does
         nothing until that feature is configured and has computed today's
         times. Within the window, the cover closes when the temperature
-        exceeds the threshold (or, once per day at cover_open_time, when
+        exceeds the threshold (or, once per day at the window start, when
         today's forecast high does). It never reopens itself once closed —
         it stays closed for the rest of the day; only the next day's normal
         open (or the daily schedule's own unconditional evening close)
@@ -317,7 +340,7 @@ class CoverManager:
         if not cover_entities or not temp_sensor:
             return
 
-        if self.cover_open_time is None or self.daily_close_time is None:
+        if self.heat_window_start is None or self.daily_close_time is None:
             _LOGGER.debug(
                 "Cover heat protection: waiting on Daily Cover Schedule's computed "
                 "open/close times (not configured yet, or not computed today)"
@@ -329,7 +352,17 @@ class CoverManager:
             await self._async_check_reactive_close(now, cover_entities, temp_sensor)
 
     async def _async_apply_cover_action(self, cover_entities: list[str]) -> None:
-        """Press the configured My button, or call the configured cover service."""
+        """Press the configured My button, or call the configured cover service.
+
+        Nothing is sent when every cover already reads closed — typically a
+        'skip' day, the covers still down from last night: a My press or a
+        stop would only move a closed cover up to its favourite position.
+        """
+        states = [self._hass.states.get(entity_id) for entity_id in cover_entities]
+        if states and all(state is not None and state.state == "closed" for state in states):
+            _LOGGER.debug("Cover heat protection: %s already closed, nothing to send", cover_entities)
+            return
+
         my_button = self._config.get(CONF_COVER_MY_BUTTON, "")
 
         if my_button:
@@ -377,7 +410,7 @@ class CoverManager:
         if self._proactive_checked_date == today:
             return
 
-        open_time = _parse_time_str(self.cover_open_time)
+        open_time = _parse_time_str(self.heat_window_start) if self.heat_window_start else None
         if open_time is None or now.time() < open_time:
             return
 
@@ -475,7 +508,7 @@ class CoverManager:
         if not cover_entities or not temp_sensor:
             return None
 
-        if self.cover_open_time is None or self.daily_close_time is None:
+        if self.heat_window_start is None or self.daily_close_time is None:
             return None
 
         if not self._is_within_daily_window(now):
@@ -662,10 +695,8 @@ class CoverManager:
         if raw_value == "skip":
             self.cover_open_time = None
         elif raw_value == "sunrise":
-            sunrise_time = self._get_next_sun_time("next_rising")
-            earliest_time = _parse_time_str(self._config.get(CONF_SUNRISE_EARLIEST, DEFAULT_SUNRISE_EARLIEST))
-            if sunrise_time is not None and earliest_time is not None:
-                target = sunrise_time if sunrise_time > earliest_time else earliest_time
+            target = self._sunrise_open_time()
+            if target is not None:
                 self.cover_open_time = target.strftime("%H:%M")
             else:
                 _LOGGER.warning("Daily cover schedule: could not determine sunrise/earliest open time")
@@ -683,6 +714,15 @@ class CoverManager:
         close_time = self._resolve_close_time(now)
         self.daily_close_time = close_time.strftime("%H:%M") if close_time is not None else None
 
+        # No opening today: heat protection still starts at the sunrise-based
+        # time (or the earliest allowed one when sunrise is unknown).
+        fallback = None
+        if self.cover_open_time is None:
+            fallback = self._sunrise_open_time() or _parse_time_str(
+                self._config.get(CONF_SUNRISE_EARLIEST, DEFAULT_SUNRISE_EARLIEST)
+            )
+        self._heat_window_fallback = fallback.strftime("%H:%M") if fallback is not None else None
+
         _LOGGER.info(
             "Daily cover schedule: open_time=%s, close_time=%s via %s (day_mode=%s)",
             self.cover_open_time,
@@ -690,6 +730,14 @@ class CoverManager:
             self.daily_close_trigger,
             day_mode_key,
         )
+
+    def _sunrise_open_time(self) -> dt_time | None:
+        """Return sunrise floored at CONF_SUNRISE_EARLIEST, or None when unknown."""
+        sunrise_time = self._get_next_sun_time("next_rising")
+        earliest_time = _parse_time_str(self._config.get(CONF_SUNRISE_EARLIEST, DEFAULT_SUNRISE_EARLIEST))
+        if sunrise_time is None or earliest_time is None:
+            return None
+        return sunrise_time if sunrise_time > earliest_time else earliest_time
 
     def open_datetime(self, now: datetime) -> datetime | None:
         """Return today's computed cover_open_time combined with now's date/tz.

@@ -321,7 +321,9 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
         def _on_cover_timer(_now: datetime) -> None:
             self.hass.async_create_task(self._async_run_cover_checks())
 
-        open_at = self._cover_manager.open_datetime(now)
+        # On a 'skip' day the covers do not open, but heat protection's
+        # window still starts (at the sunrise-based time): fire then instead.
+        open_at = self._cover_manager.open_datetime(now) or self._cover_manager.heat_window_start_datetime(now)
         if open_at is not None:
             self._cancel_cover_open_timer = async_track_point_in_time(self.hass, _on_cover_timer, open_at)
             _LOGGER.debug("Scheduled cover open timer at %s", open_at)

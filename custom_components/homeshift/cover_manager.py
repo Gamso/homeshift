@@ -23,6 +23,7 @@ from astral.sun import (
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.event import EventStateChangedData, async_track_state_change_event
 from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
@@ -351,28 +352,39 @@ class CoverManager:
             await self._async_check_proactive_close(now, cover_entities)
             await self._async_check_reactive_close(now, cover_entities, temp_sensor)
 
-    async def _async_apply_cover_action(self, cover_entities: list[str]) -> None:
+    async def _async_call_service(self, domain: str, service: str, entity_id: str | list[str], context: str) -> bool:
+        """Call a cover/button service; log a failure instead of raising it.
+
+        These calls run inside the coordinator update. Letting a
+        HomeAssistantError through (a Somfy API timeout, a removed entity)
+        failed the whole update and turned every HomeShift entity
+        unavailable until the next poll. Returns whether the call succeeded,
+        so the caller only records an action as done once it was.
+        """
+        try:
+            await self._hass.services.async_call(domain, service, {"entity_id": entity_id}, blocking=True)
+        except HomeAssistantError as err:
+            _LOGGER.warning("%s: %s.%s failed for %s: %s", context, domain, service, entity_id, err)
+            return False
+        return True
+
+    async def _async_apply_cover_action(self, cover_entities: list[str]) -> bool:
         """Press the configured My button, or call the configured cover service.
 
         Nothing is sent when every cover already reads closed — typically a
         'skip' day, the covers still down from last night: a My press or a
         stop would only move a closed cover up to its favourite position.
+        Returns False when the service call failed.
         """
         states = [self._hass.states.get(entity_id) for entity_id in cover_entities]
         if states and all(state is not None and state.state == "closed" for state in states):
             _LOGGER.debug("Cover heat protection: %s already closed, nothing to send", cover_entities)
-            return
+            return True
 
         my_button = self._config.get(CONF_COVER_MY_BUTTON, "")
 
         if my_button:
-            await self._hass.services.async_call(
-                "button",
-                "press",
-                {"entity_id": my_button},
-                blocking=True,
-            )
-            return
+            return await self._async_call_service("button", "press", my_button, "Cover heat protection")
 
         configured_cover_action = self._config.get(CONF_COVER_ACTION, DEFAULT_COVER_ACTION)
         allowed_cover_actions = {"close_cover", "stop_cover"}
@@ -383,12 +395,7 @@ class CoverManager:
                 configured_cover_action,
                 DEFAULT_COVER_ACTION,
             )
-        await self._hass.services.async_call(
-            "cover",
-            cover_action,
-            {"entity_id": cover_entities},
-            blocking=True,
-        )
+        return await self._async_call_service("cover", cover_action, cover_entities, "Cover heat protection")
 
     async def _async_check_proactive_close(self, now: datetime, cover_entities: list[str]) -> None:
         """Close the cover ahead of time when today's forecast high is hot enough.
@@ -399,8 +406,8 @@ class CoverManager:
         undo. Checking the day's forecast once, at cover_open_time, lets the
         cover close before that gain happens (or skip the open->close flicker
         entirely if it's already known to be a hot day).
-        Runs at most once per calendar day; a failed forecast lookup is
-        retried on the next call instead of being marked done.
+        Runs at most once per calendar day; a failed forecast lookup or a
+        failed close is retried on the next call instead of being marked done.
         """
         weather_entity = self._config.get(CONF_COVER_WEATHER_ENTITY, "")
         if not weather_entity:
@@ -418,10 +425,9 @@ class CoverManager:
         if forecast_high is None:
             return
 
-        self._proactive_checked_date = today
-
         threshold = float(self._config.get(CONF_COVER_FORECAST_THRESHOLD, DEFAULT_COVER_FORECAST_THRESHOLD))
         if forecast_high <= threshold:
+            self._proactive_checked_date = today
             await self._async_save_state()
             return
 
@@ -431,7 +437,9 @@ class CoverManager:
             threshold,
             cover_entities,
         )
-        await self._async_apply_cover_action(cover_entities)
+        if not await self._async_apply_cover_action(cover_entities):
+            return
+        self._proactive_checked_date = today
         self._heat_closed = True
         await self._async_save_state()
 
@@ -490,7 +498,8 @@ class CoverManager:
             threshold,
             cover_entities,
         )
-        await self._async_apply_cover_action(cover_entities)
+        if not await self._async_apply_cover_action(cover_entities):
+            return
         self._heat_closed = True
         await self._async_save_state()
 
@@ -809,11 +818,9 @@ class CoverManager:
                     targets,
                     self.cover_open_time,
                 )
-                await self._hass.services.async_call(
-                    "cover", "open_cover", {"entity_id": targets}, blocking=True
-                )
-                self._daily_opened_date = today
-                await self._async_save_state()
+                if await self._async_call_service("cover", "open_cover", targets, "Daily cover schedule"):
+                    self._daily_opened_date = today
+                    await self._async_save_state()
 
         if self._daily_closed_date != today and self.daily_close_time:
             close_time = _parse_time_str(self.daily_close_time)
@@ -831,9 +838,11 @@ class CoverManager:
                         close_targets,
                         self.daily_close_time,
                     )
-                    await self._hass.services.async_call(
-                        "cover", "close_cover", {"entity_id": close_targets}, blocking=True
+                    succeeded = await self._async_call_service(
+                        "cover", "close_cover", close_targets, "Daily cover schedule"
                     )
+                else:
+                    succeeded = True
 
                 for cover, button in presses:
                     _LOGGER.info(
@@ -843,8 +852,9 @@ class CoverManager:
                         cover,
                         self.daily_close_time,
                     )
-                    await self._hass.services.async_call(
-                        "button", "press", {"entity_id": button}, blocking=True
+                    succeeded = (
+                        await self._async_call_service("button", "press", button, "Daily cover schedule")
+                        and succeeded
                     )
 
                 if not close_targets and not presses:
@@ -853,6 +863,11 @@ class CoverManager:
                         "is behind an open window",
                         self.daily_close_time,
                     )
+
+                if not succeeded:
+                    # Retried on the next poll: close_cover is idempotent, and
+                    # a My press on a cover already at its position is a no-op.
+                    return
 
                 self._daily_closed_date = today
                 self.covers_left_open = blocked

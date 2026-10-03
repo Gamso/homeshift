@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone, UTC
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -640,7 +640,7 @@ class TestStatePersistence:
         hass = make_mock_hass()
         coordinator = HomeShiftCoordinator(hass, make_mock_entry(override_duration=120))
         coordinator._store = self._make_store(None)
-        now = datetime(2026, 3, 4, 10, 0, 0, tzinfo=timezone.utc)  # Wednesday
+        now = datetime(2026, 3, 4, 10, 0, 0, tzinfo=UTC)  # Wednesday
 
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
             mock_dt.now.return_value = now
@@ -657,7 +657,7 @@ class TestStatePersistence:
             await restarted.async_restore_state()
             await restarted.async_update_data()
 
-        assert restarted.override_until == datetime(2026, 3, 4, 12, 0, 0, tzinfo=timezone.utc)
+        assert restarted.override_until == datetime(2026, 3, 4, 12, 0, 0, tzinfo=UTC)
         assert restarted.day_mode == "Maison"
 
     async def test_an_expired_override_is_not_restored(self):
@@ -668,7 +668,7 @@ class TestStatePersistence:
         )
 
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
-            mock_dt.now.return_value = datetime(2026, 3, 4, 12, 30, 0, tzinfo=timezone.utc)
+            mock_dt.now.return_value = datetime(2026, 3, 4, 12, 30, 0, tzinfo=UTC)
             mock_dt.parse_datetime.side_effect = datetime.fromisoformat
             await coordinator.async_restore_state()
 
@@ -2222,7 +2222,7 @@ class TestCoverOpenCloseDatetime:
         assert coordinator._cover_manager.close_datetime(datetime(2026, 7, 1, 0, 5, 0)) is None
 
     def test_open_datetime_preserves_tzinfo(self):
-        from datetime import timezone, timedelta as tdelta
+        from datetime import timedelta as tdelta
 
         hass = make_mock_hass()
         coordinator = HomeShiftCoordinator(hass, make_mock_entry())
@@ -3090,7 +3090,7 @@ class TestDailyCoverCloseOnSunElevation:
 
     async def _run(self, hass, entry, at_elevation):
         """Compute the schedule with the astral elevation lookup stubbed out."""
-        from datetime import timedelta as tdelta, timezone
+        from datetime import timedelta as tdelta
 
         coordinator = HomeShiftCoordinator(hass, entry)
         with patch("custom_components.homeshift.cover_manager.dt_util") as mock_dt:

@@ -7,7 +7,7 @@ Ce script crée automatiquement :
 
 Utilisation:
     python scripts/init_calendars.py <ha_url> <api_token>
-    
+
 Exemple:
     python scripts/init_calendars.py http://localhost:8123 eyJhbGc...
 """
@@ -20,12 +20,12 @@ import requests
 
 def create_local_calendar(ha_url: str, token: str, name: str) -> bool:
     """Crée un calendrier local via l'API Home Assistant.
-    
+
     Args:
         ha_url: URL de Home Assistant (ex: http://localhost:8123)
         token: Token d'authentification
         name: Nom du calendrier
-        
+
     Returns:
         True si succès, False sinon
     """
@@ -33,14 +33,14 @@ def create_local_calendar(ha_url: str, token: str, name: str) -> bool:
         "Authorization": f"Bearer {token}",
         "Content-Type": "application/json",
     }
-    
+
     data = {
         "action": "create",
         "name": name,
     }
-    
+
     url = f"{ha_url}/api/calendars"
-    
+
     try:
         response = requests.post(url, json=data, headers=headers, timeout=5)
         response.raise_for_status()
@@ -53,11 +53,11 @@ def create_local_calendar(ha_url: str, token: str, name: str) -> bool:
 
 def get_local_calendars(ha_url: str, token: str) -> list:
     """Récupère la liste des calendriers locaux existants.
-    
+
     Args:
         ha_url: URL de Home Assistant
         token: Token d'authentification
-        
+
     Returns:
         Liste des calendriers
     """
@@ -65,9 +65,9 @@ def get_local_calendars(ha_url: str, token: str) -> list:
         "Authorization": f"Bearer {token}",
         "Content-Type": "application/json",
     }
-    
+
     url = f"{ha_url}/api/calendars"
-    
+
     try:
         response = requests.get(url, headers=headers, timeout=5)
         response.raise_for_status()
@@ -95,14 +95,14 @@ def main():
         action="store_true",
         help="Vérifier seulement, ne pas créer",
     )
-    
+
     args = parser.parse_args()
-    
+
     ha_url = args.ha_url.rstrip("/")
     token = args.token
-    
+
     print(f"Connexion à Home Assistant: {ha_url}")
-    
+
     # Vérifier la connexion
     try:
         headers = {"Authorization": f"Bearer {token}"}
@@ -112,22 +112,22 @@ def main():
     except requests.exceptions.RequestException as err:
         print(f"✗ Erreur de connexion: {err}")
         sys.exit(1)
-    
+
     # Vérifier les calendriers existants
     existing = get_local_calendars(ha_url, token)
     existing_names = [cal.get("name", "") for cal in existing]
-    
+
     print(f"Calendriers existants: {existing_names if existing_names else 'Aucun'}\n")
-    
+
     if args.check_only:
         return
-    
+
     # Créer les calendriers manquants
     calendars_to_create = [
         "Télétravail",
         "Jours fériés",
     ]
-    
+
     created_count = 0
     for calendar_name in calendars_to_create:
         if calendar_name not in existing_names:
@@ -135,7 +135,7 @@ def main():
                 created_count += 1
         else:
             print(f"⊘ Calendrier '{calendar_name}' existe déjà")
-    
+
     print(f"\n✓ Initialisation terminée ({created_count} créé(s))")
 
 

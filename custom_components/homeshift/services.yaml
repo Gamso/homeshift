@@ -7,3 +7,13 @@ sync_calendar:
   name: Sync Calendar
   description: Re-sync the calendar and update the current day mode
   fields: {}
+
+open_covers:
+  name: Open covers
+  description: Open the covers of the daily schedule now, whatever the time or the day mode
+  fields: {}
+
+close_covers:
+  name: Close covers
+  description: Close the covers of the daily schedule now, like the evening close (open window and My button rules included)
+  fields: {}

@@ -126,6 +126,8 @@ SENSOR_COVER_OPEN_TIME = "cover_open_time"
 SENSOR_COVER_CLOSE_TIME = "cover_close_time"
 BINARY_SENSOR_COVER_HEAT_ACTIVE = "cover_heat_active"
 BINARY_SENSOR_COVERS_LEFT_OPEN = "covers_left_open"
+BUTTON_OPEN_COVERS = "open_covers"
+BUTTON_CLOSE_COVERS = "close_covers"
 
 # Sentinel value used as today_type when no calendar event is active
 EVENT_NONE = "None"
@@ -133,6 +135,8 @@ EVENT_NONE = "None"
 # Service names
 SERVICE_REFRESH_SCHEDULERS = "refresh_schedulers"
 SERVICE_SYNC_CALENDAR = "sync_calendar"
+SERVICE_OPEN_COVERS = "open_covers"
+SERVICE_CLOSE_COVERS = "close_covers"
 
 # Attributes
 ATTR_DAY_MODE = "day_mode"

@@ -825,45 +825,9 @@ class CoverManager:
         if self._daily_closed_date != today and self.daily_close_time:
             close_time = _parse_time_str(self.daily_close_time)
             if close_time is not None and now.time() >= close_time:
-                blocked = self._covers_behind_an_open_window()
-                presses = self._my_button_presses(blocked)
-                # Covers with an open window, or with their own My button, are
-                # handled separately — everything else gets one close_cover.
-                handled = set(blocked) | self._covers_with_my_button()
-                close_targets = [entity_id for entity_id in targets if entity_id not in handled]
-
-                if close_targets:
-                    _LOGGER.info(
-                        "Daily cover schedule: closing covers %s (close_time=%s)",
-                        close_targets,
-                        self.daily_close_time,
-                    )
-                    succeeded = await self._async_call_service(
-                        "cover", "close_cover", close_targets, "Daily cover schedule"
-                    )
-                else:
-                    succeeded = True
-
-                for cover, button in presses:
-                    _LOGGER.info(
-                        "Daily cover schedule: pressing My position button '%s' for cover '%s' "
-                        "(close_time=%s)",
-                        button,
-                        cover,
-                        self.daily_close_time,
-                    )
-                    succeeded = (
-                        await self._async_call_service("button", "press", button, "Daily cover schedule")
-                        and succeeded
-                    )
-
-                if not close_targets and not presses:
-                    _LOGGER.warning(
-                        "Daily cover schedule: nothing closed at %s — every configured cover "
-                        "is behind an open window",
-                        self.daily_close_time,
-                    )
-
+                succeeded, blocked = await self._async_close_targets(
+                    targets, f"Daily cover schedule (close_time={self.daily_close_time})"
+                )
                 if not succeeded:
                     # Retried on the next poll: close_cover is idempotent, and
                     # a My press on a cover already at its position is a no-op.
@@ -873,3 +837,71 @@ class CoverManager:
                 self.covers_left_open = blocked
                 self.covers_left_open_date = today
                 await self._async_save_state()
+
+    async def _async_close_targets(self, targets: list[str], context: str) -> tuple[bool, dict[str, str]]:
+        """Close the daily-schedule covers the way the evening close does.
+
+        A cover whose window sensor reports the window open is left up (and
+        warned about); a cover with a My position button gets a press of
+        that button instead of close_cover; everything else gets one
+        close_cover. Returns whether every service call succeeded, and the
+        covers left up as {cover: window sensor}.
+        """
+        blocked = self._covers_behind_an_open_window()
+        presses = self._my_button_presses(blocked)
+        # Covers with an open window, or with their own My button, are
+        # handled separately — everything else gets one close_cover.
+        handled = set(blocked) | self._covers_with_my_button()
+        close_targets = [entity_id for entity_id in targets if entity_id not in handled]
+
+        succeeded = True
+        if close_targets:
+            _LOGGER.info("%s: closing covers %s", context, close_targets)
+            succeeded = await self._async_call_service("cover", "close_cover", close_targets, context)
+
+        for cover, button in presses:
+            _LOGGER.info("%s: pressing My position button '%s' for cover '%s'", context, button, cover)
+            succeeded = await self._async_call_service("button", "press", button, context) and succeeded
+
+        if not close_targets and not presses:
+            _LOGGER.warning("%s: nothing closed — every configured cover is behind an open window", context)
+
+        return succeeded, blocked
+
+    # -- manual actions ----------------------------------------------------
+
+    async def async_open_covers_now(self) -> bool:
+        """Open every daily-schedule cover now, whatever the time or the mode.
+
+        Same command as the scheduled morning open, sent on demand (the
+        Open covers button, the homeshift.open_covers service). It runs even
+        on a 'skip' day, and does not touch the "already opened today"
+        state: the scheduled open still runs at its time (an open command on
+        open covers changes nothing). Returns whether the call succeeded;
+        a failure is logged, never raised.
+        """
+        targets = self._daily_cover_targets()
+        if not targets:
+            _LOGGER.warning("Manual cover open: no cover configured in the daily schedule")
+            return False
+        async with self._action_lock:
+            _LOGGER.info("Manual cover open: opening covers %s", targets)
+            return await self._async_call_service("cover", "open_cover", targets, "Manual cover open")
+
+    async def async_close_covers_now(self) -> bool:
+        """Close every daily-schedule cover now, the way the evening close does.
+
+        Same rules as the scheduled close: a cover behind an open window is
+        left up (and warned about in the log), a cover with a My position
+        button gets a press of that button. It does not touch the "already
+        closed today" state nor the covers-left-open warning, which belong
+        to the scheduled close: that close still runs at its time. Returns
+        whether every call succeeded; a failure is logged, never raised.
+        """
+        targets = self._daily_cover_targets()
+        if not targets:
+            _LOGGER.warning("Manual cover close: no cover configured in the daily schedule")
+            return False
+        async with self._action_lock:
+            succeeded, _blocked = await self._async_close_targets(targets, "Manual cover close")
+            return succeeded

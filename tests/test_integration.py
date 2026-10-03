@@ -322,3 +322,97 @@ async def test_french_setup_without_the_mapping_step_drives_the_schedulers(hass:
     assert "switch.schedule_bureau" in turned_on
     assert "switch.schedule_maison" in turned_off
     assert "switch.schedule_bureau" not in turned_off
+
+
+# ---------------------------------------------------------------------------
+# Manual cover control: buttons and services
+# ---------------------------------------------------------------------------
+
+
+async def test_cover_buttons_exist_only_with_daily_covers(hass: HomeAssistant) -> None:
+    entry = make_entry()
+    await setup_entry(hass, entry)
+    ids = homeshift_entity_ids(hass, entry)
+    assert "button.homeshift_open_covers" not in ids
+    assert "button.homeshift_close_covers" not in ids
+
+    hass.config_entries.async_update_entry(entry, options={CONF_DAILY_COVER_ITEMS: COVER_ITEMS})
+    await hass.async_block_till_done()
+    ids = homeshift_entity_ids(hass, entry)
+    assert {"button.homeshift_open_covers", "button.homeshift_close_covers"} <= ids
+
+    hass.config_entries.async_update_entry(entry, options={})
+    await hass.async_block_till_done()
+    ids = homeshift_entity_ids(hass, entry)
+    assert "button.homeshift_open_covers" not in ids
+
+
+@pytest.mark.parametrize("language", ["en", "fr"])
+async def test_cover_button_ids_and_names(hass: HomeAssistant, language: str) -> None:
+    hass.config.language = language
+    entry = make_entry(options={CONF_DAILY_COVER_ITEMS: COVER_ITEMS})
+    await setup_entry(hass, entry)
+
+    registry = er.async_get(hass)
+    open_entry = registry.async_get("button.homeshift_open_covers")
+    close_entry = registry.async_get("button.homeshift_close_covers")
+    assert open_entry.unique_id == f"{entry.entry_id}_open_covers"
+    assert close_entry.unique_id == f"{entry.entry_id}_close_covers"
+    assert open_entry.translation_key == "open_covers"
+    assert close_entry.translation_key == "close_covers"
+    expected = {"en": "HomeShift Open covers", "fr": "HomeShift Ouvrir les volets"}[language]
+    assert hass.states.get("button.homeshift_open_covers").attributes["friendly_name"] == expected
+    assert hass.states.get("button.homeshift_open_covers").attributes["icon"] == "mdi:window-shutter-open"
+    assert hass.states.get("button.homeshift_close_covers").attributes["icon"] == "mdi:window-shutter"
+
+
+@pytest.mark.parametrize(
+    ("press", "service"),
+    [
+        (("button", "press", {"entity_id": "button.homeshift_open_covers"}), "open_cover"),
+        (("button", "press", {"entity_id": "button.homeshift_close_covers"}), "close_cover"),
+        ((DOMAIN, "open_covers", {}), "open_cover"),
+        ((DOMAIN, "close_covers", {}), "close_cover"),
+    ],
+)
+async def test_buttons_and_services_move_the_covers(hass: HomeAssistant, freezer, press: tuple, service: str) -> None:
+    from pytest_homeassistant_custom_component.common import async_mock_service
+
+    freezer.move_to("2026-03-03 11:00:00+00:00")  # 03:00 local: no scheduled open or close due
+    entry = make_entry(options={CONF_DAILY_COVER_ITEMS: COVER_ITEMS})
+    await setup_entry(hass, entry)
+    calls = async_mock_service(hass, "cover", service)
+
+    domain, name, data = press
+    await hass.services.async_call(domain, name, data, blocking=True)
+    await hass.async_block_till_done()
+
+    assert len(calls) == 1
+    assert calls[0].data["entity_id"] == ["cover.salon"]
+
+
+async def test_a_failing_cover_leaves_the_buttons_available(hass: HomeAssistant) -> None:
+    """No cover service registered: the press is logged, nothing turns unavailable."""
+    from homeassistant.const import STATE_UNAVAILABLE
+
+    entry = make_entry(options={CONF_DAILY_COVER_ITEMS: COVER_ITEMS})
+    await setup_entry(hass, entry)
+
+    await hass.services.async_call("button", "press", {"entity_id": "button.homeshift_close_covers"}, blocking=True)
+    await hass.async_block_till_done()
+
+    assert hass.states.get("button.homeshift_close_covers").state != STATE_UNAVAILABLE
+    assert hass.states.get("select.homeshift_day_mode").state != STATE_UNAVAILABLE
+
+
+async def test_cover_services_are_removed_with_the_entry(hass: HomeAssistant) -> None:
+    entry = make_entry(options={CONF_DAILY_COVER_ITEMS: COVER_ITEMS})
+    await setup_entry(hass, entry)
+    assert hass.services.has_service(DOMAIN, "open_covers")
+    assert hass.services.has_service(DOMAIN, "close_covers")
+
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert not hass.services.has_service(DOMAIN, "open_covers")
+    assert not hass.services.has_service(DOMAIN, "close_covers")

@@ -1358,6 +1358,16 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
                 "No schedulers assigned to day_mode '%s' (key=%s)", self._day_mode, mode_key
             )
 
+    async def async_open_covers(self) -> None:
+        """Open the daily-schedule covers now (button / homeshift.open_covers)."""
+        await self._cover_manager.async_open_covers_now()
+        self.async_update_listeners()
+
+    async def async_close_covers(self) -> None:
+        """Close the daily-schedule covers now (button / homeshift.close_covers)."""
+        await self._cover_manager.async_close_covers_now()
+        self.async_update_listeners()
+
     async def _async_switch(self, service: str, entity_ids: list[str]) -> None:
         """Call switch.turn_on/turn_off and wait for it, logging a failure.
 

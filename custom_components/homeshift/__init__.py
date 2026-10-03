@@ -29,6 +29,8 @@ from .const import (
     LEGACY_CLOSE_MODE_ELEVATION,
     LOCALIZED_DEFAULTS,
     SENSOR_NEXT_SCAN,
+    SERVICE_CLOSE_COVERS,
+    SERVICE_OPEN_COVERS,
     SERVICE_REFRESH_SCHEDULERS,
     SERVICE_SYNC_CALENDAR,
     get_localized_defaults,
@@ -40,7 +42,15 @@ from .cover_manager import elevation_for_sunset_offset
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS: list[Platform] = [Platform.SELECT, Platform.NUMBER, Platform.SENSOR, Platform.BINARY_SENSOR]
+PLATFORMS: list[Platform] = [
+    Platform.SELECT,
+    Platform.NUMBER,
+    Platform.SENSOR,
+    Platform.BINARY_SENSOR,
+    Platform.BUTTON,
+]
+
+SERVICES = (SERVICE_REFRESH_SCHEDULERS, SERVICE_SYNC_CALENDAR, SERVICE_OPEN_COVERS, SERVICE_CLOSE_COVERS)
 
 # Settings the v3 -> v4 migration folds into CONF_DAILY_COVER_CLOSE_ELEVATION.
 _RETIRED_CLOSE_KEYS = frozenset({CONF_DAILY_COVER_CLOSE_MODE, CONF_DAILY_COVER_CLOSE_OFFSET_MINUTES})
@@ -330,7 +340,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             # would still appear in the UI and act on an unloaded coordinator
             # (writing to its store, calling cover/switch services).
             hass.data.pop(DOMAIN)
-            for service in (SERVICE_REFRESH_SCHEDULERS, SERVICE_SYNC_CALENDAR):
+            for service in SERVICES:
                 hass.services.async_remove(DOMAIN, service)
 
     return unload_ok
@@ -366,3 +376,18 @@ def async_setup_services(hass: HomeAssistant) -> None:
     hass.services.async_register(
         DOMAIN, SERVICE_SYNC_CALENDAR, handle_sync_calendar
     )
+
+    async def handle_open_covers(_call) -> None:
+        """Open the daily-schedule covers now, whatever the time or the mode."""
+        _LOGGER.info("Service call: open_covers")
+        for coordinator in _coordinators():
+            await coordinator.async_open_covers()
+
+    async def handle_close_covers(_call) -> None:
+        """Close the daily-schedule covers now, like the evening close."""
+        _LOGGER.info("Service call: close_covers")
+        for coordinator in _coordinators():
+            await coordinator.async_close_covers()
+
+    hass.services.async_register(DOMAIN, SERVICE_OPEN_COVERS, handle_open_covers)
+    hass.services.async_register(DOMAIN, SERVICE_CLOSE_COVERS, handle_close_covers)

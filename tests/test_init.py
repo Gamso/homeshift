@@ -373,7 +373,7 @@ class TestUnloadRemovesServices:
 
         assert result is True
         removed = {call.args[1] for call in hass.services.async_remove.call_args_list}
-        assert removed == {SERVICE_REFRESH_SCHEDULERS, SERVICE_SYNC_CALENDAR}
+        assert removed == {SERVICE_REFRESH_SCHEDULERS, SERVICE_SYNC_CALENDAR, "open_covers", "close_covers"}
         assert DOMAIN not in hass.data
 
     async def test_services_kept_while_another_entry_is_loaded(self):

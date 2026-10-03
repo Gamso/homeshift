@@ -7,6 +7,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EVENT_HOMEASSISTANT_STARTED, Platform
 from homeassistant.core import CoreState, Event, HomeAssistant, callback
 from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
 from .const import (
@@ -33,6 +34,7 @@ from .const import (
     get_localized_defaults,
     parse_key_value_map,
 )
+from . import coordinator as coordinator_module, cover_manager as cover_manager_module
 from .coordinator import HomeShiftCoordinator
 from .cover_manager import elevation_for_sunset_offset
 
@@ -301,6 +303,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     _LOGGER.info("HomeShift integration loaded successfully (entry_id=%s)", entry.entry_id)
 
     return True
+
+
+async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Delete the entry's persisted state when the integration is removed.
+
+    The coordinator and the cover manager each keep a store named after the
+    entry id; nothing else would ever delete them.
+    """
+    for module in (coordinator_module, cover_manager_module):
+        await Store(hass, module.STORAGE_VERSION, f"{module.STORAGE_KEY}.{entry.entry_id}").async_remove()
 
 
 async def _async_reload_on_options_update(hass: HomeAssistant, entry: ConfigEntry) -> None:

@@ -116,6 +116,37 @@ async def test_unconfigured_features_leave_no_stale_entity(hass: HomeAssistant) 
     assert "select.homeshift_day_mode" in ids
 
 
+async def test_removing_the_entry_deletes_its_stores(hass: HomeAssistant, hass_storage: dict) -> None:
+    """No orphan .storage files once the integration is deleted (audit A4)."""
+    entry = make_entry(options={CONF_DAILY_COVER_ITEMS: COVER_ITEMS})
+    await setup_entry(hass, entry)
+    await hass.services.async_call(
+        "select", "select_option", {"entity_id": "select.homeshift_day_mode", "option": "Away"}, blocking=True
+    )
+    await hass.async_block_till_done()
+    keys = [key for key in hass_storage if entry.entry_id in key]
+    assert keys, "the coordinator should have persisted its state"
+
+    assert await hass.config_entries.async_remove(entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert not [key for key in hass_storage if entry.entry_id in key]
+
+
+async def test_diagnostics_report_the_configuration_and_the_state(hass: HomeAssistant) -> None:
+    from custom_components.homeshift.diagnostics import async_get_config_entry_diagnostics
+
+    entry = make_entry(options={CONF_DAILY_COVER_ITEMS: COVER_ITEMS})
+    await setup_entry(hass, entry)
+
+    diagnostics = await async_get_config_entry_diagnostics(hass, entry)
+
+    assert diagnostics["entry"]["version"] == 5
+    assert diagnostics["entry"]["options"][CONF_DAILY_COVER_ITEMS] == COVER_ITEMS
+    assert diagnostics["coordinator"]["data"]["day_mode_key"] in {"home", "work", "remote", "away"}
+    assert "cover_open_time" in diagnostics["covers"]
+
+
 async def test_entities_belong_to_one_service_device(hass: HomeAssistant) -> None:
     from homeassistant.helpers import device_registry as dr
 

@@ -26,9 +26,11 @@ Automatic day-mode and thermostat-mode management for Home Assistant, driven by 
     - [`sensor.cover_open_time`](#sensorcover_open_time)
     - [`sensor.cover_close_time`](#sensorcover_close_time)
     - [`binary_sensor.covers_left_open`](#binary_sensorcovers_left_open)
+    - [`button.homeshift_open_covers` / `button.homeshift_close_covers`](#buttonhomeshift_open_covers--buttonhomeshift_close_covers)
   - [🛠️ Services](#️-services)
     - [`homeshift.refresh_schedulers`](#homeshiftrefresh_schedulers)
     - [`homeshift.sync_calendar`](#homeshiftsync_calendar)
+    - [`homeshift.open_covers` / `homeshift.close_covers`](#homeshiftopen_covers--homeshiftclose_covers)
   - [⚙️ Configuration Parameters](#️-configuration-parameters)
   - [🧠 Detection Logic](#-detection-logic)
     - [Half-Day Events](#half-day-events)
@@ -38,6 +40,7 @@ Automatic day-mode and thermostat-mode management for Home Assistant, driven by 
   - [🗓️ Daily Cover Schedule](#️-daily-cover-schedule)
     - [When the Covers Close](#when-the-covers-close)
     - [Individual Covers](#individual-covers)
+    - [Opening and Closing on Demand](#opening-and-closing-on-demand)
   - [☀️ Cover Heat Protection](#️-cover-heat-protection)
     - [Reactive Close](#reactive-close)
     - [Proactive Forecast-Based Close](#proactive-forecast-based-close)
@@ -197,6 +200,13 @@ automation:
             {{ state_attr('binary_sensor.covers_left_open', 'covers') | join(', ') }}
 ```
 
+### `button.homeshift_open_covers` / `button.homeshift_close_covers`
+Open or close the covers of the daily schedule right now, whatever the time and the day mode. See [Opening and Closing on Demand](#opening-and-closing-on-demand).
+
+- **Type:** Button (icons `mdi:window-shutter-open` / `mdi:window-shutter`)
+- **Only registered** when at least one cover is listed under **Individual Covers**.
+- **Always available:** a failed cover command is logged, it never turns the buttons (or any other HomeShift entity) unavailable.
+
 ---
 
 ## 🛠️ Services
@@ -206,6 +216,9 @@ Immediately refreshes the scheduler switches based on the current day mode and t
 
 ### `homeshift.sync_calendar`
 Manually triggers a calendar check and updates `select.day_mode` if needed. This is also called automatically at regular intervals.
+
+### `homeshift.open_covers` / `homeshift.close_covers`
+Same as pressing `button.homeshift_open_covers` / `button.homeshift_close_covers`: open or close the covers of the daily schedule now. No field. Does nothing (and logs a warning) when no cover is listed under **Individual Covers**.
 
 ---
 
@@ -389,6 +402,15 @@ Details worth knowing:
 - **A cover reached through a group is not protected.** HomeShift sends the close to the entity ids you configured and does not look inside a group, so a cover that should keep its own window sensor or My position must be listed here individually (and dropped from the group).
 - Covers without a window sensor behave exactly as before.
 
+### Opening and Closing on Demand
+
+The **Open covers** and **Close covers** buttons (`button.homeshift_open_covers`, `button.homeshift_close_covers`), and the matching `homeshift.open_covers` / `homeshift.close_covers` services, send the daily schedule's own commands at any time — the HomeShift card uses them when you click the opening or closing time.
+
+- **Open** sends `open_cover` to every cover of the list, even on a `skip` day.
+- **Close** follows the evening close's rules: a cover whose window sensor reports the window open is left up (with a warning in the log), a cover with a My position button gets a press of that button instead of `close_cover`.
+- **The schedule is not changed.** A manual action does not count as today's scheduled open or close: the scheduled action still runs at its time. Opening by hand at 07:00 before an 08:30 opening is harmless (the 08:30 command finds the covers open); closing by hand in the morning does not cancel that day's opening. The `covers_left_open` warning also stays tied to the scheduled evening close.
+- A failed command is logged as a warning, like the scheduled ones.
+
 > **Migrating from Scheduler-integration volet entities:** if you previously used two Scheduler entities (a fixed/sunrise-based "open" and a sunset-offset "close") purely to drive covers, you can disable/delete them once Daily Cover Schedule is configured with the same times — HomeShift no longer needs the Scheduler integration for covers at all.
 
 ---
@@ -434,6 +456,7 @@ Whether the cover has already been closed by this automation today, and when the
 | Skip the evening close when a window is open |  ✅  | See [Individual Covers](#individual-covers) |
 | Warning entity listing the covers left open |  ✅  | `binary_sensor.covers_left_open` |
 | Per-cover My position instead of a full close |  ✅  | See [Individual Covers](#individual-covers) |
+| Open / close the covers on demand           |   ✅   | See [Opening and Closing on Demand](#opening-and-closing-on-demand) |
 | Cover reactive heat close                   |   ✅   | See [Reactive Close](#reactive-close); active window derived from Daily Cover Schedule; never reopens itself |
 | Cover proactive forecast-based close        |   ✅   | See [Proactive Forecast-Based Close](#proactive-forecast-based-close) |
 | Cover automation state survives HA restart  |   ✅   | See [State Persistence](#state-persistence)                        |

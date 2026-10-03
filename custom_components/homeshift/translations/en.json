@@ -360,6 +360,14 @@
       "covers_left_open": {
         "name": "Covers Left Open"
       }
+    },
+    "button": {
+      "open_covers": {
+        "name": "Open covers"
+      },
+      "close_covers": {
+        "name": "Close covers"
+      }
     }
   },
   "selector": {
@@ -384,6 +392,14 @@
     "sync_calendar": {
       "name": "Sync Calendar",
       "description": "Re-sync the calendar and update the current day mode"
+    },
+    "open_covers": {
+      "name": "Open covers",
+      "description": "Open the covers of the daily schedule now, whatever the time or the day mode."
+    },
+    "close_covers": {
+      "name": "Close covers",
+      "description": "Close the covers of the daily schedule now, like the evening close: a cover behind an open window stays up, a cover with a My button goes to its My position."
     }
   }
 }

@@ -360,6 +360,14 @@
       "covers_left_open": {
         "name": "Volets non fermés"
       }
+    },
+    "button": {
+      "open_covers": {
+        "name": "Ouvrir les volets"
+      },
+      "close_covers": {
+        "name": "Fermer les volets"
+      }
     }
   },
   "selector": {
@@ -384,6 +392,14 @@
     "sync_calendar": {
       "name": "Synchroniser le Calendrier",
       "description": "Re-synchronise le calendrier et met à jour le mode jour courant"
+    },
+    "open_covers": {
+      "name": "Ouvrir les volets",
+      "description": "Ouvre maintenant les volets du planning quotidien, quels que soient l'heure et le mode jour."
+    },
+    "close_covers": {
+      "name": "Fermer les volets",
+      "description": "Ferme maintenant les volets du planning quotidien, comme la fermeture du soir : un volet derrière une fenêtre ouverte reste ouvert, un volet avec bouton My va à sa position My."
     }
   }
 }

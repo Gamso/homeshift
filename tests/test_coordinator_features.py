@@ -1982,6 +1982,91 @@ class TestServiceFailuresAreContained:
         assert turn_on and turn_on[0].kwargs["blocking"] is True
 
 
+class TestManualCoverActions:
+    """The Open/Close covers buttons and services (feature: manual cover control)."""
+
+    def _manager(self, items, states=None, fail_on=frozenset()):
+        from homeassistant.exceptions import HomeAssistantError
+
+        from custom_components.homeshift.const import CONF_DAILY_COVER_ITEMS
+
+        entry = make_mock_entry()
+        entry.options = {CONF_DAILY_COVER_ITEMS: items}
+        hass = make_mock_hass()
+        states = states or {}
+        hass.states.get.side_effect = lambda entity_id: states.get(entity_id)
+
+        async def _call(domain, service, data=None, **kwargs):
+            if (domain, service) in fail_on:
+                raise HomeAssistantError("Somfy API timeout")
+
+        hass.services.async_call = AsyncMock(side_effect=_call)
+        coordinator = HomeShiftCoordinator(hass, entry)
+        return hass, coordinator._cover_manager
+
+    def _calls(self, hass):
+        return [(c.args[0], c.args[1], c.args[2]["entity_id"]) for c in hass.services.async_call.call_args_list]
+
+    async def test_open_opens_every_cover_whatever_the_time_or_skip(self):
+        hass, manager = self._manager(_cover_items("cover.salon", "cover.chambre"))
+        manager.cover_open_time = None  # a 'skip' day
+
+        assert await manager.async_open_covers_now() is True
+
+        assert self._calls(hass) == [("cover", "open_cover", ["cover.salon", "cover.chambre"])]
+
+    async def test_close_follows_the_evening_close_rules(self):
+        """Open window: left up. My button: pressed instead of close_cover."""
+        window = MagicMock()
+        window.state = "on"
+        items = [
+            {"cover": "cover.salon", "window_sensor": "", "my_button": ""},
+            {"cover": "cover.cuisine", "window_sensor": "binary_sensor.fenetre_cuisine", "my_button": ""},
+            {"cover": "cover.bureau", "window_sensor": "", "my_button": "button.bureau_my"},
+        ]
+        hass, manager = self._manager(items, states={"binary_sensor.fenetre_cuisine": window})
+
+        assert await manager.async_close_covers_now() is True
+
+        assert self._calls(hass) == [
+            ("cover", "close_cover", ["cover.salon"]),
+            ("button", "press", "button.bureau_my"),
+        ]
+
+    async def test_manual_actions_leave_the_daily_schedule_alone(self):
+        """The scheduled open and close still run after a manual action."""
+        hass, manager = self._manager(_cover_items("cover.salon"))
+        manager.cover_open_time = "08:30"
+        manager.daily_close_time = "21:30"
+
+        await manager.async_close_covers_now()
+        await manager.async_open_covers_now()
+        assert manager._daily_opened_date is None
+        assert manager._daily_closed_date is None
+        assert manager.covers_left_open == {}
+
+        hass.services.async_call.reset_mock()
+        await manager.async_check_daily_schedule(datetime(2026, 7, 1, 8, 30, 0))
+        assert ("cover", "open_cover", ["cover.salon"]) in self._calls(hass)
+
+    async def test_a_failure_is_logged_not_raised(self, caplog):
+        hass, manager = self._manager(_cover_items("cover.salon"), fail_on={("cover", "close_cover")})
+
+        with caplog.at_level("WARNING"):
+            assert await manager.async_close_covers_now() is False
+
+        assert "Manual cover close" in caplog.text
+
+    async def test_nothing_happens_without_any_daily_cover(self, caplog):
+        hass, manager = self._manager([])
+
+        with caplog.at_level("WARNING"):
+            assert await manager.async_open_covers_now() is False
+
+        hass.services.async_call.assert_not_called()
+        assert "no cover configured" in caplog.text
+
+
 class TestNextModeTimerScheduling:
     """Verify that a one-shot timer is scheduled/cancelled at _next_mode_at."""
 

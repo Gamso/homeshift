@@ -112,18 +112,17 @@ class TestIcsHalfDayEventsBasic:
 class TestManualOverrideDuration:
     """Verify that a manual override duration blocks automatic calendar-driven changes."""
 
-    def test_override_blocks_auto_update(self):
+    async def test_override_blocks_auto_update(self):
         """After a manual change with override_duration=120, auto-update is blocked."""
         hass = make_mock_hass()
         entry = make_mock_entry(override_duration=120)
         coordinator = HomeShiftCoordinator(hass, entry)
 
-        loop = asyncio.get_event_loop()
         base_time = datetime(2026, 3, 12, 9, 0, 0)
 
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
             mock_dt.now.return_value = base_time
-            loop.run_until_complete(coordinator.async_set_day_mode("Télétravail"))
+            await coordinator.async_set_day_mode("Télétravail")
 
         assert coordinator.override_until is not None
 
@@ -135,22 +134,21 @@ class TestManualOverrideDuration:
         )
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
             mock_dt.now.return_value = datetime(2026, 3, 12, 10, 0, 0)
-            loop.run_until_complete(coordinator.async_update_data())
+            await coordinator.async_update_data()
 
         assert coordinator.day_mode == "Télétravail"
 
-    def test_override_expiry_resumes_auto_update(self):
+    async def test_override_expiry_resumes_auto_update(self):
         """After the override expires, automatic mode changes resume."""
         hass = make_mock_hass()
         entry = make_mock_entry(override_duration=60)
         coordinator = HomeShiftCoordinator(hass, entry)
 
-        loop = asyncio.get_event_loop()
         base_time = datetime(2026, 3, 12, 9, 0, 0)
 
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
             mock_dt.now.return_value = base_time
-            loop.run_until_complete(coordinator.async_set_day_mode("Télétravail"))
+            await coordinator.async_set_day_mode("Télétravail")
 
         hass.states.get.return_value = make_calendar_state(
             state="on",
@@ -160,22 +158,21 @@ class TestManualOverrideDuration:
         )
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
             mock_dt.now.return_value = datetime(2026, 3, 12, 10, 1, 0)
-            loop.run_until_complete(coordinator.async_update_data())
+            await coordinator.async_update_data()
 
         assert coordinator.override_until is None
         assert coordinator.day_mode == "Maison"
 
-    def test_override_zero_does_not_block(self):
+    async def test_override_zero_does_not_block(self):
         """When override_duration is 0 (disabled), auto-update works immediately."""
         hass = make_mock_hass()
         entry = make_mock_entry(override_duration=0)
         coordinator = HomeShiftCoordinator(hass, entry)
 
-        loop = asyncio.get_event_loop()
 
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
             mock_dt.now.return_value = datetime(2026, 3, 12, 9, 0, 0)
-            loop.run_until_complete(coordinator.async_set_day_mode("Télétravail"))
+            await coordinator.async_set_day_mode("Télétravail")
 
         assert coordinator.override_until is None
 
@@ -187,49 +184,47 @@ class TestManualOverrideDuration:
         )
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
             mock_dt.now.return_value = datetime(2026, 3, 12, 9, 5, 0)
-            loop.run_until_complete(coordinator.async_update_data())
+            await coordinator.async_update_data()
 
         assert coordinator.day_mode == "Maison"
 
-    def test_new_manual_change_resets_override_timer(self):
+    async def test_new_manual_change_resets_override_timer(self):
         """A second manual change resets (extends) the override deadline."""
         hass = make_mock_hass()
         entry = make_mock_entry(override_duration=60)
         coordinator = HomeShiftCoordinator(hass, entry)
 
-        loop = asyncio.get_event_loop()
         first_time = datetime(2026, 3, 12, 9, 0, 0)
         second_time = datetime(2026, 3, 12, 9, 30, 0)
 
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
             mock_dt.now.return_value = first_time
-            loop.run_until_complete(coordinator.async_set_day_mode("Télétravail"))
+            await coordinator.async_set_day_mode("Télétravail")
 
         first_override = coordinator.override_until
         assert first_override is not None
 
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
             mock_dt.now.return_value = second_time
-            loop.run_until_complete(coordinator.async_set_day_mode("Travail"))
+            await coordinator.async_set_day_mode("Travail")
 
         second_override = coordinator.override_until
         assert second_override is not None
         assert second_override > first_override
 
-    def test_override_until_appears_in_coordinator_data(self):
+    async def test_override_until_appears_in_coordinator_data(self):
         """override_until is exposed in coordinator.data after a manual change."""
         hass = make_mock_hass()
         hass.states.get.return_value = make_calendar_state(state="off")
         entry = make_mock_entry(override_duration=60)
         coordinator = HomeShiftCoordinator(hass, entry)
 
-        loop = asyncio.get_event_loop()
-        result = loop.run_until_complete(coordinator.async_update_data())
+        result = await coordinator.async_update_data()
         assert result.get("override_until") is None
 
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
             mock_dt.now.return_value = datetime(2026, 3, 12, 9, 0, 0)
-            loop.run_until_complete(coordinator.async_set_day_mode("Télétravail"))
+            await coordinator.async_set_day_mode("Télétravail")
 
         assert coordinator.data.get("override_until") is not None
         assert "2026-03-12" in coordinator.data["override_until"]
@@ -244,18 +239,17 @@ class TestManualOverrideDuration:
         coordinator.set_override_duration_minutes(90)
         assert coordinator.override_duration_minutes == 90
 
-    def test_runtime_override_duration_takes_effect_on_next_manual_change(self):
+    async def test_runtime_override_duration_takes_effect_on_next_manual_change(self):
         """After set_override_duration_minutes(90), the next manual change uses 90 min."""
         hass = make_mock_hass()
         entry = make_mock_entry(override_duration=0)
         coordinator = HomeShiftCoordinator(hass, entry)
 
-        loop = asyncio.get_event_loop()
         coordinator.set_override_duration_minutes(90)
 
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
             mock_dt.now.return_value = datetime(2026, 3, 12, 9, 0, 0)
-            loop.run_until_complete(coordinator.async_set_day_mode("Télétravail"))
+            await coordinator.async_set_day_mode("Télétravail")
 
         assert coordinator.override_until is not None
         assert coordinator.override_until.minute == 30
@@ -286,57 +280,51 @@ class TestManualOverrideDuration:
 class TestThermostatModeKeyResolution:
     """Verify thermostat_mode accepts display values AND internal keys."""
 
-    def test_set_thermostat_mode_by_display_value(self):
+    async def test_set_thermostat_mode_by_display_value(self):
         """Set thermostat mode by display value."""
         hass = make_mock_hass()
         coordinator = HomeShiftCoordinator(hass, make_mock_entry())
-        loop = asyncio.get_event_loop()
-        loop.run_until_complete(coordinator.async_set_thermostat_mode("Chauffage"))
+        await coordinator.async_set_thermostat_mode("Chauffage")
         assert coordinator.thermostat_mode == "Chauffage"
         assert coordinator.thermostat_mode_key == "heating"
 
-    def test_set_thermostat_mode_by_internal_key_exact_case(self):
+    async def test_set_thermostat_mode_by_internal_key_exact_case(self):
         """Set thermostat mode by internal key exact case."""
         hass = make_mock_hass()
         coordinator = HomeShiftCoordinator(hass, make_mock_entry())
-        loop = asyncio.get_event_loop()
-        loop.run_until_complete(coordinator.async_set_thermostat_mode("heating"))
+        await coordinator.async_set_thermostat_mode("heating")
         assert coordinator.thermostat_mode == "Chauffage"
         assert coordinator.thermostat_mode_key == "heating"
 
-    def test_set_thermostat_mode_by_internal_key_lowercase(self):
+    async def test_set_thermostat_mode_by_internal_key_lowercase(self):
         """Set thermostat mode by internal key lowercase."""
         hass = make_mock_hass()
         coordinator = HomeShiftCoordinator(hass, make_mock_entry())
-        loop = asyncio.get_event_loop()
-        loop.run_until_complete(coordinator.async_set_thermostat_mode("heating"))
+        await coordinator.async_set_thermostat_mode("heating")
         assert coordinator.thermostat_mode == "Chauffage"
 
-    def test_set_thermostat_mode_off_key(self):
+    async def test_set_thermostat_mode_off_key(self):
         """Set thermostat mode off key."""
         hass = make_mock_hass()
         coordinator = HomeShiftCoordinator(hass, make_mock_entry())
-        loop = asyncio.get_event_loop()
-        loop.run_until_complete(coordinator.async_set_thermostat_mode("off"))
+        await coordinator.async_set_thermostat_mode("off")
         assert coordinator.thermostat_mode == "Eteint"
         assert coordinator.thermostat_mode_key == "off"
 
-    def test_set_thermostat_mode_unknown_rejected(self):
+    async def test_set_thermostat_mode_unknown_rejected(self):
         """Set thermostat mode unknown rejected."""
         hass = make_mock_hass()
         coordinator = HomeShiftCoordinator(hass, make_mock_entry())
         initial = coordinator.thermostat_mode
-        loop = asyncio.get_event_loop()
-        loop.run_until_complete(coordinator.async_set_thermostat_mode("unknown_mode"))
+        await coordinator.async_set_thermostat_mode("unknown_mode")
         assert coordinator.thermostat_mode == initial
 
-    def test_thermostat_mode_key_in_coordinator_data(self):
+    async def test_thermostat_mode_key_in_coordinator_data(self):
         """Thermostat mode key in coordinator data."""
         hass = make_mock_hass()
         hass.states.get.return_value = make_calendar_state(state="off")
         coordinator = HomeShiftCoordinator(hass, make_mock_entry())
-        loop = asyncio.get_event_loop()
-        result = loop.run_until_complete(coordinator.async_update_data())
+        result = await coordinator.async_update_data()
         assert "thermostat_mode_key" in result
         assert result["thermostat_mode_key"] in ("off", "heating", "cooling", "ventilation")
 
@@ -354,7 +342,7 @@ class TestSchedulerRefresh:
         hass.states.get.return_value = make_calendar_state(state="off")
         return hass
 
-    def test_active_schedulers_turned_on_others_off(self):
+    async def test_active_schedulers_turned_on_others_off(self):
         """Active schedulers turned on others off."""
         schedulers = {
             "Maison": ["switch.sched_maison"],
@@ -367,7 +355,7 @@ class TestSchedulerRefresh:
         )
         coordinator.day_mode = "Travail"
 
-        asyncio.get_event_loop().run_until_complete(coordinator.async_refresh_schedulers())
+        await coordinator.async_refresh_schedulers()
 
         calls = hass.services.async_call.call_args_list
         on_calls  = [c for c in calls if c.args[1] == "turn_on"]
@@ -384,14 +372,14 @@ class TestSchedulerRefresh:
             "switch.sched_teletravail",
         }
 
-    def test_no_schedulers_configured_does_nothing(self):
+    async def test_no_schedulers_configured_does_nothing(self):
         """No schedulers configured does nothing."""
         hass = self._hass()
         coordinator = HomeShiftCoordinator(hass, make_mock_entry(schedulers_per_mode={}))
-        asyncio.get_event_loop().run_until_complete(coordinator.async_refresh_schedulers())
+        await coordinator.async_refresh_schedulers()
         hass.services.async_call.assert_not_called()
 
-    def test_active_mode_with_no_switches_only_turns_off_others(self):
+    async def test_active_mode_with_no_switches_only_turns_off_others(self):
         """Active mode with no switches only turns off others."""
         schedulers = {
             "Maison": ["switch.sched_maison"],
@@ -404,7 +392,7 @@ class TestSchedulerRefresh:
         )
         coordinator.day_mode = "Travail"
 
-        asyncio.get_event_loop().run_until_complete(coordinator.async_refresh_schedulers())
+        await coordinator.async_refresh_schedulers()
 
         calls = hass.services.async_call.call_args_list
         on_calls  = [c for c in calls if c.args[1] == "turn_on"]
@@ -417,7 +405,7 @@ class TestSchedulerRefresh:
             "switch.sched_teletravail",
         }
 
-    def test_shared_switch_not_turned_off(self):
+    async def test_shared_switch_not_turned_off(self):
         """Shared switch not turned off."""
         shared = "switch.shared"
         schedulers = {
@@ -430,7 +418,7 @@ class TestSchedulerRefresh:
         )
         coordinator.day_mode = "Travail"
 
-        asyncio.get_event_loop().run_until_complete(coordinator.async_refresh_schedulers())
+        await coordinator.async_refresh_schedulers()
 
         calls = hass.services.async_call.call_args_list
         off_calls = [c for c in calls if c.args[1] == "turn_off"]
@@ -438,7 +426,7 @@ class TestSchedulerRefresh:
         assert shared not in turned_off
         assert "switch.maison_only" in turned_off
 
-    def test_mode_change_triggers_scheduler_refresh(self):
+    async def test_mode_change_triggers_scheduler_refresh(self):
         """Mode change triggers scheduler refresh."""
         schedulers = {
             "Maison": ["switch.sched_maison"],
@@ -451,9 +439,7 @@ class TestSchedulerRefresh:
 
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
             mock_dt.now.return_value = datetime(2026, 3, 12, 9, 0, 0)
-            asyncio.get_event_loop().run_until_complete(
-                coordinator.async_set_day_mode("Télétravail")
-            )
+            await coordinator.async_set_day_mode("Télétravail")
 
         on_calls = [
             c for c in hass.services.async_call.call_args_list
@@ -470,7 +456,7 @@ class TestSchedulerRefresh:
         state.attributes = {"tags": tags}
         return state
 
-    def test_thermostat_heating_disables_cooling_scheduler(self):
+    async def test_thermostat_heating_disables_cooling_scheduler(self):
         """When thermostat=Chauffage, scheduler tagged Climatisation is force-disabled
         even if it belongs to the active day mode."""
         # day_mode = Travail → all 3 schedulers are candidates for ON
@@ -497,10 +483,10 @@ class TestSchedulerRefresh:
 
         coordinator = HomeShiftCoordinator(hass, make_mock_entry(schedulers_per_mode=schedulers))
         coordinator.day_mode = "Travail"
-        asyncio.get_event_loop().run_until_complete(coordinator.async_set_thermostat_mode("Chauffage"))
+        await coordinator.async_set_thermostat_mode("Chauffage")
         hass.services.async_call.reset_mock()
 
-        asyncio.get_event_loop().run_until_complete(coordinator.async_refresh_schedulers())
+        await coordinator.async_refresh_schedulers()
 
         calls = hass.services.async_call.call_args_list
         on_calls = [c for c in calls if c.args[1] == "turn_on"]
@@ -514,7 +500,7 @@ class TestSchedulerRefresh:
         assert "switch.sched_volet" in turned_on, "Non-thermostat scheduler must be ON (day mode)"
         assert "switch.sched_clim" in turned_off, "Climatisation scheduler must be force-disabled"
 
-    def test_thermostat_off_disables_all_thermostat_tagged_schedulers(self):
+    async def test_thermostat_off_disables_all_thermostat_tagged_schedulers(self):
         """When thermostat=Eteint, all schedulers with any thermostat tag are disabled."""
         schedulers = {
             "Travail": [
@@ -538,10 +524,10 @@ class TestSchedulerRefresh:
 
         coordinator = HomeShiftCoordinator(hass, make_mock_entry(schedulers_per_mode=schedulers))
         coordinator.day_mode = "Travail"
-        asyncio.get_event_loop().run_until_complete(coordinator.async_set_thermostat_mode("off"))
+        await coordinator.async_set_thermostat_mode("off")
         hass.services.async_call.reset_mock()
 
-        asyncio.get_event_loop().run_until_complete(coordinator.async_refresh_schedulers())
+        await coordinator.async_refresh_schedulers()
 
         calls = hass.services.async_call.call_args_list
         on_calls = [c for c in calls if c.args[1] == "turn_on"]
@@ -556,7 +542,7 @@ class TestSchedulerRefresh:
         assert "switch.sched_clim" in turned_off
         assert "switch.sched_chauffage" in turned_off
 
-    def test_no_thermostat_tag_scheduler_follows_day_mode_only(self):
+    async def test_no_thermostat_tag_scheduler_follows_day_mode_only(self):
         """A scheduler with no thermostat tag always follows day-mode rules regardless of
         the active thermostat mode."""
         schedulers = {
@@ -571,10 +557,10 @@ class TestSchedulerRefresh:
 
         coordinator = HomeShiftCoordinator(hass, make_mock_entry(schedulers_per_mode=schedulers))
         coordinator.day_mode = "Travail"
-        asyncio.get_event_loop().run_until_complete(coordinator.async_set_thermostat_mode("Chauffage"))
+        await coordinator.async_set_thermostat_mode("Chauffage")
         hass.services.async_call.reset_mock()
 
-        asyncio.get_event_loop().run_until_complete(coordinator.async_refresh_schedulers())
+        await coordinator.async_refresh_schedulers()
 
         calls = hass.services.async_call.call_args_list
         on_calls = [c for c in calls if c.args[1] == "turn_on"]
@@ -597,30 +583,30 @@ class TestStatePersistence:
         store.async_save = AsyncMock()
         return store
 
-    def test_restore_state_sets_day_mode_from_stored_key(self):
+    async def test_restore_state_sets_day_mode_from_stored_key(self):
         """async_restore_state() maps stored day_mode_key to the correct display value."""
         hass = make_mock_hass()
         coordinator = HomeShiftCoordinator(hass, make_mock_entry())
         mock_store = self._make_store({"day_mode_key": "remote", "thermostat_mode_key": "off"})
         coordinator._store = mock_store
 
-        asyncio.get_event_loop().run_until_complete(coordinator.async_restore_state())
+        await coordinator.async_restore_state()
 
         assert coordinator.day_mode == "Télétravail"
 
-    def test_restore_state_sets_thermostat_mode_from_stored_key(self):
+    async def test_restore_state_sets_thermostat_mode_from_stored_key(self):
         """async_restore_state() maps stored thermostat_mode_key to the correct display value."""
         hass = make_mock_hass()
         coordinator = HomeShiftCoordinator(hass, make_mock_entry())
         mock_store = self._make_store({"day_mode_key": "work", "thermostat_mode_key": "heating"})
         coordinator._store = mock_store
 
-        asyncio.get_event_loop().run_until_complete(coordinator.async_restore_state())
+        await coordinator.async_restore_state()
 
         assert coordinator.thermostat_mode == "Chauffage"
         assert coordinator.thermostat_mode_key == "heating"
 
-    def test_restore_state_no_stored_data_uses_defaults(self):
+    async def test_restore_state_no_stored_data_uses_defaults(self):
         """async_restore_state() leaves defaults untouched when storage is empty."""
         hass = make_mock_hass()
         coordinator = HomeShiftCoordinator(hass, make_mock_entry())
@@ -629,12 +615,12 @@ class TestStatePersistence:
         mock_store = self._make_store(None)
         coordinator._store = mock_store
 
-        asyncio.get_event_loop().run_until_complete(coordinator.async_restore_state())
+        await coordinator.async_restore_state()
 
         assert coordinator.day_mode == initial_day
         assert coordinator.thermostat_mode == initial_thermo
 
-    def test_restore_state_unknown_key_ignored(self):
+    async def test_restore_state_unknown_key_ignored(self):
         """async_restore_state() ignores keys not present in the current mode map."""
         hass = make_mock_hass()
         coordinator = HomeShiftCoordinator(hass, make_mock_entry())
@@ -642,13 +628,13 @@ class TestStatePersistence:
         mock_store = self._make_store({"day_mode_key": "unknown_key", "thermostat_mode_key": "off"})
         coordinator._store = mock_store
 
-        asyncio.get_event_loop().run_until_complete(coordinator.async_restore_state())
+        await coordinator.async_restore_state()
 
         # Unknown day_mode_key is ignored; thermostat_mode key is still restored
         assert coordinator.day_mode == initial_day
         assert coordinator.thermostat_mode == "Eteint"
 
-    def test_restore_state_handles_load_error_gracefully(self):
+    async def test_restore_state_handles_load_error_gracefully(self):
         """async_restore_state() does not raise when storage load fails."""
         hass = make_mock_hass()
         coordinator = HomeShiftCoordinator(hass, make_mock_entry())
@@ -658,10 +644,10 @@ class TestStatePersistence:
         coordinator._store = mock_store
 
         # Should not raise
-        asyncio.get_event_loop().run_until_complete(coordinator.async_restore_state())
+        await coordinator.async_restore_state()
         assert coordinator.day_mode == initial_day
 
-    def test_save_state_called_on_manual_day_mode_change(self):
+    async def test_save_state_called_on_manual_day_mode_change(self):
         """_async_save_state() is awaited after async_set_day_mode()."""
         hass = make_mock_hass()
         coordinator = HomeShiftCoordinator(hass, make_mock_entry())
@@ -669,13 +655,13 @@ class TestStatePersistence:
         mock_store.async_save = AsyncMock()
         coordinator._store = mock_store
 
-        asyncio.get_event_loop().run_until_complete(coordinator.async_set_day_mode("Télétravail"))
+        await coordinator.async_set_day_mode("Télétravail")
 
         mock_store.async_save.assert_called_once()
         saved = mock_store.async_save.call_args[0][0]
         assert saved["day_mode_key"] == "remote"
 
-    def test_save_state_called_on_manual_thermostat_mode_change(self):
+    async def test_save_state_called_on_manual_thermostat_mode_change(self):
         """_async_save_state() is awaited after async_set_thermostat_mode()."""
         hass = make_mock_hass()
         coordinator = HomeShiftCoordinator(hass, make_mock_entry())
@@ -683,15 +669,13 @@ class TestStatePersistence:
         mock_store.async_save = AsyncMock()
         coordinator._store = mock_store
 
-        asyncio.get_event_loop().run_until_complete(
-            coordinator.async_set_thermostat_mode("Chauffage")
-        )
+        await coordinator.async_set_thermostat_mode("Chauffage")
 
         mock_store.async_save.assert_called_once()
         saved = mock_store.async_save.call_args[0][0]
         assert saved["thermostat_mode_key"] == "heating"
 
-    def test_save_state_called_on_auto_mode_change(self):
+    async def test_save_state_called_on_auto_mode_change(self):
         """_async_save_state() is awaited when auto-update changes day_mode."""
         hass = make_mock_hass()
         hass.states.get.return_value = make_calendar_state(
@@ -708,7 +692,7 @@ class TestStatePersistence:
 
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
             mock_dt.now.return_value = datetime(2026, 3, 4, 10, 0, 0)  # Wednesday
-            asyncio.get_event_loop().run_until_complete(coordinator.async_update_data())
+            await coordinator.async_update_data()
 
         # Day mode should have changed (auto-update), triggering a save
         assert coordinator.day_mode == "Télétravail"
@@ -727,7 +711,7 @@ def _mock_get_events(calendar_entity: str, events: list[dict]):
 class TestEarlySwitch:
     """Verify the early_switch_minutes feature pre-activates timed events."""
 
-    def test_early_switch_activates_before_timed_event(self):
+    async def test_early_switch_activates_before_timed_event(self):
         """Calendar off; timed event starts in 90 min; early_switch=120 → mode switches now."""
         hass = make_mock_hass()
         entry = make_mock_entry(early_switch_minutes=120)
@@ -741,11 +725,11 @@ class TestEarlySwitch:
         now = datetime(2026, 3, 11, 12, 0, 0)  # 90 min before 14:00
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
             mock_dt.now.return_value = now
-            asyncio.get_event_loop().run_until_complete(coordinator.async_update_data())
+            await coordinator.async_update_data()
 
         assert coordinator.day_mode == "Télétravail"
 
-    def test_early_switch_not_active_outside_window(self):
+    async def test_early_switch_not_active_outside_window(self):
         """Event starts in 3h; early_switch=120 → still too far out, no pre-activation."""
         hass = make_mock_hass()
         entry = make_mock_entry(early_switch_minutes=120)
@@ -759,11 +743,11 @@ class TestEarlySwitch:
         now = datetime(2026, 3, 11, 12, 0, 0)  # 3 h before 15:00
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
             mock_dt.now.return_value = now
-            asyncio.get_event_loop().run_until_complete(coordinator.async_update_data())
+            await coordinator.async_update_data()
 
         assert coordinator.day_mode == "Travail"  # default, no early switch
 
-    def test_early_switch_does_not_activate_for_allday_event(self):
+    async def test_early_switch_does_not_activate_for_allday_event(self):
         """All-day event (date-only start); early_switch=120 → no pre-activation."""
         hass = make_mock_hass()
         entry = make_mock_entry(early_switch_minutes=120)
@@ -778,11 +762,11 @@ class TestEarlySwitch:
         now = datetime(2026, 3, 11, 23, 0, 0)  # within 120 min of midnight → all-day ignored
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
             mock_dt.now.return_value = now
-            asyncio.get_event_loop().run_until_complete(coordinator.async_update_data())
+            await coordinator.async_update_data()
 
         assert coordinator.day_mode == "Travail"  # no early switch for all-day
 
-    def test_early_switch_zero_no_effect(self):
+    async def test_early_switch_zero_no_effect(self):
         """early_switch=0 (disabled): timed event in 30 min, no pre-activation."""
         hass = make_mock_hass()
         entry = make_mock_entry(early_switch_minutes=0)
@@ -796,11 +780,11 @@ class TestEarlySwitch:
         now = datetime(2026, 3, 11, 13, 30, 0)  # 30 min before event
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
             mock_dt.now.return_value = now
-            asyncio.get_event_loop().run_until_complete(coordinator.async_update_data())
+            await coordinator.async_update_data()
 
         assert coordinator.day_mode == "Travail"
 
-    def test_next_mode_at_reflects_early_switch(self):
+    async def test_next_mode_at_reflects_early_switch(self):
         """next_mode_at = event_start - early_switch_minutes for a timed event."""
         hass = make_mock_hass()
         entry = make_mock_entry(early_switch_minutes=120)
@@ -814,13 +798,13 @@ class TestEarlySwitch:
         now = datetime(2026, 3, 11, 9, 0, 0)  # before the early window
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
             mock_dt.now.return_value = now
-            asyncio.get_event_loop().run_until_complete(coordinator.async_update_data())
+            await coordinator.async_update_data()
 
         # next_mode_at should be 14:00 - 120 min = 12:00
         assert coordinator.next_mode_at == datetime(2026, 3, 11, 12, 0, 0)
         assert coordinator.next_mode_predicted == "Télétravail"
 
-    def test_next_mode_at_allday_not_shifted(self):
+    async def test_next_mode_at_allday_not_shifted(self):
         """All-day event: next_mode_at is not shifted by early_switch."""
         hass = make_mock_hass()
         entry = make_mock_entry(early_switch_minutes=120)
@@ -835,7 +819,7 @@ class TestEarlySwitch:
         now = datetime(2026, 3, 13, 10, 0, 0)  # Saturday all-day event already active
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
             mock_dt.now.return_value = now
-            asyncio.get_event_loop().run_until_complete(coordinator.async_update_data())
+            await coordinator.async_update_data()
 
         # All-day events start at midnight (parsed as 00:00:00 from date-only string)
         # The event is active now, so next change is when it ends (Sunday midnight)
@@ -887,7 +871,7 @@ class TestCoverHeatControl:
         state.state = str(temperature)
         return state
 
-    def test_close_cover_called_when_hot_and_in_window(self):
+    async def test_close_cover_called_when_hot_and_in_window(self):
         """cover.close_cover is called by default when temperature > threshold inside the window."""
         hass = make_mock_hass()
         hass.services.async_call = AsyncMock()
@@ -903,9 +887,7 @@ class TestCoverHeatControl:
         coordinator = self._make_coordinator(hass, entry, open_time="08:00", close_time="20:00")
         now = datetime(2026, 7, 1, 14, 0, 0)
 
-        asyncio.get_event_loop().run_until_complete(
-            coordinator._cover_manager.async_check_heat_protection(now)
-        )
+        await coordinator._cover_manager.async_check_heat_protection(now)
 
         hass.services.async_call.assert_called_once()
         call = hass.services.async_call.call_args
@@ -913,7 +895,7 @@ class TestCoverHeatControl:
         assert call.args[1] == "close_cover"
         assert "cover.volet_salon" in call.args[2]["entity_id"]
 
-    def test_stop_cover_called_when_configured_and_hot(self):
+    async def test_stop_cover_called_when_configured_and_hot(self):
         """cover.stop_cover is called when configured explicitly and temperature > threshold."""
         hass = make_mock_hass()
         hass.services.async_call = AsyncMock()
@@ -929,9 +911,7 @@ class TestCoverHeatControl:
         coordinator = self._make_coordinator(hass, entry, open_time="08:00", close_time="20:00")
         now = datetime(2026, 7, 1, 14, 0, 0)
 
-        asyncio.get_event_loop().run_until_complete(
-            coordinator._cover_manager.async_check_heat_protection(now)
-        )
+        await coordinator._cover_manager.async_check_heat_protection(now)
 
         hass.services.async_call.assert_called_once()
         call = hass.services.async_call.call_args
@@ -939,7 +919,7 @@ class TestCoverHeatControl:
         assert call.args[1] == "stop_cover"
         assert "cover.volet_salon" in call.args[2]["entity_id"]
 
-    def test_my_position_button_pressed_when_configured_and_hot(self):
+    async def test_my_position_button_pressed_when_configured_and_hot(self):
         """button.press is called on the My button entity when it is configured and hot, regardless of cover_action."""
         hass = make_mock_hass()
         hass.services.async_call = AsyncMock()
@@ -959,7 +939,7 @@ class TestCoverHeatControl:
         coordinator = self._make_coordinator(hass, entry, open_time="08:00", close_time="20:00")
         now = datetime(2026, 7, 1, 14, 0, 0)
 
-        asyncio.get_event_loop().run_until_complete(coordinator._cover_manager.async_check_heat_protection(now))
+        await coordinator._cover_manager.async_check_heat_protection(now)
 
         hass.services.async_call.assert_called_once()
         call = hass.services.async_call.call_args
@@ -967,7 +947,7 @@ class TestCoverHeatControl:
         assert call.args[1] == "press"
         assert call.args[2]["entity_id"] == "button.volet_salon_my_position"
 
-    def test_my_position_button_overrides_stop_cover_action(self):
+    async def test_my_position_button_overrides_stop_cover_action(self):
         """button.press is used even when cover_action=stop_cover if a My button is configured."""
         hass = make_mock_hass()
         hass.services.async_call = AsyncMock()
@@ -987,14 +967,14 @@ class TestCoverHeatControl:
         coordinator = self._make_coordinator(hass, entry, open_time="08:00", close_time="20:00")
         now = datetime(2026, 7, 1, 14, 0, 0)
 
-        asyncio.get_event_loop().run_until_complete(coordinator._cover_manager.async_check_heat_protection(now))
+        await coordinator._cover_manager.async_check_heat_protection(now)
 
         hass.services.async_call.assert_called_once()
         call = hass.services.async_call.call_args
         assert call.args[0] == "button"
         assert call.args[1] == "press"
 
-    def test_no_call_when_below_threshold(self):
+    async def test_no_call_when_below_threshold(self):
         """cover.stop_cover is NOT called when temperature is below threshold."""
         hass = make_mock_hass()
         hass.services.async_call = AsyncMock()
@@ -1010,13 +990,11 @@ class TestCoverHeatControl:
         coordinator = self._make_coordinator(hass, entry, open_time="08:00", close_time="20:00")
         now = datetime(2026, 7, 1, 14, 0, 0)
 
-        asyncio.get_event_loop().run_until_complete(
-            coordinator._cover_manager.async_check_heat_protection(now)
-        )
+        await coordinator._cover_manager.async_check_heat_protection(now)
 
         hass.services.async_call.assert_not_called()
 
-    def test_no_call_outside_time_window(self):
+    async def test_no_call_outside_time_window(self):
         """cover.stop_cover is NOT called when current time is outside the window."""
         hass = make_mock_hass()
         hass.services.async_call = AsyncMock()
@@ -1033,13 +1011,11 @@ class TestCoverHeatControl:
         # 19:00 — outside the 08:00–18:00 window
         now = datetime(2026, 7, 1, 19, 0, 0)
 
-        asyncio.get_event_loop().run_until_complete(
-            coordinator._cover_manager.async_check_heat_protection(now)
-        )
+        await coordinator._cover_manager.async_check_heat_protection(now)
 
         hass.services.async_call.assert_not_called()
 
-    def test_no_call_when_daily_schedule_not_configured(self):
+    async def test_no_call_when_daily_schedule_not_configured(self):
         """cover.close_cover is NOT called when cover_open_time/daily_close_time haven't been computed."""
         hass = make_mock_hass()
         hass.services.async_call = AsyncMock()
@@ -1056,13 +1032,11 @@ class TestCoverHeatControl:
         coordinator = HomeShiftCoordinator(hass, entry)
         now = datetime(2026, 7, 1, 14, 0, 0)
 
-        asyncio.get_event_loop().run_until_complete(
-            coordinator._cover_manager.async_check_heat_protection(now)
-        )
+        await coordinator._cover_manager.async_check_heat_protection(now)
 
         hass.services.async_call.assert_not_called()
 
-    def test_no_call_when_no_cover_entities_configured(self):
+    async def test_no_call_when_no_cover_entities_configured(self):
         """cover.stop_cover is NOT called when no cover entities are configured."""
         hass = make_mock_hass()
         hass.services.async_call = AsyncMock()
@@ -1073,13 +1047,11 @@ class TestCoverHeatControl:
         coordinator = self._make_coordinator(hass, entry, open_time="08:00", close_time="20:00")
         now = datetime(2026, 7, 1, 14, 0, 0)
 
-        asyncio.get_event_loop().run_until_complete(
-            coordinator._cover_manager.async_check_heat_protection(now)
-        )
+        await coordinator._cover_manager.async_check_heat_protection(now)
 
         hass.services.async_call.assert_not_called()
 
-    def test_no_call_when_temp_sensor_unavailable(self):
+    async def test_no_call_when_temp_sensor_unavailable(self):
         """cover.stop_cover is NOT called when the temperature sensor is missing."""
         hass = make_mock_hass()
         hass.services.async_call = AsyncMock()
@@ -1091,13 +1063,11 @@ class TestCoverHeatControl:
         coordinator = self._make_coordinator(hass, entry, open_time="08:00", close_time="20:00")
         now = datetime(2026, 7, 1, 14, 0, 0)
 
-        asyncio.get_event_loop().run_until_complete(
-            coordinator._cover_manager.async_check_heat_protection(now)
-        )
+        await coordinator._cover_manager.async_check_heat_protection(now)
 
         hass.services.async_call.assert_not_called()
 
-    def test_stays_closed_after_temperature_drops(self):
+    async def test_stays_closed_after_temperature_drops(self):
         """Once closed for heat, the cover is left alone even if it cools back down the same day."""
         hass = make_mock_hass()
         hass.services.async_call = AsyncMock()
@@ -1115,16 +1085,12 @@ class TestCoverHeatControl:
         coordinator = self._make_coordinator(hass, entry, open_time="08:00", close_time="20:00")
 
         # 11:00 — hot, closes
-        asyncio.get_event_loop().run_until_complete(
-            coordinator._cover_manager.async_check_heat_protection(datetime(2026, 7, 1, 11, 0, 0))
-        )
+        await coordinator._cover_manager.async_check_heat_protection(datetime(2026, 7, 1, 11, 0, 0))
         assert coordinator._cover_manager._heat_closed is True
 
         # 14:00 — cooled down, but heat protection never reopens on its own
         temps["value"] = 20.0
-        asyncio.get_event_loop().run_until_complete(
-            coordinator._cover_manager.async_check_heat_protection(datetime(2026, 7, 1, 14, 0, 0))
-        )
+        await coordinator._cover_manager.async_check_heat_protection(datetime(2026, 7, 1, 14, 0, 0))
 
         hass.services.async_call.assert_called_once()  # only the original close, nothing else
         assert coordinator._cover_manager._heat_closed is True
@@ -1171,7 +1137,7 @@ class TestCoverProactiveClose:
             return None
         return _side_effect
 
-    def test_closes_when_forecast_exceeds_threshold_at_open_time(self):
+    async def test_closes_when_forecast_exceeds_threshold_at_open_time(self):
         """Covers close proactively when the forecast high exceeds the threshold at cover_open_time."""
         hass = make_mock_hass()
         hass.services.async_call = AsyncMock(side_effect=self._forecast_side_effect(32.0))
@@ -1181,9 +1147,7 @@ class TestCoverProactiveClose:
         coordinator = self._make_coordinator(hass, entry, open_time="08:35")
         now = datetime(2026, 7, 1, 8, 35, 0)
 
-        asyncio.get_event_loop().run_until_complete(
-            coordinator._cover_manager.async_check_heat_protection(now)
-        )
+        await coordinator._cover_manager.async_check_heat_protection(now)
 
         calls = hass.services.async_call.call_args_list
         assert any(c.args[0] == "weather" and c.args[1] == "get_forecasts" for c in calls)
@@ -1192,7 +1156,7 @@ class TestCoverProactiveClose:
         assert "cover.volet_salon" in close_calls[0].args[2]["entity_id"]
         assert coordinator._cover_manager._heat_closed is True
 
-    def test_no_close_when_forecast_below_threshold(self):
+    async def test_no_close_when_forecast_below_threshold(self):
         """No cover action when the forecast high stays under the threshold."""
         hass = make_mock_hass()
         hass.services.async_call = AsyncMock(side_effect=self._forecast_side_effect(24.0))
@@ -1202,14 +1166,12 @@ class TestCoverProactiveClose:
         coordinator = self._make_coordinator(hass, entry, open_time="08:35")
         now = datetime(2026, 7, 1, 8, 35, 0)
 
-        asyncio.get_event_loop().run_until_complete(
-            coordinator._cover_manager.async_check_heat_protection(now)
-        )
+        await coordinator._cover_manager.async_check_heat_protection(now)
 
         calls = hass.services.async_call.call_args_list
         assert not any(c.args[0] == "cover" for c in calls)
 
-    def test_no_forecast_lookup_when_no_weather_entity_configured(self):
+    async def test_no_forecast_lookup_when_no_weather_entity_configured(self):
         """No weather.get_forecasts call when CONF_COVER_WEATHER_ENTITY is unset."""
         hass = make_mock_hass()
         hass.services.async_call = AsyncMock(side_effect=self._forecast_side_effect(32.0))
@@ -1219,13 +1181,11 @@ class TestCoverProactiveClose:
         coordinator = self._make_coordinator(hass, entry, open_time="08:35")
         now = datetime(2026, 7, 1, 8, 35, 0)
 
-        asyncio.get_event_loop().run_until_complete(
-            coordinator._cover_manager.async_check_heat_protection(now)
-        )
+        await coordinator._cover_manager.async_check_heat_protection(now)
 
         hass.services.async_call.assert_not_called()
 
-    def test_no_close_before_open_time(self):
+    async def test_no_close_before_open_time(self):
         """No forecast lookup yet if now is before cover_open_time."""
         hass = make_mock_hass()
         hass.services.async_call = AsyncMock(side_effect=self._forecast_side_effect(32.0))
@@ -1235,13 +1195,11 @@ class TestCoverProactiveClose:
         coordinator = self._make_coordinator(hass, entry, open_time="08:35")
         now = datetime(2026, 7, 1, 7, 0, 0)
 
-        asyncio.get_event_loop().run_until_complete(
-            coordinator._cover_manager.async_check_heat_protection(now)
-        )
+        await coordinator._cover_manager.async_check_heat_protection(now)
 
         hass.services.async_call.assert_not_called()
 
-    def test_runs_once_per_day(self):
+    async def test_runs_once_per_day(self):
         """A second check on the same day does not repeat the forecast lookup or the close."""
         hass = make_mock_hass()
         hass.services.async_call = AsyncMock(side_effect=self._forecast_side_effect(32.0))
@@ -1250,12 +1208,8 @@ class TestCoverProactiveClose:
 
         coordinator = self._make_coordinator(hass, entry, open_time="08:35")
 
-        asyncio.get_event_loop().run_until_complete(
-            coordinator._cover_manager.async_check_heat_protection(datetime(2026, 7, 1, 8, 35, 0))
-        )
-        asyncio.get_event_loop().run_until_complete(
-            coordinator._cover_manager.async_check_heat_protection(datetime(2026, 7, 1, 9, 0, 0))
-        )
+        await coordinator._cover_manager.async_check_heat_protection(datetime(2026, 7, 1, 8, 35, 0))
+        await coordinator._cover_manager.async_check_heat_protection(datetime(2026, 7, 1, 9, 0, 0))
 
         calls = hass.services.async_call.call_args_list
         forecast_calls = [c for c in calls if c.args[0] == "weather"]
@@ -1283,7 +1237,7 @@ class TestCoverPersistence:
         store.async_save = AsyncMock()
         return store
 
-    def test_restore_state_sets_heat_closed_and_proactive_date(self):
+    async def test_restore_state_sets_heat_closed_and_proactive_date(self):
         """async_restore_state() restores heat_closed and proactive_checked_date."""
         hass = make_mock_hass()
         coordinator = HomeShiftCoordinator(hass, make_mock_entry())
@@ -1295,12 +1249,12 @@ class TestCoverPersistence:
         )
         coordinator._cover_manager._store = mock_store
 
-        asyncio.get_event_loop().run_until_complete(coordinator._cover_manager.async_restore_state())
+        await coordinator._cover_manager.async_restore_state()
 
         assert coordinator._cover_manager._heat_closed is True
         assert coordinator._cover_manager._proactive_checked_date == date(2026, 7, 1)
 
-    def test_restore_state_sets_daily_schedule_dates(self):
+    async def test_restore_state_sets_daily_schedule_dates(self):
         """async_restore_state() also restores the daily-schedule action dates."""
         hass = make_mock_hass()
         coordinator = HomeShiftCoordinator(hass, make_mock_entry())
@@ -1309,24 +1263,24 @@ class TestCoverPersistence:
         )
         coordinator._cover_manager._store = mock_store
 
-        asyncio.get_event_loop().run_until_complete(coordinator._cover_manager.async_restore_state())
+        await coordinator._cover_manager.async_restore_state()
 
         assert coordinator._cover_manager._daily_opened_date == date(2026, 7, 1)
         assert coordinator._cover_manager._daily_closed_date == date(2026, 6, 30)
 
-    def test_restore_state_no_stored_data_leaves_defaults(self):
+    async def test_restore_state_no_stored_data_leaves_defaults(self):
         """async_restore_state() leaves defaults when storage is empty."""
         hass = make_mock_hass()
         coordinator = HomeShiftCoordinator(hass, make_mock_entry())
         mock_store = self._make_store(None)
         coordinator._cover_manager._store = mock_store
 
-        asyncio.get_event_loop().run_until_complete(coordinator._cover_manager.async_restore_state())
+        await coordinator._cover_manager.async_restore_state()
 
         assert coordinator._cover_manager._heat_closed is False
         assert coordinator._cover_manager._proactive_checked_date is None
 
-    def test_restore_state_handles_load_error_gracefully(self):
+    async def test_restore_state_handles_load_error_gracefully(self):
         """async_restore_state() does not raise when storage load fails."""
         hass = make_mock_hass()
         coordinator = HomeShiftCoordinator(hass, make_mock_entry())
@@ -1335,10 +1289,10 @@ class TestCoverPersistence:
         coordinator._cover_manager._store = mock_store
 
         # Should not raise
-        asyncio.get_event_loop().run_until_complete(coordinator._cover_manager.async_restore_state())
+        await coordinator._cover_manager.async_restore_state()
         assert coordinator._cover_manager._heat_closed is False
 
-    def test_save_state_called_after_reactive_close(self):
+    async def test_save_state_called_after_reactive_close(self):
         """_async_save_state() persists heat_closed=True after a reactive close."""
         from custom_components.homeshift.const import (
             CONF_COVER_ENTITIES,
@@ -1365,9 +1319,7 @@ class TestCoverPersistence:
         mock_store.async_save = AsyncMock()
         coordinator._cover_manager._store = mock_store
 
-        asyncio.get_event_loop().run_until_complete(
-            coordinator._cover_manager.async_check_heat_protection(datetime(2026, 7, 1, 14, 0, 0))
-        )
+        await coordinator._cover_manager.async_check_heat_protection(datetime(2026, 7, 1, 14, 0, 0))
 
         mock_store.async_save.assert_called_once()
         saved = mock_store.async_save.call_args[0][0]
@@ -1519,76 +1471,74 @@ class TestDailyCoverScheduleCompute:
             state.attributes["next_setting"] = next_setting_iso
         return state
 
-    def _run_compute(self, hass, entry, now, day_mode_key):
+    async def _run_compute(self, hass, entry, now, day_mode_key):
         coordinator = HomeShiftCoordinator(hass, entry)
         with patch("custom_components.homeshift.cover_manager.dt_util") as mock_dt:
             from datetime import timezone, timedelta as tdelta
             tz_paris = timezone(tdelta(hours=2))
             mock_dt.as_local.side_effect = lambda dt: dt.astimezone(tz_paris)
-            asyncio.get_event_loop().run_until_complete(
-                coordinator._cover_manager.async_compute_daily_schedule(now, day_mode_key)
-            )
+            await coordinator._cover_manager.async_compute_daily_schedule(now, day_mode_key)
         return coordinator
 
-    def test_fixed_open_time_for_mode_with_custom_time(self):
+    async def test_fixed_open_time_for_mode_with_custom_time(self):
         """Uses the mode's custom HH:MM value from the open-time map."""
         hass = make_mock_hass()
         hass.states.get.side_effect = lambda eid: self._sun_state(next_setting_iso="2026-07-01T19:30:00+00:00") if eid == "sun.sun" else None
         entry = self._make_entry(open_time_map="work:sunrise, home:08:30")
 
-        coordinator = self._run_compute(hass, entry, datetime(2026, 7, 1, 0, 5, 0), day_mode_key="home")
+        coordinator = await self._run_compute(hass, entry, datetime(2026, 7, 1, 0, 5, 0), day_mode_key="home")
 
         assert coordinator._cover_manager.cover_open_time == "08:30"
 
-    def test_mode_missing_from_map_falls_back_to_default(self):
+    async def test_mode_missing_from_map_falls_back_to_default(self):
         """A day mode absent from the map falls back to DEFAULT_DAILY_COVER_OPEN_TIME (matches 'home' behavior)."""
         hass = make_mock_hass()
         hass.states.get.side_effect = lambda eid: self._sun_state(next_setting_iso="2026-07-01T19:30:00+00:00") if eid == "sun.sun" else None
         entry = self._make_entry(open_time_map="work:sunrise")
 
-        coordinator = self._run_compute(hass, entry, datetime(2026, 7, 1, 0, 5, 0), day_mode_key="away")
+        coordinator = await self._run_compute(hass, entry, datetime(2026, 7, 1, 0, 5, 0), day_mode_key="away")
 
         assert coordinator._cover_manager.cover_open_time == "08:30"
 
-    def test_sunrise_based_open_time_when_mode_set_to_sunrise(self):
+    async def test_sunrise_based_open_time_when_mode_set_to_sunrise(self):
         """Uses sunrise (floored at earliest) when the mode's map value is 'sunrise'."""
         hass = make_mock_hass()
         # sunrise at 07:45 local (05:45 UTC + 2h)
         hass.states.get.side_effect = lambda eid: self._sun_state(next_rising_iso="2026-07-01T05:45:00+00:00") if eid == "sun.sun" else None
         entry = self._make_entry(open_time_map="work:sunrise", earliest="07:10:00")
 
-        coordinator = self._run_compute(hass, entry, datetime(2026, 7, 1, 0, 5, 0), day_mode_key="work")
+        coordinator = await self._run_compute(hass, entry, datetime(2026, 7, 1, 0, 5, 0), day_mode_key="work")
 
         assert coordinator._cover_manager.cover_open_time == "07:45"
 
-    def test_sunrise_floored_at_earliest_when_sunrise_too_early(self):
+    async def test_sunrise_floored_at_earliest_when_sunrise_too_early(self):
         """Uses earliest when sunrise is before it (winter case)."""
         hass = make_mock_hass()
         # sunrise at 05:30 local (03:30 UTC + 2h) — earlier than the 07:10 floor
         hass.states.get.side_effect = lambda eid: self._sun_state(next_rising_iso="2026-07-01T03:30:00+00:00") if eid == "sun.sun" else None
         entry = self._make_entry(open_time_map="work:sunrise", earliest="07:10:00")
 
-        coordinator = self._run_compute(hass, entry, datetime(2026, 7, 1, 0, 5, 0), day_mode_key="work")
+        coordinator = await self._run_compute(hass, entry, datetime(2026, 7, 1, 0, 5, 0), day_mode_key="work")
 
         assert coordinator._cover_manager.cover_open_time == "07:10"
 
-    def test_skip_value_sets_open_time_to_none(self):
+    async def test_skip_value_sets_open_time_to_none(self):
         """A mode set to 'skip' results in cover_open_time = None (no automatic opening)."""
         hass = make_mock_hass()
         hass.states.get.side_effect = lambda eid: self._sun_state(next_setting_iso="2026-07-01T19:30:00+00:00") if eid == "sun.sun" else None
         entry = self._make_entry(open_time_map="away:skip, home:08:30")
 
-        coordinator = self._run_compute(hass, entry, datetime(2026, 7, 1, 0, 5, 0), day_mode_key="away")
+        coordinator = await self._run_compute(hass, entry, datetime(2026, 7, 1, 0, 5, 0), day_mode_key="away")
 
         assert coordinator._cover_manager.cover_open_time is None
 
-    def test_noop_when_no_daily_cover_entities_configured(self):
+    async def test_noop_when_no_daily_cover_entities_configured(self):
         """Does nothing when no cover is configured."""
         hass = make_mock_hass()
         hass.states.get.side_effect = lambda eid: self._sun_state(next_setting_iso="2026-07-01T19:30:00+00:00") if eid == "sun.sun" else None
         entry = self._make_entry(entities=[])
 
-        coordinator = self._run_compute(hass, entry, datetime(2026, 7, 1, 0, 5, 0), day_mode_key="home")
+        coordinator = await self._run_compute(hass, entry, datetime(2026, 7, 1, 0, 5, 0), day_mode_key="home")
 
         assert coordinator._cover_manager.cover_open_time is None
         assert coordinator._cover_manager.daily_close_time is None
@@ -1605,7 +1555,7 @@ class TestDailyCoverScheduleUsesTodaysDayMode:
     for the whole day is computed using yesterday's mode.
     """
 
-    def test_midnight_mode_change_uses_new_mode_for_open_time(self):
+    async def test_midnight_mode_change_uses_new_mode_for_open_time(self):
         from custom_components.homeshift.const import (
             CONF_DAILY_COVER_ITEMS,
             CONF_DAILY_COVER_OPEN_TIME_MAP,
@@ -1639,7 +1589,7 @@ class TestDailyCoverScheduleUsesTodaysDayMode:
             from datetime import timezone, timedelta as tdelta
             tz_paris = timezone(tdelta(hours=2))
             mock_cover_dt.as_local.side_effect = lambda dt: dt.astimezone(tz_paris)
-            asyncio.get_event_loop().run_until_complete(coordinator.async_update_data())
+            await coordinator.async_update_data()
 
         # Monday is a weekday with no calendar event -> resolves to the default mode
         assert coordinator.day_mode == "Travail"
@@ -1669,7 +1619,7 @@ class TestDailyCoverScheduleCheck:
         coordinator._cover_manager.daily_close_time = close_time
         return coordinator
 
-    def test_opens_covers_at_open_time(self):
+    async def test_opens_covers_at_open_time(self):
         """cover.open_cover is called once now.time() reaches the computed open time."""
         hass = make_mock_hass()
         hass.services.async_call = AsyncMock()
@@ -1677,9 +1627,7 @@ class TestDailyCoverScheduleCheck:
         entry = self._make_entry()
         coordinator = self._make_coordinator(hass, entry, open_time="08:30", close_time="21:40")
 
-        asyncio.get_event_loop().run_until_complete(
-            coordinator._cover_manager.async_check_daily_schedule(datetime(2026, 7, 1, 8, 30, 0))
-        )
+        await coordinator._cover_manager.async_check_daily_schedule(datetime(2026, 7, 1, 8, 30, 0))
 
         hass.services.async_call.assert_called_once()
         call = hass.services.async_call.call_args
@@ -1687,7 +1635,7 @@ class TestDailyCoverScheduleCheck:
         assert call.args[1] == "open_cover"
         assert "cover.volets" in call.args[2]["entity_id"]
 
-    def test_closes_covers_at_close_time(self):
+    async def test_closes_covers_at_close_time(self):
         """cover.close_cover is called once now.time() reaches the computed close time."""
         hass = make_mock_hass()
         hass.services.async_call = AsyncMock()
@@ -1697,9 +1645,7 @@ class TestDailyCoverScheduleCheck:
         # Already opened today, so only the close action is under test here.
         coordinator._cover_manager._daily_opened_date = date(2026, 7, 1)
 
-        asyncio.get_event_loop().run_until_complete(
-            coordinator._cover_manager.async_check_daily_schedule(datetime(2026, 7, 1, 21, 40, 0))
-        )
+        await coordinator._cover_manager.async_check_daily_schedule(datetime(2026, 7, 1, 21, 40, 0))
 
         hass.services.async_call.assert_called_once()
         call = hass.services.async_call.call_args
@@ -1707,7 +1653,7 @@ class TestDailyCoverScheduleCheck:
         assert call.args[1] == "close_cover"
         assert "cover.volets" in call.args[2]["entity_id"]
 
-    def test_no_action_before_open_time(self):
+    async def test_no_action_before_open_time(self):
         """No call yet when now is before the computed open time."""
         hass = make_mock_hass()
         hass.services.async_call = AsyncMock()
@@ -1715,13 +1661,11 @@ class TestDailyCoverScheduleCheck:
         entry = self._make_entry()
         coordinator = self._make_coordinator(hass, entry, open_time="08:30", close_time="21:40")
 
-        asyncio.get_event_loop().run_until_complete(
-            coordinator._cover_manager.async_check_daily_schedule(datetime(2026, 7, 1, 7, 0, 0))
-        )
+        await coordinator._cover_manager.async_check_daily_schedule(datetime(2026, 7, 1, 7, 0, 0))
 
         hass.services.async_call.assert_not_called()
 
-    def test_no_open_call_but_close_still_fires_when_open_time_is_none(self):
+    async def test_no_open_call_but_close_still_fires_when_open_time_is_none(self):
         """cover_open_time=None (mode resolved to 'skip') skips the open, but close is unconditional."""
         hass = make_mock_hass()
         hass.services.async_call = AsyncMock()
@@ -1729,15 +1673,13 @@ class TestDailyCoverScheduleCheck:
         entry = self._make_entry()
         coordinator = self._make_coordinator(hass, entry, open_time=None, close_time="21:40")
 
-        asyncio.get_event_loop().run_until_complete(
-            coordinator._cover_manager.async_check_daily_schedule(datetime(2026, 7, 1, 21, 40, 0))
-        )
+        await coordinator._cover_manager.async_check_daily_schedule(datetime(2026, 7, 1, 21, 40, 0))
 
         hass.services.async_call.assert_called_once()
         call = hass.services.async_call.call_args
         assert call.args[1] == "close_cover"
 
-    def test_noop_when_no_daily_cover_entities_configured(self):
+    async def test_noop_when_no_daily_cover_entities_configured(self):
         """No call when no cover is configured."""
         hass = make_mock_hass()
         hass.services.async_call = AsyncMock()
@@ -1745,13 +1687,11 @@ class TestDailyCoverScheduleCheck:
         entry = self._make_entry(entities=[])
         coordinator = self._make_coordinator(hass, entry, open_time="08:30", close_time="21:40")
 
-        asyncio.get_event_loop().run_until_complete(
-            coordinator._cover_manager.async_check_daily_schedule(datetime(2026, 7, 1, 21, 40, 0))
-        )
+        await coordinator._cover_manager.async_check_daily_schedule(datetime(2026, 7, 1, 21, 40, 0))
 
         hass.services.async_call.assert_not_called()
 
-    def test_open_and_close_each_fire_once_per_day(self):
+    async def test_open_and_close_each_fire_once_per_day(self):
         """A second check later the same day does not repeat either action."""
         hass = make_mock_hass()
         hass.services.async_call = AsyncMock()
@@ -1759,12 +1699,8 @@ class TestDailyCoverScheduleCheck:
         entry = self._make_entry()
         coordinator = self._make_coordinator(hass, entry, open_time="08:30", close_time="21:40")
 
-        asyncio.get_event_loop().run_until_complete(
-            coordinator._cover_manager.async_check_daily_schedule(datetime(2026, 7, 1, 21, 40, 0))
-        )
-        asyncio.get_event_loop().run_until_complete(
-            coordinator._cover_manager.async_check_daily_schedule(datetime(2026, 7, 1, 22, 0, 0))
-        )
+        await coordinator._cover_manager.async_check_daily_schedule(datetime(2026, 7, 1, 21, 40, 0))
+        await coordinator._cover_manager.async_check_daily_schedule(datetime(2026, 7, 1, 22, 0, 0))
 
         assert hass.services.async_call.call_count == 2  # one open + one close, not repeated
 
@@ -2082,7 +2018,7 @@ class TestAsyncRunCoverChecks:
     schedule's own group-open action firing right after in the same cycle.
     """
 
-    def test_daily_schedule_runs_before_heat_protection(self):
+    async def test_daily_schedule_runs_before_heat_protection(self):
         hass = make_mock_hass()
         coordinator = HomeShiftCoordinator(hass, make_mock_entry())
 
@@ -2094,7 +2030,7 @@ class TestAsyncRunCoverChecks:
             side_effect=lambda now: call_order.append("heat_protection")
         )
 
-        asyncio.get_event_loop().run_until_complete(coordinator._async_run_cover_checks())
+        await coordinator._async_run_cover_checks()
 
         assert call_order == ["daily_schedule", "heat_protection"]
 
@@ -2102,7 +2038,7 @@ class TestAsyncRunCoverChecks:
 class TestCoverCheckOrderInPeriodicPoll:
     """Verify the periodic poll (_async_update_data) also checks the daily schedule before heat protection."""
 
-    def test_daily_schedule_runs_before_heat_protection_in_periodic_poll(self):
+    async def test_daily_schedule_runs_before_heat_protection_in_periodic_poll(self):
         hass = make_mock_hass()
         hass.states.get.return_value = make_calendar_state(state="off")
         hass.services.async_call = AsyncMock(return_value={})
@@ -2118,7 +2054,7 @@ class TestCoverCheckOrderInPeriodicPoll:
 
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
             mock_dt.now.return_value = datetime(2026, 3, 11, 12, 0, 0)
-            asyncio.get_event_loop().run_until_complete(coordinator.async_update_data())
+            await coordinator.async_update_data()
 
         assert call_order == ["daily_schedule", "heat_protection"]
 # ---------------------------------------------------------------------------
@@ -2161,12 +2097,10 @@ class TestDailyCoverIndividualCovers:
         state.attributes = {"entity_id": members} if members is not None else {}
         return state
 
-    def _run_close(self, coordinator):
-        asyncio.get_event_loop().run_until_complete(
-            coordinator._cover_manager.async_check_daily_schedule(datetime(2026, 7, 1, 21, 40, 0))
-        )
+    async def _run_close(self, coordinator):
+        await coordinator._cover_manager.async_check_daily_schedule(datetime(2026, 7, 1, 21, 40, 0))
 
-    def test_every_configured_cover_is_opened(self):
+    async def test_every_configured_cover_is_opened(self):
         """The open call targets every cover of the list, in configured order."""
         hass = self._hass_with_states({})
         entry = self._make_entry(
@@ -2176,27 +2110,25 @@ class TestDailyCoverIndividualCovers:
         coordinator = self._make_coordinator(hass, entry)
         coordinator._cover_manager._daily_opened_date = None
 
-        asyncio.get_event_loop().run_until_complete(
-            coordinator._cover_manager.async_check_daily_schedule(datetime(2026, 7, 1, 8, 30, 0))
-        )
+        await coordinator._cover_manager.async_check_daily_schedule(datetime(2026, 7, 1, 8, 30, 0))
 
         call = hass.services.async_call.call_args
         assert call.args[1] == "open_cover"
         assert call.args[2]["entity_id"] == ["cover.volets", "cover.chambre"]
 
-    def test_closes_individual_cover_when_window_is_closed(self):
+    async def test_closes_individual_cover_when_window_is_closed(self):
         """A cover whose window sensor reads 'off' closes normally."""
         hass = self._hass_with_states({"binary_sensor.fenetre_chambre": self._entity_state("off")})
         entry = self._make_entry([{"cover": "cover.chambre", "window_sensor": "binary_sensor.fenetre_chambre"}])
         coordinator = self._make_coordinator(hass, entry)
 
-        self._run_close(coordinator)
+        await self._run_close(coordinator)
 
         call = hass.services.async_call.call_args
         assert call.args[1] == "close_cover"
         assert call.args[2]["entity_id"] == ["cover.chambre"]
 
-    def test_skips_cover_whose_window_is_open_and_warns(self, caplog):
+    async def test_skips_cover_whose_window_is_open_and_warns(self, caplog):
         """The open-window cover is left out of the close call, with a warning."""
         hass = self._hass_with_states(
             {
@@ -2213,24 +2145,24 @@ class TestDailyCoverIndividualCovers:
         coordinator = self._make_coordinator(hass, entry)
 
         with caplog.at_level("WARNING"):
-            self._run_close(coordinator)
+            await self._run_close(coordinator)
 
         call = hass.services.async_call.call_args
         assert call.args[2]["entity_id"] == ["cover.salon"]
         assert "cover.chambre" in caplog.text
         assert "window open" in caplog.text
 
-    def test_cover_without_window_sensor_always_closes(self):
+    async def test_cover_without_window_sensor_always_closes(self):
         """An individual cover configured without a sensor is never skipped."""
         hass = self._hass_with_states({})
         entry = self._make_entry([{"cover": "cover.bureau", "window_sensor": ""}])
         coordinator = self._make_coordinator(hass, entry)
 
-        self._run_close(coordinator)
+        await self._run_close(coordinator)
 
         assert hass.services.async_call.call_args.args[2]["entity_id"] == ["cover.bureau"]
 
-    def test_unavailable_window_sensor_closes_anyway_and_warns(self, caplog):
+    async def test_unavailable_window_sensor_closes_anyway_and_warns(self, caplog):
         """An unavailable sensor can't prove the window is open — the cover closes, with a warning."""
         hass = self._hass_with_states(
             {"binary_sensor.fenetre_chambre": self._entity_state("unavailable")}
@@ -2239,26 +2171,26 @@ class TestDailyCoverIndividualCovers:
         coordinator = self._make_coordinator(hass, entry)
 
         with caplog.at_level("WARNING"):
-            self._run_close(coordinator)
+            await self._run_close(coordinator)
 
         assert hass.services.async_call.call_args.args[2]["entity_id"] == ["cover.chambre"]
         assert "unavailable" in caplog.text
 
-    def test_no_close_call_when_every_cover_is_blocked(self, caplog):
+    async def test_no_close_call_when_every_cover_is_blocked(self, caplog):
         """Nothing is closed (and no empty service call is sent) when all windows are open."""
         hass = self._hass_with_states({"binary_sensor.fenetre_chambre": self._entity_state("on")})
         entry = self._make_entry([{"cover": "cover.chambre", "window_sensor": "binary_sensor.fenetre_chambre"}])
         coordinator = self._make_coordinator(hass, entry)
 
         with caplog.at_level("WARNING"):
-            self._run_close(coordinator)
+            await self._run_close(coordinator)
 
         hass.services.async_call.assert_not_called()
         assert "nothing closed" in caplog.text.lower()
         # The day is still marked done — a skipped cover isn't retried later that night.
         assert coordinator._cover_manager._daily_closed_date == date(2026, 7, 1)
 
-    def test_a_group_entity_is_closed_as_configured(self):
+    async def test_a_group_entity_is_closed_as_configured(self):
         """A group entity is one cover like any other: it is not looked inside.
 
         The cover listed with its own sensor is skipped, but the group
@@ -2272,11 +2204,11 @@ class TestDailyCoverIndividualCovers:
         )
         coordinator = self._make_coordinator(hass, entry)
 
-        self._run_close(coordinator)
+        await self._run_close(coordinator)
 
         assert hass.services.async_call.call_args.args[2]["entity_id"] == ["cover.volets"]
 
-    def test_schedule_is_computed_with_individual_covers_only(self):
+    async def test_schedule_is_computed_with_individual_covers_only(self):
         """Individual covers alone are enough to configure the daily schedule (no group needed)."""
         hass = make_mock_hass()
         sun_state = MagicMock()
@@ -2289,11 +2221,9 @@ class TestDailyCoverIndividualCovers:
             from datetime import timezone, timedelta as tdelta
             tz_paris = timezone(tdelta(hours=2))
             mock_dt.as_local.side_effect = lambda dt: dt.astimezone(tz_paris)
-            asyncio.get_event_loop().run_until_complete(
-                coordinator._cover_manager.async_compute_daily_schedule(
+            await coordinator._cover_manager.async_compute_daily_schedule(
                     datetime(2026, 7, 1, 0, 5, 0), day_mode_key="home"
                 )
-            )
 
         # the exact minute depends on the location; that it was computed is the point
         assert coordinator._cover_manager.daily_close_time is not None
@@ -2331,15 +2261,13 @@ class TestDailyCoverMyPositionButton:
         state.attributes = {"entity_id": members} if members is not None else {}
         return state
 
-    def _run_close(self, coordinator):
-        asyncio.get_event_loop().run_until_complete(
-            coordinator._cover_manager.async_check_daily_schedule(datetime(2026, 7, 1, 21, 40, 0))
-        )
+    async def _run_close(self, coordinator):
+        await coordinator._cover_manager.async_check_daily_schedule(datetime(2026, 7, 1, 21, 40, 0))
 
     def _calls(self, hass):
         return [(c.args[0], c.args[1], c.args[2]["entity_id"]) for c in hass.services.async_call.call_args_list]
 
-    def test_presses_the_button_instead_of_closing(self):
+    async def test_presses_the_button_instead_of_closing(self):
         """The cover gets a button press, and no close_cover at all."""
         hass = self._hass_with_states()
         entry = self._make_entry(
@@ -2347,11 +2275,11 @@ class TestDailyCoverMyPositionButton:
         )
         coordinator = self._make_coordinator(hass, entry)
 
-        self._run_close(coordinator)
+        await self._run_close(coordinator)
 
         assert self._calls(hass) == [("button", "press", "button.my_salon")]
 
-    def test_other_covers_still_close_normally(self):
+    async def test_other_covers_still_close_normally(self):
         """Only the My-button cover is diverted; the rest are closed in one call."""
         hass = self._hass_with_states()
         entry = self._make_entry(
@@ -2362,14 +2290,14 @@ class TestDailyCoverMyPositionButton:
         )
         coordinator = self._make_coordinator(hass, entry)
 
-        self._run_close(coordinator)
+        await self._run_close(coordinator)
 
         assert self._calls(hass) == [
             ("cover", "close_cover", ["cover.chambre"]),
             ("button", "press", "button.my_salon"),
         ]
 
-    def test_open_window_wins_over_the_button(self, caplog):
+    async def test_open_window_wins_over_the_button(self, caplog):
         """A cover behind an open window is skipped entirely — no press either."""
         hass = self._hass_with_states({"binary_sensor.f": self._entity_state("on")})
         entry = self._make_entry(
@@ -2378,12 +2306,12 @@ class TestDailyCoverMyPositionButton:
         coordinator = self._make_coordinator(hass, entry)
 
         with caplog.at_level("WARNING"):
-            self._run_close(coordinator)
+            await self._run_close(coordinator)
 
         hass.services.async_call.assert_not_called()
         assert "window open" in caplog.text
 
-    def test_each_cover_gets_its_own_button_press(self):
+    async def test_each_cover_gets_its_own_button_press(self):
         """Two My-position covers produce one press each, and no close_cover."""
         hass = self._hass_with_states()
         entry = self._make_entry(
@@ -2394,14 +2322,14 @@ class TestDailyCoverMyPositionButton:
         )
         coordinator = self._make_coordinator(hass, entry)
 
-        self._run_close(coordinator)
+        await self._run_close(coordinator)
 
         assert self._calls(hass) == [
             ("button", "press", "button.my_salon"),
             ("button", "press", "button.my_bureau"),
         ]
 
-    def test_morning_open_is_unaffected_by_the_button(self):
+    async def test_morning_open_is_unaffected_by_the_button(self):
         """The My button only changes how a cover closes — it still opens normally."""
         hass = self._hass_with_states()
         entry = self._make_entry(
@@ -2410,13 +2338,11 @@ class TestDailyCoverMyPositionButton:
         coordinator = self._make_coordinator(hass, entry)
         coordinator._cover_manager._daily_opened_date = None
 
-        asyncio.get_event_loop().run_until_complete(
-            coordinator._cover_manager.async_check_daily_schedule(datetime(2026, 7, 1, 8, 30, 0))
-        )
+        await coordinator._cover_manager.async_check_daily_schedule(datetime(2026, 7, 1, 8, 30, 0))
 
         assert self._calls(hass) == [("cover", "open_cover", ["cover.salon"])]
 
-    def test_day_is_marked_done_when_only_a_button_was_pressed(self):
+    async def test_day_is_marked_done_when_only_a_button_was_pressed(self):
         """A press alone still counts as today's close (no warning, no retry)."""
         hass = self._hass_with_states()
         entry = self._make_entry(
@@ -2424,7 +2350,7 @@ class TestDailyCoverMyPositionButton:
         )
         coordinator = self._make_coordinator(hass, entry)
 
-        self._run_close(coordinator)
+        await self._run_close(coordinator)
 
         assert coordinator._cover_manager._daily_closed_date == date(2026, 7, 1)
 class TestHeatProtectionResetIsPerCalendarDay:
@@ -2460,14 +2386,12 @@ class TestHeatProtectionResetIsPerCalendarDay:
         hass.states.get.side_effect = lambda eid: sun_state if eid == "sun.sun" else None
         return hass
 
-    def _compute(self, manager, now):
+    async def _compute(self, manager, now):
         with patch("custom_components.homeshift.cover_manager.dt_util") as mock_dt:
             from datetime import timezone, timedelta as tdelta
             tz_paris = timezone(tdelta(hours=2))
             mock_dt.as_local.side_effect = lambda dt: dt.astimezone(tz_paris)
-            asyncio.get_event_loop().run_until_complete(
-                manager.async_compute_daily_schedule(now, "home")
-            )
+            await manager.async_compute_daily_schedule(now, "home")
 
     def _manager(self):
         coordinator = HomeShiftCoordinator(self._sun_hass(), self._make_entry())
@@ -2475,57 +2399,57 @@ class TestHeatProtectionResetIsPerCalendarDay:
         manager._async_save_state = AsyncMock()
         return manager
 
-    def test_same_day_recompute_keeps_the_closed_flag(self):
+    async def test_same_day_recompute_keeps_the_closed_flag(self):
         """HA restarts at 15:00: the schedule is recomputed, the flag survives."""
         manager = self._manager()
         # state restored from storage after the restart
         manager._heat_closed = True
         manager._schedule_computed_date = date(2026, 7, 1)
 
-        self._compute(manager, datetime(2026, 7, 1, 15, 0, 0))
+        await self._compute(manager, datetime(2026, 7, 1, 15, 0, 0))
 
         assert manager._heat_closed is True
         # the times are still recomputed — they are not persisted
         assert manager.daily_close_time is not None
 
-    def test_new_day_recompute_clears_the_closed_flag(self):
+    async def test_new_day_recompute_clears_the_closed_flag(self):
         """Next morning: heat protection starts over."""
         manager = self._manager()
         manager._heat_closed = True
         manager._schedule_computed_date = date(2026, 6, 30)
 
-        self._compute(manager, datetime(2026, 7, 1, 0, 5, 0))
+        await self._compute(manager, datetime(2026, 7, 1, 0, 5, 0))
 
         assert manager._heat_closed is False
         assert manager._schedule_computed_date == date(2026, 7, 1)
 
-    def test_first_ever_run_clears_the_flag_and_records_the_day(self):
+    async def test_first_ever_run_clears_the_flag_and_records_the_day(self):
         """With nothing persisted yet, the first compute behaves like a new day."""
         manager = self._manager()
         manager._heat_closed = True  # would be False in practice; proves the reset runs
 
-        self._compute(manager, datetime(2026, 7, 1, 0, 5, 0))
+        await self._compute(manager, datetime(2026, 7, 1, 0, 5, 0))
 
         assert manager._heat_closed is False
         assert manager._schedule_computed_date == date(2026, 7, 1)
 
-    def test_the_day_is_persisted_on_the_flip(self):
+    async def test_the_day_is_persisted_on_the_flip(self):
         """The new day is written to storage, so the next restart sees it."""
         manager = self._manager()
         manager._schedule_computed_date = date(2026, 6, 30)
 
-        self._compute(manager, datetime(2026, 7, 1, 0, 5, 0))
+        await self._compute(manager, datetime(2026, 7, 1, 0, 5, 0))
 
         manager._async_save_state.assert_awaited()
 
-    def test_restore_reads_back_the_computed_day(self):
+    async def test_restore_reads_back_the_computed_day(self):
         """async_restore_state picks the date up from storage."""
         manager = self._manager()
         manager._store.async_load = AsyncMock(
             return_value={"heat_closed": True, "schedule_computed_date": "2026-07-01"}
         )
 
-        asyncio.get_event_loop().run_until_complete(manager.async_restore_state())
+        await manager.async_restore_state()
 
         assert manager._heat_closed is True
         assert manager._schedule_computed_date == date(2026, 7, 1)
@@ -2564,38 +2488,34 @@ class TestCoverActionsAreNotSentTwice:
         manager.daily_close_time = "21:40"
         return manager
 
-    def test_two_overlapping_closes_send_one_command(self):
+    async def test_two_overlapping_closes_send_one_command(self):
         """The close timer and the periodic poll landing together."""
         hass = self._slow_hass()
         manager = self._daily_manager(hass)
         manager._daily_opened_date = date(2026, 7, 1)
 
-        asyncio.get_event_loop().run_until_complete(
-            asyncio.gather(
+        await asyncio.gather(
                 manager.async_check_daily_schedule(datetime(2026, 7, 1, 21, 40, 0)),
                 manager.async_check_daily_schedule(datetime(2026, 7, 1, 21, 40, 1)),
             )
-        )
 
         assert hass.services.async_call.await_count == 1
         assert manager._daily_closed_date == date(2026, 7, 1)
 
-    def test_two_overlapping_opens_send_one_command(self):
+    async def test_two_overlapping_opens_send_one_command(self):
         """Same race on the morning open."""
         hass = self._slow_hass()
         manager = self._daily_manager(hass)
 
-        asyncio.get_event_loop().run_until_complete(
-            asyncio.gather(
+        await asyncio.gather(
                 manager.async_check_daily_schedule(datetime(2026, 7, 1, 8, 30, 0)),
                 manager.async_check_daily_schedule(datetime(2026, 7, 1, 8, 30, 1)),
             )
-        )
 
         assert hass.services.async_call.await_count == 1
         assert hass.services.async_call.await_args.args[1] == "open_cover"
 
-    def test_two_overlapping_temperature_changes_close_once(self):
+    async def test_two_overlapping_temperature_changes_close_once(self):
         """Two sensor updates in the same tick must not close the cover twice."""
         from custom_components.homeshift.const import (
             CONF_COVER_ENTITIES,
@@ -2617,12 +2537,10 @@ class TestCoverActionsAreNotSentTwice:
         manager.cover_open_time = "08:30"
         manager.daily_close_time = "21:40"
 
-        asyncio.get_event_loop().run_until_complete(
-            asyncio.gather(
+        await asyncio.gather(
                 manager.async_check_heat_protection(datetime(2026, 7, 1, 14, 0, 0)),
                 manager.async_check_heat_protection(datetime(2026, 7, 1, 14, 0, 1)),
             )
-        )
 
         assert hass.services.async_call.await_count == 1
         assert manager._heat_closed is True
@@ -2639,7 +2557,7 @@ class TestDebugLogsDoNotDoWorkWhenDisabled:
         )
         return HomeShiftCoordinator(hass, make_mock_entry())
 
-    def test_event_summary_is_not_built_when_debug_is_off(self):
+    async def test_event_summary_is_not_built_when_debug_is_off(self):
         import custom_components.homeshift.coordinator as coord_module
 
         coordinator = self._coordinator_and_result()
@@ -2647,16 +2565,14 @@ class TestDebugLogsDoNotDoWorkWhenDisabled:
             patch.object(coord_module._LOGGER, "isEnabledFor", return_value=False),
             patch.object(coord_module.HomeShiftCoordinator, "_summarize_events_for_log") as summarize,
         ):
-            events = asyncio.get_event_loop().run_until_complete(
-                coordinator._async_get_upcoming_events(
+            events = await coordinator._async_get_upcoming_events(
                     "calendar.teletravail", datetime(2026, 7, 1), datetime(2026, 7, 2)
                 )
-            )
 
         summarize.assert_not_called()
         assert len(events) == 1  # the events themselves are still returned
 
-    def test_event_summary_is_built_when_debug_is_on(self):
+    async def test_event_summary_is_built_when_debug_is_on(self):
         import custom_components.homeshift.coordinator as coord_module
 
         coordinator = self._coordinator_and_result()
@@ -2664,11 +2580,9 @@ class TestDebugLogsDoNotDoWorkWhenDisabled:
             patch.object(coord_module._LOGGER, "isEnabledFor", return_value=True),
             patch.object(coord_module.HomeShiftCoordinator, "_summarize_events_for_log") as summarize,
         ):
-            asyncio.get_event_loop().run_until_complete(
-                coordinator._async_get_upcoming_events(
+            await coordinator._async_get_upcoming_events(
                     "calendar.teletravail", datetime(2026, 7, 1), datetime(2026, 7, 2)
                 )
-            )
 
         summarize.assert_called_once()
 class TestSteadyStatePollIsQuiet:
@@ -2685,10 +2599,10 @@ class TestSteadyStatePollIsQuiet:
         coordinator._async_save_state = AsyncMock()
         return coordinator
 
-    def _poll(self, coordinator, now):
+    async def _poll(self, coordinator, now):
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
             mock_dt.now.return_value = now
-            asyncio.get_event_loop().run_until_complete(coordinator.async_update_data())
+            await coordinator.async_update_data()
 
     def _infos(self, caplog):
         return [
@@ -2697,7 +2611,7 @@ class TestSteadyStatePollIsQuiet:
             if record.levelname == "INFO" and "coordinator" in record.name
         ]
 
-    def test_second_identical_poll_logs_nothing_at_info(self, caplog):
+    async def test_second_identical_poll_logs_nothing_at_info(self, caplog):
         hass = make_mock_hass()
         hass.states.get.return_value = make_calendar_state(state="off")
         hass.services.async_call = AsyncMock(return_value={})
@@ -2706,24 +2620,24 @@ class TestSteadyStatePollIsQuiet:
         # First poll of the day: legitimately logs the new day and the first
         # prediction.
         with caplog.at_level("DEBUG"):
-            self._poll(coordinator, datetime(2026, 3, 4, 10, 0, 0))
+            await self._poll(coordinator, datetime(2026, 3, 4, 10, 0, 0))
             caplog.clear()
-            self._poll(coordinator, datetime(2026, 3, 4, 10, 5, 0))
+            await self._poll(coordinator, datetime(2026, 3, 4, 10, 5, 0))
 
         assert self._infos(caplog) == []
 
-    def test_a_changed_prediction_is_still_logged_at_info(self, caplog):
+    async def test_a_changed_prediction_is_still_logged_at_info(self, caplog):
         hass = make_mock_hass()
         hass.states.get.return_value = make_calendar_state(state="off")
         hass.services.async_call = AsyncMock(return_value={})
         coordinator = self._coordinator(hass)
 
         with caplog.at_level("DEBUG"):
-            self._poll(coordinator, datetime(2026, 3, 4, 10, 0, 0))
+            await self._poll(coordinator, datetime(2026, 3, 4, 10, 0, 0))
             caplog.clear()
             # a different prediction than the one already reported
             coordinator._last_logged_prediction = ("Something else", None)
-            self._poll(coordinator, datetime(2026, 3, 4, 10, 5, 0))
+            await self._poll(coordinator, datetime(2026, 3, 4, 10, 5, 0))
 
         assert any("next_mode=" in message for message in self._infos(caplog))
 class TestPreparedEventViews:
@@ -2816,7 +2730,7 @@ class TestDailyCoverCloseOnSunElevation:
         hass.states.get.side_effect = lambda eid: sun if eid == "sun.sun" else None
         return hass
 
-    def _run(self, hass, entry, at_elevation):
+    async def _run(self, hass, entry, at_elevation):
         """Compute the schedule with the astral elevation lookup stubbed out."""
         from datetime import timedelta as tdelta, timezone
 
@@ -2828,19 +2742,17 @@ class TestDailyCoverCloseOnSunElevation:
                 "custom_components.homeshift.cover_manager.sun_time_at_elevation",
                 return_value=at_elevation,
             ) as mock_at_elevation:
-                asyncio.get_event_loop().run_until_complete(
-                    coordinator._cover_manager.async_compute_daily_schedule(
+                await coordinator._cover_manager.async_compute_daily_schedule(
                         datetime(2026, 7, 1, 0, 5, 0), "away"
                     )
-                )
         return coordinator, mock_at_elevation
 
-    def test_the_close_time_is_when_the_sun_reaches_the_elevation(self):
+    async def test_the_close_time_is_when_the_sun_reaches_the_elevation(self):
         from datetime import time as dt_time
 
         from custom_components.homeshift.const import CLOSE_TRIGGER_ELEVATION
 
-        coordinator, mock_at_elevation = self._run(
+        coordinator, mock_at_elevation = await self._run(
             self._hass(), self._make_entry(elevation=-4.0), at_elevation=dt_time(21, 52)
         )
 
@@ -2850,23 +2762,23 @@ class TestDailyCoverCloseOnSunElevation:
         assert elevation == -4.0
         assert on_date == date(2026, 7, 1)
 
-    def test_an_entry_without_the_setting_uses_the_recommended_default(self):
+    async def test_an_entry_without_the_setting_uses_the_recommended_default(self):
         from datetime import time as dt_time
 
         from custom_components.homeshift.const import DEFAULT_DAILY_COVER_CLOSE_ELEVATION
 
-        _coordinator, mock_at_elevation = self._run(
+        _coordinator, mock_at_elevation = await self._run(
             self._hass(), self._make_entry(), at_elevation=dt_time(21, 41)
         )
 
         assert mock_at_elevation.call_args.args[1] == DEFAULT_DAILY_COVER_CLOSE_ELEVATION
 
-    def test_an_unreachable_elevation_falls_back_to_sunset_and_warns(self, caplog):
+    async def test_an_unreachable_elevation_falls_back_to_sunset_and_warns(self, caplog):
         """A threshold the sun never reaches must not leave the covers open all night."""
         from custom_components.homeshift.const import CLOSE_TRIGGER_SUNSET
 
         with caplog.at_level("WARNING"):
-            coordinator, _ = self._run(
+            coordinator, _ = await self._run(
                 self._hass(), self._make_entry(elevation=5.0), at_elevation=None
             )
 
@@ -2874,35 +2786,35 @@ class TestDailyCoverCloseOnSunElevation:
         assert coordinator._cover_manager.daily_close_trigger == CLOSE_TRIGGER_SUNSET
         assert "never reaches" in caplog.text
 
-    def test_an_unparseable_elevation_uses_the_recommended_default(self):
+    async def test_an_unparseable_elevation_uses_the_recommended_default(self):
         """A corrupted value must not crash the nightly close."""
         from datetime import time as dt_time
 
         from custom_components.homeshift.const import DEFAULT_DAILY_COVER_CLOSE_ELEVATION
 
-        _coordinator, mock_at_elevation = self._run(
+        _coordinator, mock_at_elevation = await self._run(
             self._hass(), self._make_entry(elevation="nonsense"), at_elevation=dt_time(21, 52)
         )
 
         assert mock_at_elevation.call_args.args[1] == DEFAULT_DAILY_COVER_CLOSE_ELEVATION
 
-    def test_the_close_timer_follows_the_elevation_time(self):
+    async def test_the_close_timer_follows_the_elevation_time(self):
         """close_datetime — and so the one-shot timer — uses the elevation time."""
         from datetime import time as dt_time
 
-        coordinator, _ = self._run(
+        coordinator, _ = await self._run(
             self._hass(), self._make_entry(elevation=-4.0), at_elevation=dt_time(21, 52)
         )
 
         close_at = coordinator._cover_manager.close_datetime(datetime(2026, 7, 1, 12, 0, 0))
         assert close_at == datetime(2026, 7, 1, 21, 52, 0)
 
-    def test_no_sun_entity_leaves_the_close_time_unset(self):
+    async def test_no_sun_entity_leaves_the_close_time_unset(self):
         """Without sun.sun neither the elevation nor the fallback can answer."""
         hass = make_mock_hass()
         hass.states.get.side_effect = lambda _eid: None
 
-        coordinator, _ = self._run(hass, self._make_entry(), at_elevation=None)
+        coordinator, _ = await self._run(hass, self._make_entry(), at_elevation=None)
 
         assert coordinator._cover_manager.daily_close_time is None
 
@@ -2986,31 +2898,29 @@ class TestCoversLeftOpenState:
         manager._store = store
         return manager
 
-    def _close(self, hass, entry, on_day=date(2026, 7, 1)):
+    async def _close(self, hass, entry, on_day=date(2026, 7, 1)):
         manager = self._manager(hass, entry)
         manager.cover_open_time = "08:30"
         manager.daily_close_time = "21:40"
         manager._daily_opened_date = on_day
-        asyncio.get_event_loop().run_until_complete(
-            manager.async_check_daily_schedule(
+        await manager.async_check_daily_schedule(
                 datetime(on_day.year, on_day.month, on_day.day, 21, 40, 0)
             )
-        )
         return manager
 
-    def test_a_skipped_cover_is_recorded_with_its_sensor(self):
+    async def test_a_skipped_cover_is_recorded_with_its_sensor(self):
         """The entity must be able to name both the cover and why."""
         hass = self._hass({"binary_sensor.fenetre_chambre": self._state("on")})
         entry = self._make_entry(
             [{"cover": "cover.chambre", "window_sensor": "binary_sensor.fenetre_chambre"}]
         )
 
-        manager = self._close(hass, entry)
+        manager = await self._close(hass, entry)
 
         assert manager.covers_left_open == {"cover.chambre": "binary_sensor.fenetre_chambre"}
         assert manager.covers_left_open_date == date(2026, 7, 1)
 
-    def test_only_the_blocked_covers_are_listed(self):
+    async def test_only_the_blocked_covers_are_listed(self):
         hass = self._hass(
             {
                 "binary_sensor.f1": self._state("on"),
@@ -3024,50 +2934,50 @@ class TestCoversLeftOpenState:
             ]
         )
 
-        manager = self._close(hass, entry)
+        manager = await self._close(hass, entry)
 
         assert list(manager.covers_left_open) == ["cover.chambre"]
 
-    def test_a_clean_close_records_nothing(self):
+    async def test_a_clean_close_records_nothing(self):
         hass = self._hass({"binary_sensor.f1": self._state("off")})
         entry = self._make_entry([{"cover": "cover.chambre", "window_sensor": "binary_sensor.f1"}])
 
-        manager = self._close(hass, entry)
+        manager = await self._close(hass, entry)
 
         assert manager.covers_left_open == {}
         assert manager.covers_left_open_date == date(2026, 7, 1)
 
-    def test_an_unavailable_sensor_is_not_a_left_open_cover(self):
+    async def test_an_unavailable_sensor_is_not_a_left_open_cover(self):
         """That cover was closed anyway, so it is not left up."""
         hass = self._hass({"binary_sensor.f1": self._state("unavailable")})
         entry = self._make_entry([{"cover": "cover.chambre", "window_sensor": "binary_sensor.f1"}])
 
-        manager = self._close(hass, entry)
+        manager = await self._close(hass, entry)
 
         assert manager.covers_left_open == {}
 
-    def test_a_my_position_cover_is_not_left_open(self):
+    async def test_a_my_position_cover_is_not_left_open(self):
         """It was sent to its favourite position, which counts as handled."""
         hass = self._hass({})
         entry = self._make_entry(
             [{"cover": "cover.salon", "window_sensor": "", "my_button": "button.my_salon"}]
         )
 
-        manager = self._close(hass, entry)
+        manager = await self._close(hass, entry)
 
         assert manager.covers_left_open == {}
 
-    def test_the_list_is_persisted(self):
+    async def test_the_list_is_persisted(self):
         hass = self._hass({"binary_sensor.f1": self._state("on")})
         entry = self._make_entry([{"cover": "cover.chambre", "window_sensor": "binary_sensor.f1"}])
 
-        manager = self._close(hass, entry)
+        manager = await self._close(hass, entry)
         saved = manager._store.async_save.call_args.args[0]
 
         assert saved["covers_left_open"] == {"cover.chambre": "binary_sensor.f1"}
         assert saved["covers_left_open_date"] == "2026-07-01"
 
-    def test_the_list_is_restored_after_a_restart(self):
+    async def test_the_list_is_restored_after_a_restart(self):
         """A reboot the same evening must not silence the warning."""
         manager = self._manager(
             make_mock_hass(),
@@ -3078,57 +2988,55 @@ class TestCoversLeftOpenState:
             },
         )
 
-        asyncio.get_event_loop().run_until_complete(manager.async_restore_state())
+        await manager.async_restore_state()
 
         assert manager.covers_left_open == {"cover.chambre": "binary_sensor.f1"}
         assert manager.covers_left_open_date == date(2026, 7, 1)
 
-    def test_a_corrupted_stored_list_is_ignored(self):
+    async def test_a_corrupted_stored_list_is_ignored(self):
         manager = self._manager(
             make_mock_hass(), self._make_entry([]), stored={"covers_left_open": "junk"}
         )
 
-        asyncio.get_event_loop().run_until_complete(manager.async_restore_state())
+        await manager.async_restore_state()
 
         assert manager.covers_left_open == {}
 
-    def _compute(self, manager, on_day):
+    async def _compute(self, manager, on_day):
         sun = MagicMock()
         sun.attributes = {"next_setting": "2026-07-01T19:30:00+00:00"}
         manager._hass.states.get.side_effect = lambda eid: sun if eid == "sun.sun" else None
-        asyncio.get_event_loop().run_until_complete(
-            manager.async_compute_daily_schedule(
+        await manager.async_compute_daily_schedule(
                 datetime(on_day.year, on_day.month, on_day.day, 0, 5, 0), "home"
             )
-        )
 
-    def test_a_new_day_clears_the_warning(self):
+    async def test_a_new_day_clears_the_warning(self):
         hass = self._hass({"binary_sensor.f1": self._state("on")})
         entry = self._make_entry([{"cover": "cover.chambre", "window_sensor": "binary_sensor.f1"}])
-        manager = self._close(hass, entry)
+        manager = await self._close(hass, entry)
 
-        self._compute(manager, date(2026, 7, 2))
+        await self._compute(manager, date(2026, 7, 2))
 
         assert manager.covers_left_open == {}
         assert manager.covers_left_open_date is None
 
-    def test_a_same_day_recompute_keeps_the_warning(self):
+    async def test_a_same_day_recompute_keeps_the_warning(self):
         """A restart re-runs the compute for today; the warning must survive it."""
         hass = self._hass({"binary_sensor.f1": self._state("on")})
         entry = self._make_entry([{"cover": "cover.chambre", "window_sensor": "binary_sensor.f1"}])
-        manager = self._close(hass, entry)
+        manager = await self._close(hass, entry)
         manager._schedule_computed_date = date(2026, 7, 1)
 
-        self._compute(manager, date(2026, 7, 1))
+        await self._compute(manager, date(2026, 7, 1))
 
         assert manager.covers_left_open == {"cover.chambre": "binary_sensor.f1"}
 
-    def test_the_entities_are_refreshed_right_after_a_timer_close(self):
+    async def test_the_entities_are_refreshed_right_after_a_timer_close(self):
         """The timers fire between polls — the warning must not wait for one."""
         hass = self._hass({})
         coordinator = HomeShiftCoordinator(hass, self._make_entry([]))
         coordinator.async_update_listeners = MagicMock()
 
-        asyncio.get_event_loop().run_until_complete(coordinator._async_run_cover_checks())
+        await coordinator._async_run_cover_checks()
 
         coordinator.async_update_listeners.assert_called_once()

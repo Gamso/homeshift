@@ -14,6 +14,8 @@ from collections.abc import Callable
 from datetime import date, datetime, time as dt_time, timedelta
 from typing import TYPE_CHECKING
 
+# astral is a dependency of Home Assistant itself; hassfest forbids listing it
+# in the manifest of a custom integration, so it is used here undeclared.
 from astral import Observer
 from astral.sun import (
     SunDirection,

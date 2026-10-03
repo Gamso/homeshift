@@ -39,7 +39,6 @@ from .const import (
     DEFAULT_EVENT_MODE_MAP,
     DEFAULT_MODE_ABSENCE,
     EVENT_NONE,
-    THERMOSTAT_OFF_KEY,
     get_localized_defaults,
     parse_key_value_map,
 )

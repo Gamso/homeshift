@@ -594,24 +594,20 @@ def _apply_cover_item_remove(user_input: dict[str, Any], data: dict[str, Any]) -
 
 
 # ---------------------------------------------------------------------------
-# Config flow (initial setup) – menu-based
+# Menu steps shared by the config flow and the options flow
 # ---------------------------------------------------------------------------
 
 
-class HomeShiftConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
-    """Handle a config flow for HomeShift."""
+class _HomeShiftMenuSteps:
+    """The menu and its sections, identical in the config and options flows.
 
-    VERSION = 5
+    Each flow keeps its own entry point (user / init) and final step
+    (create the entry / save the options); everything in between edits
+    self._data the same way.
+    """
 
-    def __init__(self) -> None:
-        """Initialise the config flow."""
-        self._data: dict[str, Any] = {}
-
-    def is_matching(self, _other_flow: Self) -> bool:
-        """Return True if another in-progress flow matches this one (not used)."""
-        return False
-
-    # -- helpers -----------------------------------------------------------
+    hass: Any
+    _data: dict[str, Any]
 
     def _effective_data(self) -> dict[str, Any]:
         """Return _data merged over localized defaults (for schema builders)."""
@@ -620,21 +616,6 @@ class HomeShiftConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     def _is_config_complete(self) -> bool:
         """Return True when the minimum required configuration is present."""
         return bool(self._data.get(CONF_CALENDAR_ENTITY))
-
-    # -- entry point -------------------------------------------------------
-
-    async def async_step_user(
-        self,
-        _user_input: dict[str, Any] | None = None,
-    ) -> config_entries.ConfigFlowResult:
-        """Entry point – redirect to the menu, unless HomeShift is already set up.
-
-        A second entry would mean a second coordinator driving the same covers
-        and schedulers, each unaware of the other.
-        """
-        if self._async_current_entries():
-            return self.async_abort(reason="single_instance_allowed")
-        return await self.async_step_menu()
 
     # -- menu --------------------------------------------------------------
 
@@ -654,7 +635,7 @@ class HomeShiftConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self,
         user_input: dict[str, Any] | None = None,
     ) -> config_entries.ConfigFlowResult:
-        """Configure calendar entities and scan interval."""
+        """Configure the work and holiday calendar entities."""
         errors: dict[str, str] = {}
 
         if user_input is not None:
@@ -796,7 +777,37 @@ class HomeShiftConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             data_schema=_cover_item_remove_schema(self._data),
         )
 
-    # -- finalize ----------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# Config flow (initial setup) – menu-based
+# ---------------------------------------------------------------------------
+
+
+class HomeShiftConfigFlow(_HomeShiftMenuSteps, config_entries.ConfigFlow, domain=DOMAIN):
+    """Handle a config flow for HomeShift."""
+
+    VERSION = 5
+
+    def __init__(self) -> None:
+        """Initialise the config flow."""
+        self._data: dict[str, Any] = {}
+
+    def is_matching(self, _other_flow: Self) -> bool:
+        """Return True if another in-progress flow matches this one (not used)."""
+        return False
+
+    async def async_step_user(
+        self,
+        _user_input: dict[str, Any] | None = None,
+    ) -> config_entries.ConfigFlowResult:
+        """Entry point – redirect to the menu, unless HomeShift is already set up.
+
+        A second entry would mean a second coordinator driving the same covers
+        and schedulers, each unaware of the other.
+        """
+        if self._async_current_entries():
+            return self.async_abort(reason="single_instance_allowed")
+        return await self.async_step_menu()
 
     async def async_step_finalize(
         self,
@@ -804,8 +815,6 @@ class HomeShiftConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     ) -> config_entries.ConfigFlowResult:
         """Create the config entry."""
         return self.async_create_entry(title="HomeShift", data=self._data)
-
-    # -- options flow accessor ---------------------------------------------
 
     @staticmethod
     @callback
@@ -821,24 +830,12 @@ class HomeShiftConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 # ---------------------------------------------------------------------------
 
 
-class HomeShiftOptionsFlow(config_entries.OptionsFlow):
+class HomeShiftOptionsFlow(_HomeShiftMenuSteps, config_entries.OptionsFlow):
     """Handle options flow for HomeShift."""
 
     def __init__(self) -> None:
         """Initialize options flow."""
         self._data: dict[str, Any] = {}
-
-    # -- helpers -----------------------------------------------------------
-
-    def _is_config_complete(self) -> bool:
-        """Return True when the minimum required configuration is present."""
-        return bool(self._data.get(CONF_CALENDAR_ENTITY))
-
-    def _effective_data(self) -> dict[str, Any]:
-        """Return _data merged over localized defaults (for schema builders)."""
-        return {**_get_localized_defaults(self.hass), **self._data}
-
-    # -- entry point -------------------------------------------------------
 
     async def async_step_init(
         self,
@@ -847,168 +844,6 @@ class HomeShiftOptionsFlow(config_entries.OptionsFlow):
         """Entry point – pre-populate from existing entry, then show menu."""
         self._data = {**self.config_entry.data, **self.config_entry.options}
         return await self.async_step_menu()
-
-    # -- menu --------------------------------------------------------------
-
-    async def async_step_menu(
-        self,
-        _user_input: dict[str, Any] | None = None,
-    ) -> config_entries.ConfigFlowResult:
-        """Show the options menu."""
-        menu_options = ["calendars", "mapping", "schedulers", "covers", "daily_cover_schedule", "cover_items"]
-        if self._is_config_complete():
-            menu_options.append("finalize")
-        return self.async_show_menu(step_id="menu", menu_options=menu_options)
-
-    # -- calendars ---------------------------------------------------------
-
-    async def async_step_calendars(
-        self,
-        user_input: dict[str, Any] | None = None,
-    ) -> config_entries.ConfigFlowResult:
-        """Configure calendar entities and scan interval."""
-        errors: dict[str, str] = {}
-
-        if user_input is not None:
-            errors = _validate_calendars(self.hass, user_input)
-            if not errors:
-                self._data.update(user_input)
-                return await self.async_step_menu()
-
-        return self.async_show_form(
-            step_id="calendars",
-            data_schema=_calendars_schema(self._effective_data()),
-            errors=errors,
-        )
-
-    # -- mapping -----------------------------------------------------------
-
-    async def async_step_mapping(
-        self,
-        user_input: dict[str, Any] | None = None,
-    ) -> config_entries.ConfigFlowResult:
-        """Configure day-mode & thermostat-mode mapping."""
-        if user_input is not None:
-            # Flatten section-nested input from the three sections
-            flat: dict[str, Any] = {
-                **user_input.get("day_modes_section", {}),
-                **user_input.get("defaults_section", {}),
-                **user_input.get("thermostat_section", {}),
-            }
-            flat[CONF_DAY_MODE_MAP] = _rebuild_day_mode_map(flat, self._effective_data())
-            flat[CONF_THERMOSTAT_MODE_MAP] = _rebuild_thermostat_map(flat, self._effective_data())
-            self._data.update(flat)
-            return await self.async_step_menu()
-
-        return self.async_show_form(
-            step_id="mapping",
-            data_schema=_mapping_schema(self._effective_data()),
-        )
-
-    # -- schedulers --------------------------------------------------------
-
-    async def async_step_schedulers(
-        self,
-        user_input: dict[str, Any] | None = None,
-    ) -> config_entries.ConfigFlowResult:
-        """Assign scheduler entities to each day mode."""
-        if user_input is not None:
-            self._data[CONF_SCHEDULERS_PER_MODE] = _extract_schedulers(user_input, self._effective_data())
-            return await self.async_step_menu()
-
-        return self.async_show_form(
-            step_id="schedulers",
-            data_schema=_schedulers_schema(self.hass, self._effective_data()),
-        )
-
-    # -- covers ------------------------------------------------------------
-
-    async def async_step_covers(
-        self,
-        user_input: dict[str, Any] | None = None,
-    ) -> config_entries.ConfigFlowResult:
-        """Configure cover heat-control settings."""
-        if user_input is not None:
-            self._data.update(_apply_covers_input(user_input))
-            return await self.async_step_menu()
-
-        return self.async_show_form(
-            step_id="covers",
-            data_schema=_covers_schema(self.hass, self._effective_data()),
-        )
-
-    # -- daily cover schedule ------------------------------------------------
-
-    async def async_step_daily_cover_schedule(
-        self,
-        user_input: dict[str, Any] | None = None,
-    ) -> config_entries.ConfigFlowResult:
-        """Configure the native daily cover open/close schedule."""
-        errors: dict[str, str] = {}
-        data = self._effective_data()
-
-        if user_input is not None:
-            errors = _validate_close_elevation(self.hass, user_input)
-            if not errors:
-                user_input[CONF_DAILY_COVER_OPEN_TIME_MAP] = _rebuild_daily_open_time_map(
-                    user_input, data
-                )
-                self._data.update(user_input)
-                return await self.async_step_menu()
-            # Redisplay what was typed, not what is stored, so the rejected
-            # value is there to correct and the preview matches it.
-            data = {**data, **user_input}
-            data[CONF_DAILY_COVER_OPEN_TIME_MAP] = _rebuild_daily_open_time_map(dict(user_input), data)
-
-        return self.async_show_form(
-            step_id="daily_cover_schedule",
-            data_schema=_daily_cover_schema(self.hass, data),
-            description_placeholders=_close_time_preview(self.hass, data),
-            errors=errors,
-        )
-
-    # -- individual covers ---------------------------------------------------
-
-    async def async_step_cover_items(
-        self,
-        _user_input: dict[str, Any] | None = None,
-    ) -> config_entries.ConfigFlowResult:
-        """Show the individual-cover menu (add one, remove some, or go back)."""
-        return self.async_show_menu(
-            step_id="cover_items",
-            menu_options=_cover_items_menu_options(self._data),
-            description_placeholders={"covers": _cover_items_summary(self._data)},
-        )
-
-    async def async_step_cover_item_add(
-        self,
-        user_input: dict[str, Any] | None = None,
-    ) -> config_entries.ConfigFlowResult:
-        """Add one cover — or update the window sensor of one already configured."""
-        if user_input is not None:
-            self._data[CONF_DAILY_COVER_ITEMS] = _apply_cover_item_add(user_input, self._data)
-            return await self.async_step_cover_items()
-
-        return self.async_show_form(
-            step_id="cover_item_add",
-            data_schema=_cover_item_add_schema(),
-        )
-
-    async def async_step_cover_item_remove(
-        self,
-        user_input: dict[str, Any] | None = None,
-    ) -> config_entries.ConfigFlowResult:
-        """Remove individually-configured covers."""
-        if user_input is not None:
-            self._data[CONF_DAILY_COVER_ITEMS] = _apply_cover_item_remove(user_input, self._data)
-            return await self.async_step_cover_items()
-
-        return self.async_show_form(
-            step_id="cover_item_remove",
-            data_schema=_cover_item_remove_schema(self._data),
-        )
-
-    # -- finalize ----------------------------------------------------------
 
     async def async_step_finalize(
         self,

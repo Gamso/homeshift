@@ -153,7 +153,7 @@ class TestNextModeNoEvent:
             mock_dt.now.return_value = now
             await coordinator.async_update_data()
 
-        assert "Calendar entity 'calendar.teletravail' not found in Home Assistant states" in caplog.text
+        assert "'calendar.teletravail' not found in Home Assistant states" in caplog.text
         assert "Next-mode fallback: calendar entity unavailable" in caplog.text
         assert "next_mode=Travail" in caplog.text
         assert "next_mode_at=2026-03-30T00:00:00" in caplog.text

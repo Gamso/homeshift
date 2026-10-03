@@ -5,6 +5,9 @@
   "documentation": "https://github.com/Gamso/day_mode",
   "requirements": [],
   "dependencies": [],
+  "after_dependencies": [
+    "calendar"
+  ],
   "codeowners": [
     "@Gamso"
   ],

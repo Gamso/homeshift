@@ -8,6 +8,7 @@ from typing import Any, Callable
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import STATE_UNAVAILABLE, STATE_UNKNOWN
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.event import async_track_point_in_time
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
@@ -1359,22 +1360,25 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
         # Turn off first so we don't have conflicting schedulers briefly active
         if to_disable:
             _LOGGER.info("Turning OFF schedulers: %s", sorted(to_disable))
-            await self.hass.services.async_call(
-                "switch",
-                "turn_off",
-                {"entity_id": sorted(to_disable)},
-                blocking=False,
-            )
+            await self._async_switch("turn_off", sorted(to_disable))
 
         if to_enable:
             _LOGGER.info("Turning ON schedulers: %s", sorted(to_enable))
-            await self.hass.services.async_call(
-                "switch",
-                "turn_on",
-                {"entity_id": sorted(to_enable)},
-                blocking=False,
-            )
+            await self._async_switch("turn_on", sorted(to_enable))
         elif mode_key and schedulers_per_mode.get(mode_key) is not None:
             _LOGGER.debug(
                 "No schedulers assigned to day_mode '%s' (key=%s)", self._day_mode, mode_key
             )
+
+    async def _async_switch(self, service: str, entity_ids: list[str]) -> None:
+        """Call switch.turn_on/turn_off and wait for it, logging a failure.
+
+        Blocking, so a failure (a scheduler switch deleted, the Scheduler
+        integration unloaded) surfaces here instead of vanishing in a
+        fire-and-forget task, and caught, so it cannot fail the coordinator
+        update that triggered the mode change.
+        """
+        try:
+            await self.hass.services.async_call("switch", service, {"entity_id": entity_ids}, blocking=True)
+        except HomeAssistantError as err:
+            _LOGGER.warning("Scheduler switch.%s failed for %s: %s", service, entity_ids, err)

@@ -1857,6 +1857,130 @@ class TestDailyCoverScheduleCheck:
 # Next-mode timer scheduling
 # ---------------------------------------------------------------------------
 
+class TestServiceFailuresAreContained:
+    """A failing cover/button/switch service is logged, never raised (audit P1, P3)."""
+
+    def _entry(self, **options):
+        from custom_components.homeshift.const import CONF_DAILY_COVER_ITEMS
+
+        entry = make_mock_entry()
+        entry.options = {CONF_DAILY_COVER_ITEMS: _cover_items("cover.volets"), **options}
+        return entry
+
+    def _hass(self, fail_on: set[tuple[str, str]]):
+        from homeassistant.exceptions import HomeAssistantError
+
+        hass = make_mock_hass()
+        hass.states.get.return_value = make_calendar_state(state="off")
+
+        async def _call(domain, service, data=None, **kwargs):
+            if (domain, service) in fail_on:
+                raise HomeAssistantError("Somfy API timeout")
+            if (domain, service) == ("weather", "get_forecasts"):
+                return {data["entity_id"]: {"forecast": [{"temperature": 35.0}]}}
+            return None
+
+        hass.services.async_call = AsyncMock(side_effect=_call)
+        return hass
+
+    async def test_a_failed_open_is_logged_and_retried(self, caplog):
+        hass = self._hass({("cover", "open_cover")})
+        coordinator = HomeShiftCoordinator(hass, self._entry())
+        manager = coordinator._cover_manager
+        manager.cover_open_time = "08:30"
+
+        with caplog.at_level("WARNING"):
+            await manager.async_check_daily_schedule(datetime(2026, 7, 1, 8, 30, 0))
+        assert manager._daily_opened_date is None
+        assert "open_cover failed" in caplog.text
+
+        hass.services.async_call.side_effect = None
+        await manager.async_check_daily_schedule(datetime(2026, 7, 1, 8, 35, 0))
+        assert manager._daily_opened_date == date(2026, 7, 1)
+
+    async def test_a_failed_close_is_not_marked_done(self):
+        hass = self._hass({("cover", "close_cover")})
+        coordinator = HomeShiftCoordinator(hass, self._entry())
+        manager = coordinator._cover_manager
+        manager.daily_close_time = "21:30"
+
+        await manager.async_check_daily_schedule(datetime(2026, 7, 1, 21, 30, 0))
+
+        assert manager._daily_closed_date is None
+
+    async def test_a_failed_reactive_close_leaves_the_cover_unprotected_for_a_retry(self):
+        from custom_components.homeshift.const import CONF_COVER_ENTITIES, CONF_COVER_TEMP_SENSOR
+
+        hass = self._hass({("cover", "close_cover")})
+        temp = MagicMock()
+        temp.state = "35.0"
+        hass.states.get.side_effect = lambda e: temp if e == "sensor.temp" else make_calendar_state(state="off")
+        coordinator = HomeShiftCoordinator(
+            hass, self._entry(**{CONF_COVER_ENTITIES: ["cover.sud"], CONF_COVER_TEMP_SENSOR: "sensor.temp"})
+        )
+        manager = coordinator._cover_manager
+        manager.cover_open_time, manager.daily_close_time = "08:00", "21:00"
+
+        await manager.async_check_heat_protection(datetime(2026, 7, 1, 14, 0, 0))
+
+        assert manager._heat_closed is False
+
+    async def test_a_failed_proactive_close_is_retried_the_same_day(self):
+        from custom_components.homeshift.const import (
+            CONF_COVER_ENTITIES,
+            CONF_COVER_TEMP_SENSOR,
+            CONF_COVER_TEMP_THRESHOLD,
+            CONF_COVER_WEATHER_ENTITY,
+        )
+
+        hass = self._hass({("cover", "close_cover")})
+        coordinator = HomeShiftCoordinator(
+            hass,
+            self._entry(
+                **{
+                    CONF_COVER_ENTITIES: ["cover.sud"],
+                    CONF_COVER_TEMP_SENSOR: "sensor.temp",
+                    CONF_COVER_TEMP_THRESHOLD: 99.0,
+                    CONF_COVER_WEATHER_ENTITY: "weather.home",
+                }
+            ),
+        )
+        manager = coordinator._cover_manager
+        manager.cover_open_time, manager.daily_close_time = "08:00", "21:00"
+
+        await manager.async_check_heat_protection(datetime(2026, 7, 1, 8, 0, 0))
+
+        assert manager._proactive_checked_date is None
+        assert manager._heat_closed is False
+
+    async def test_the_coordinator_update_survives_a_cover_failure(self):
+        """The failure no longer turns every HomeShift entity unavailable."""
+        hass = self._hass({("cover", "open_cover")})
+        coordinator = HomeShiftCoordinator(hass, self._entry())
+        coordinator._cover_manager.cover_open_time = "08:30"
+        coordinator._cover_schedule_date = date(2026, 7, 1)
+
+        with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
+            mock_dt.now.return_value = datetime(2026, 7, 1, 9, 0, 0)
+            result = await coordinator.async_update_data()
+
+        assert result["day_mode"] == coordinator.day_mode
+
+    async def test_scheduler_switches_are_awaited_and_failures_logged(self, caplog):
+        hass = self._hass({("switch", "turn_off")})
+        coordinator = HomeShiftCoordinator(
+            hass, make_mock_entry(schedulers_per_mode={"home": ["switch.a"], "work": ["switch.b"]})
+        )
+        coordinator._day_mode = "Travail"
+
+        with caplog.at_level("WARNING"):
+            await coordinator.async_refresh_schedulers()
+
+        assert "switch.turn_off failed" in caplog.text
+        turn_on = [c for c in hass.services.async_call.call_args_list if c.args[1] == "turn_on"]
+        assert turn_on and turn_on[0].kwargs["blocking"] is True
+
+
 class TestNextModeTimerScheduling:
     """Verify that a one-shot timer is scheduled/cancelled at _next_mode_at."""
 

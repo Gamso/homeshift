@@ -716,3 +716,146 @@ class TestCalendarDrivenAbsenceDoesNotFreezeTheIntegration:
         await coordinator.async_restore_state()
 
         assert coordinator._absence_is_manual is False
+
+
+# ---------------------------------------------------------------------------
+# Unreadable calendar (audit B2 / P4)
+# ---------------------------------------------------------------------------
+
+def _states(calendar=None, holiday=None):
+    """Return a states.get side effect serving the work and holiday calendars."""
+    calendar = calendar if calendar is not None else make_calendar_state(state="off")
+    holiday = holiday if holiday is not None else make_calendar_state(state="off")
+
+    def _get(entity_id):
+        if entity_id == "calendar.teletravail":
+            return None if calendar == "missing" else calendar
+        if entity_id == "calendar.jours_feries":
+            return None if holiday == "missing" else holiday
+        return None
+
+    return _get
+
+
+class TestUnreadableCalendarKeepsTheMode:
+    """A calendar that cannot be read says nothing about today: keep the mode."""
+
+    def _coordinator(self, day_mode, side_effect):
+        hass = make_mock_hass()
+        hass.services.async_call = AsyncMock()
+        hass.states.get.side_effect = side_effect
+        coordinator = HomeShiftCoordinator(hass, make_mock_entry())
+        coordinator._day_mode = day_mode
+        coordinator.async_refresh_schedulers = AsyncMock()
+        return coordinator
+
+    async def _poll(self, coordinator, now=datetime(2026, 3, 3, 10, 0, 0)):  # Tuesday
+        with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
+            mock_dt.now.return_value = now
+            return await coordinator.async_update_data()
+
+    async def test_unavailable_calendar_keeps_remote_work(self):
+        """CalDAV down on a remote-work Tuesday: no switch to Work and back."""
+        coordinator = self._coordinator("Télétravail", _states(calendar=make_calendar_state(state="unavailable")))
+
+        await self._poll(coordinator)
+
+        assert coordinator.day_mode == "Télétravail"
+        coordinator.async_refresh_schedulers.assert_not_called()
+
+    async def test_unknown_calendar_keeps_the_mode(self):
+        coordinator = self._coordinator("Télétravail", _states(calendar=make_calendar_state(state="unknown")))
+
+        await self._poll(coordinator)
+
+        assert coordinator.day_mode == "Télétravail"
+
+    async def test_missing_calendar_keeps_the_mode(self):
+        coordinator = self._coordinator("Télétravail", _states(calendar="missing"))
+
+        await self._poll(coordinator)
+
+        assert coordinator.day_mode == "Télétravail"
+
+    async def test_unavailable_holiday_calendar_keeps_the_mode(self):
+        """A bank holiday must not turn into a work day because its calendar is down."""
+        coordinator = self._coordinator(DEFAULT_MODE_HOLIDAY, _states(holiday=make_calendar_state(state="unavailable")))
+
+        await self._poll(coordinator)
+
+        assert coordinator.day_mode == DEFAULT_MODE_HOLIDAY
+
+    async def test_calendar_absence_is_not_cancelled(self):
+        """An absence set by a calendar event survives a calendar outage."""
+        coordinator = self._coordinator(DEFAULT_MODE_ABSENCE, _states(calendar=make_calendar_state(state="unavailable")))
+        coordinator._absence_is_manual = False
+
+        await self._poll(coordinator)
+
+        assert coordinator.day_mode == DEFAULT_MODE_ABSENCE
+
+    async def test_the_mode_follows_the_calendar_again_once_it_answers(self):
+        side = {"calendar": make_calendar_state(state="unavailable")}
+        coordinator = self._coordinator("Télétravail", lambda e: _states(**side)(e))
+
+        await self._poll(coordinator)
+        side["calendar"] = make_calendar_state(state="off")
+        await self._poll(coordinator, datetime(2026, 3, 3, 10, 5, 0))
+
+        assert coordinator.day_mode == DEFAULT_MODE_DEFAULT
+
+    async def test_the_outage_is_warned_about_once(self, caplog):
+        coordinator = self._coordinator("Télétravail", _states(calendar=make_calendar_state(state="unavailable")))
+
+        with caplog.at_level("WARNING"):
+            await self._poll(coordinator)
+            await self._poll(coordinator, datetime(2026, 3, 3, 10, 5, 0))
+
+        warnings = [r for r in caplog.records if "Calendar unreadable" in r.getMessage() and r.levelname == "WARNING"]
+        assert len(warnings) == 1
+
+
+class TestCoversDoNotWaitForTheCalendar:
+    """The cover schedule runs even when the calendar cannot be read (audit P4)."""
+
+    def _coordinator(self, side_effect):
+        hass = make_mock_hass()
+        hass.services.async_call = AsyncMock()
+        hass.states.get.side_effect = side_effect
+        coordinator = HomeShiftCoordinator(hass, make_mock_entry())
+        coordinator._day_mode = DEFAULT_MODE_DEFAULT
+        coordinator.async_refresh_schedulers = AsyncMock()
+        manager = coordinator._cover_manager
+        manager.async_compute_daily_schedule = AsyncMock()
+        manager.async_check_daily_schedule = AsyncMock()
+        manager.async_check_heat_protection = AsyncMock()
+        coordinator._schedule_cover_timers = MagicMock()
+        return coordinator
+
+    async def _poll(self, coordinator, now):
+        with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
+            mock_dt.now.return_value = now
+            await coordinator.async_update_data()
+
+    async def test_covers_are_scheduled_and_checked_without_the_calendar(self):
+        coordinator = self._coordinator(_states(calendar="missing"))
+
+        await self._poll(coordinator, datetime(2026, 3, 3, 8, 0, 0))
+
+        manager = coordinator._cover_manager
+        manager.async_compute_daily_schedule.assert_awaited_once()
+        manager.async_check_daily_schedule.assert_awaited_once()
+        manager.async_check_heat_protection.assert_awaited_once()
+
+    async def test_a_provisional_schedule_is_computed_again_once_the_calendar_answers(self):
+        side = {"calendar": "missing"}
+        coordinator = self._coordinator(lambda e: _states(**side)(e))
+
+        await self._poll(coordinator, datetime(2026, 3, 3, 0, 1, 0))
+        await self._poll(coordinator, datetime(2026, 3, 3, 0, 6, 0))
+        assert coordinator._cover_manager.async_compute_daily_schedule.await_count == 1
+
+        side["calendar"] = make_calendar_state(state="off")
+        await self._poll(coordinator, datetime(2026, 3, 3, 0, 11, 0))
+        await self._poll(coordinator, datetime(2026, 3, 3, 0, 16, 0))
+        assert coordinator._cover_manager.async_compute_daily_schedule.await_count == 2

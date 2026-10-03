@@ -6,6 +6,7 @@ from datetime import datetime, date, timedelta
 from typing import Any, Callable
 
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import STATE_UNAVAILABLE, STATE_UNKNOWN
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.event import async_track_point_in_time
 from homeassistant.helpers.storage import Store
@@ -105,6 +106,15 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
         # Stored as the matched event keyword (locale-independent) or EVENT_NONE.
         self._today_type: str = EVENT_NONE
         self._today_date: date | None = None
+        # True while a calendar cannot be read (missing, unavailable or
+        # unknown): the day mode is then kept rather than recomputed from an
+        # absence of events. Tracked to warn once per outage, not every poll.
+        self._calendar_unreadable: bool = False
+        # Day today's cover schedule was computed for, and whether it was
+        # computed while the calendar was unreadable (from a day mode that may
+        # still change once the calendar answers, so computed again then).
+        self._cover_schedule_date: date | None = None
+        self._cover_schedule_provisional: bool = False
         # Manual override duration (minutes) — mutable at runtime via number entity
         override_raw = _config.get(CONF_OVERRIDE_DURATION, DEFAULT_OVERRIDE_DURATION)
         try:
@@ -692,23 +702,95 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
             self._day_mode,
         )
 
+        calendar_state = self.hass.states.get(calendar_entity) if calendar_entity else None
+        unreadable = self._unreadable_calendars(calendar_entity, calendar_state)
+        self._log_calendar_readability(unreadable)
+
+        # Reset day-level event type at midnight (new calendar day)
+        today = now.date()
+        if today != self._today_date:
+            _LOGGER.info("New calendar day (%s), resetting today_type", today)
+            self._today_type = EVENT_NONE
+            self._today_date = today
+
+        if not unreadable:
+            await self._async_apply_calendar(calendar_entity, calendar_state, now)
+
+        # Compute today's native daily cover open/close times using TODAY's
+        # day mode — resolved just above, since a midnight mode change (e.g.
+        # Sunday 'Home' -> Monday 'Work') must be applied before this runs,
+        # not after — then schedule precise timers so open/close fire exactly
+        # on time. The covers do not wait for the calendar: with it unreadable
+        # (still loading at boot, CalDAV down) the schedule is computed from
+        # the mode kept so far, and computed again once the calendar answers.
+        if self._cover_schedule_date != today or (self._cover_schedule_provisional and not unreadable):
+            await self._cover_manager.async_compute_daily_schedule(now, self.day_mode_key)
+            self._schedule_cover_timers()
+            self._cover_schedule_date = today
+            self._cover_schedule_provisional = bool(unreadable)
+
+        # Compute when and to what mode the next automatic change is expected
+        await self._async_refresh_next_mode_prediction(
+            None if unreadable else calendar_state,
+            now,
+            context=(
+                "Next-mode fallback: calendar entity unavailable"
+                if unreadable
+                else "Next-mode prediction updated"
+            ),
+        )
+
+        # Native daily cover open/close schedule — runs first so the morning
+        # group open is never undone by a heat-protection action that fires
+        # at the same cover_open_time (the heat-protected cover is typically
+        # also a member of the daily-schedule cover group).
+        await self._cover_manager.async_check_daily_schedule(now)
+
+        # Cover heat protection — close covers if temperature exceeds threshold in window
+        await self._cover_manager.async_check_heat_protection(now)
+
+        return self._build_result()
+
+    def _unreadable_calendars(self, calendar_entity: str | None, calendar_state) -> list[str]:
+        """Return a description of each calendar that cannot be read right now.
+
+        A calendar that is missing, unavailable or unknown says nothing about
+        today: reading it as "no event" would switch a remote-work day to
+        work (and cancel a calendar absence) for as long as the outage
+        lasts, then switch back. The mode is kept instead.
+        """
+        unreadable: list[str] = []
         if not calendar_entity:
-            _LOGGER.warning("No calendar entity configured, skipping sync")
-            self._next_mode, self._next_mode_at = None, None
-            self._schedule_next_mode_timer()
-            return self._build_result()
+            unreadable.append("no calendar entity configured")
+        elif calendar_state is None:
+            unreadable.append(f"'{calendar_entity}' not found in Home Assistant states")
+        elif calendar_state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN):
+            unreadable.append(f"'{calendar_entity}' is {calendar_state.state}")
 
-        # Get calendar state
-        calendar_state = self.hass.states.get(calendar_entity)
-        if not calendar_state:
-            _LOGGER.warning("Calendar entity '%s' not found in Home Assistant states", calendar_entity)
-            await self._async_refresh_next_mode_prediction(
-                None,
-                now,
-                context="Next-mode fallback: calendar entity unavailable",
+        holiday_calendar = self._config.get(CONF_HOLIDAY_CALENDAR)
+        if holiday_calendar:
+            holiday_state = self.hass.states.get(holiday_calendar)
+            if holiday_state is None:
+                unreadable.append(f"holiday calendar '{holiday_calendar}' not found in Home Assistant states")
+            elif holiday_state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN):
+                unreadable.append(f"holiday calendar '{holiday_calendar}' is {holiday_state.state}")
+        return unreadable
+
+    def _log_calendar_readability(self, unreadable: list[str]) -> None:
+        """Warn once when a calendar becomes unreadable, and once when it recovers."""
+        if unreadable:
+            log = _LOGGER.warning if not self._calendar_unreadable else _LOGGER.debug
+            log(
+                "Calendar unreadable (%s) — keeping day mode '%s' until it answers again",
+                "; ".join(unreadable),
+                self._day_mode,
             )
-            return self._build_result()
+        elif self._calendar_unreadable:
+            _LOGGER.info("Calendars readable again, resuming automatic mode changes")
+        self._calendar_unreadable = bool(unreadable)
 
+    async def _async_apply_calendar(self, calendar_entity: str, calendar_state, now: datetime) -> None:
+        """Read the running event and switch the day mode automatically."""
         _LOGGER.debug(
             "Calendar '%s' -> state=%s | event='%s' | start=%s end=%s",
             calendar_entity,
@@ -721,14 +803,6 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
         # Determine current event from calendar
         self._current_event = None
         today_type = EVENT_NONE
-
-        # Reset day-level event type at midnight (new calendar day)
-        today = now.date()
-        is_new_day = today != self._today_date
-        if is_new_day:
-            _LOGGER.info("New calendar day (%s), resetting today_type", today)
-            self._today_type = EVENT_NONE
-            self._today_date = today
 
         if calendar_state.state == "on":
             event_message = calendar_state.attributes.get("message", "")
@@ -817,33 +891,6 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
                     self._day_mode,
                     self._current_event,
                 )
-
-        if is_new_day:
-            # Compute today's native daily cover open/close times using
-            # TODAY's day mode — resolved just above, since a midnight
-            # mode change (e.g. Sunday 'Home' -> Monday 'Work') must be
-            # applied before this runs, not after — then schedule precise
-            # timers so open/close fire exactly on time.
-            await self._cover_manager.async_compute_daily_schedule(now, self.day_mode_key)
-            self._schedule_cover_timers()
-
-        # Compute when and to what mode the next automatic change is expected
-        await self._async_refresh_next_mode_prediction(
-            calendar_state,
-            now,
-            context="Next-mode prediction updated",
-        )
-
-        # Native daily cover open/close schedule — runs first so the morning
-        # group open is never undone by a heat-protection action that fires
-        # at the same cover_open_time (the heat-protected cover is typically
-        # also a member of the daily-schedule cover group).
-        await self._cover_manager.async_check_daily_schedule(now)
-
-        # Cover heat protection — close covers if temperature exceeds threshold in window
-        await self._cover_manager.async_check_heat_protection(now)
-
-        return self._build_result()
 
     def _build_result(self) -> dict:
         """Build the data dict returned by the coordinator."""

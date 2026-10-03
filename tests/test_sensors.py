@@ -884,7 +884,9 @@ class TestCoversLeftOpenSensorRegistration:
         coordinator = HomeShiftCoordinator(hass, entry)
         hass.data = {DOMAIN: {entry.entry_id: coordinator}}
         added = []
-        await async_setup_entry(hass, entry, lambda entities: added.extend(entities))
+        # The entity registry needs a real hass: covered by test_integration.
+        with patch("custom_components.homeshift.entity.er"):
+            await async_setup_entry(hass, entry, lambda entities: added.extend(entities))
         return [type(entity).__name__ for entity in added]
 
     async def test_registered_when_daily_covers_are_configured(self):

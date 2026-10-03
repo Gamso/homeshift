@@ -91,6 +91,31 @@ async def test_names_follow_the_instance_language(hass: HomeAssistant) -> None:
     assert state.state == "Maison"
 
 
+async def test_unconfigured_features_leave_no_stale_entity(hass: HomeAssistant) -> None:
+    """Removing the covers from the options removes their entities (audit A5)."""
+    entry = make_entry(
+        options={
+            CONF_DAILY_COVER_ITEMS: COVER_ITEMS,
+            "cover_entities": ["cover.sud"],
+            "cover_temp_sensor": "sensor.exterieur",
+        }
+    )
+    await setup_entry(hass, entry)
+    ids = homeshift_entity_ids(hass, entry)
+    assert "sensor.homeshift_cover_open_time" in ids
+    assert "binary_sensor.homeshift_cover_heat_active" in ids
+
+    hass.config_entries.async_update_entry(entry, options={})
+    await hass.async_block_till_done()
+
+    ids = homeshift_entity_ids(hass, entry)
+    assert "sensor.homeshift_cover_open_time" not in ids
+    assert "sensor.homeshift_cover_close_time" not in ids
+    assert "binary_sensor.homeshift_covers_left_open" not in ids
+    assert "binary_sensor.homeshift_cover_heat_active" not in ids
+    assert "select.homeshift_day_mode" in ids
+
+
 async def test_entities_belong_to_one_service_device(hass: HomeAssistant) -> None:
     from homeassistant.helpers import device_registry as dr
 

@@ -22,7 +22,7 @@ from .const import (
     SENSOR_NEXT_MODE_AT,
 )
 from .coordinator import HomeShiftCoordinator
-from .entity import setup_entity
+from .entity import async_remove_stale_entities, setup_entity
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -42,6 +42,8 @@ async def async_setup_entry(
     if _daily_covers_configured(config):
         entities.append(HomeShiftCoverOpenTimeSensor(coordinator, entry))
         entities.append(HomeShiftCoverCloseTimeSensor(coordinator, entry))
+    else:
+        async_remove_stale_entities(hass, entry, SENSOR_DOMAIN, [SENSOR_COVER_OPEN_TIME, SENSOR_COVER_CLOSE_TIME])
     async_add_entities(entities)
 
 

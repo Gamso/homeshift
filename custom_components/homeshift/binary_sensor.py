@@ -24,7 +24,7 @@ from .const import (
     DOMAIN,
 )
 from .coordinator import HomeShiftCoordinator
-from .entity import setup_entity
+from .entity import async_remove_stale_entities, setup_entity
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -38,10 +38,16 @@ async def async_setup_entry(
     coordinator: HomeShiftCoordinator = hass.data[DOMAIN][entry.entry_id]
     config = {**entry.data, **entry.options}
     entities = []
+    stale: list[str] = []
     if config.get(CONF_COVER_ENTITIES) and config.get(CONF_COVER_TEMP_SENSOR):
         entities.append(HomeShiftCoverHeatActiveSensor(coordinator, entry))
+    else:
+        stale.append(BINARY_SENSOR_COVER_HEAT_ACTIVE)
     if config.get(CONF_DAILY_COVER_ITEMS):
         entities.append(HomeShiftCoversLeftOpenSensor(coordinator, entry))
+    else:
+        stale.append(BINARY_SENSOR_COVERS_LEFT_OPEN)
+    async_remove_stale_entities(hass, entry, BINARY_SENSOR_DOMAIN, stale)
     async_add_entities(entities)
 
 

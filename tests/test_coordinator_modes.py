@@ -8,6 +8,7 @@ from custom_components.homeshift.coordinator import HomeShiftCoordinator
 from custom_components.homeshift.const import CONF_DAY_MODE_MAP, CONF_EVENT_MODE_MAP
 
 from .conftest import (
+    set_day_mode,
     EVENT_NONE,
     EVENT_REMOTE,
     EVENT_VACATION,
@@ -34,7 +35,7 @@ class TestDefaultModeMapping:
         entry = make_mock_entry()
         hass.states.get.return_value = make_calendar_state(state="off")
         coordinator = HomeShiftCoordinator(hass, entry)
-        coordinator.day_mode = "Maison"
+        set_day_mode(coordinator, "Maison")
 
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
             mock_dt.now.return_value = datetime(2026, 3, 4, 10, 0, 0)  # Wednesday
@@ -51,7 +52,7 @@ class TestDefaultModeMapping:
             start_time="2026-03-03 00:00:00", end_time="2026-03-04 00:00:00",
         )
         coordinator = HomeShiftCoordinator(hass, entry)
-        coordinator.day_mode = DEFAULT_MODE_DEFAULT
+        set_day_mode(coordinator, DEFAULT_MODE_DEFAULT)
 
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
             mock_dt.now.return_value = datetime(2026, 3, 3, 10, 0, 0)
@@ -69,7 +70,7 @@ class TestDefaultModeMapping:
             start_time="2026-03-04 13:00:00", end_time="2026-03-04 18:00:00",
         )
         coordinator = HomeShiftCoordinator(hass, entry)
-        coordinator.day_mode = DEFAULT_MODE_DEFAULT
+        set_day_mode(coordinator, DEFAULT_MODE_DEFAULT)
 
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
             mock_dt.now.return_value = datetime(2026, 3, 4, 14, 0, 0)
@@ -83,7 +84,7 @@ class TestDefaultModeMapping:
         entry = make_mock_entry()
         hass.states.get.return_value = make_calendar_state(state="off")
         coordinator = HomeShiftCoordinator(hass, entry)
-        coordinator.day_mode = "Maison"
+        set_day_mode(coordinator, "Maison")
 
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
             mock_dt.now.return_value = datetime(2026, 3, 4, 9, 0, 0)
@@ -101,7 +102,7 @@ class TestDefaultModeMapping:
             start_time="2026-03-12 08:00:00", end_time="2026-03-12 12:00:00",
         )
         coordinator = HomeShiftCoordinator(hass, entry)
-        coordinator.day_mode = DEFAULT_MODE_DEFAULT
+        set_day_mode(coordinator, DEFAULT_MODE_DEFAULT)
 
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
             mock_dt.now.return_value = datetime(2026, 3, 12, 10, 0, 0)
@@ -115,7 +116,7 @@ class TestDefaultModeMapping:
         entry = make_mock_entry()
         hass.states.get.return_value = make_calendar_state(state="off")
         coordinator = HomeShiftCoordinator(hass, entry)
-        coordinator.day_mode = "Télétravail"
+        set_day_mode(coordinator, "Télétravail")
 
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
             mock_dt.now.return_value = datetime(2026, 3, 12, 14, 0, 0)
@@ -132,7 +133,7 @@ class TestDefaultModeMapping:
             start_time="2026-08-03 00:00:00", end_time="2026-08-17 00:00:00",
         )
         coordinator = HomeShiftCoordinator(hass, entry)
-        coordinator.day_mode = DEFAULT_MODE_DEFAULT
+        set_day_mode(coordinator, DEFAULT_MODE_DEFAULT)
 
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
             mock_dt.now.return_value = datetime(2026, 8, 5, 10, 0, 0)
@@ -147,7 +148,7 @@ class TestDefaultModeMapping:
         entry = make_mock_entry()
         hass.states.get.return_value = make_calendar_state(state="off")
         coordinator = HomeShiftCoordinator(hass, entry)
-        coordinator.day_mode = DEFAULT_MODE_DEFAULT
+        set_day_mode(coordinator, DEFAULT_MODE_DEFAULT)
 
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
             mock_dt.now.return_value = datetime(2026, 3, 7, 10, 0, 0)  # Saturday
@@ -164,7 +165,7 @@ class TestDefaultModeMapping:
             start_time="2026-03-03 00:00:00", end_time="2026-03-04 00:00:00",
         )
         coordinator = HomeShiftCoordinator(hass, entry)
-        coordinator.day_mode = DEFAULT_MODE_ABSENCE
+        set_day_mode(coordinator, DEFAULT_MODE_ABSENCE)
 
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
             mock_dt.now.return_value = datetime(2026, 3, 3, 10, 0, 0)
@@ -186,7 +187,7 @@ class TestDefaultModeMapping:
         hass.states.get.side_effect = get_state
 
         coordinator = HomeShiftCoordinator(hass, entry)
-        coordinator.day_mode = DEFAULT_MODE_DEFAULT
+        set_day_mode(coordinator, DEFAULT_MODE_DEFAULT)
 
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
             mock_dt.now.return_value = datetime(2026, 5, 1, 10, 0, 0)
@@ -225,7 +226,7 @@ class TestCustomModeMapping:
         entry.data[CONF_DAY_MODE_MAP] = "work:Bureau, home:Maison, remote:Télétravail, away:Absence"
         hass.states.get.return_value = make_calendar_state(state="off")
         coordinator = HomeShiftCoordinator(hass, entry)
-        coordinator.day_mode = "Maison"
+        set_day_mode(coordinator, "Maison")
 
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
             mock_dt.now.return_value = datetime(2026, 3, 4, 10, 0, 0)
@@ -239,7 +240,7 @@ class TestCustomModeMapping:
         entry.data[CONF_DAY_MODE_MAP] = "work:Travail, home:Repos, remote:Télétravail, away:Absence"
         hass.states.get.return_value = make_calendar_state(state="off")
         coordinator = HomeShiftCoordinator(hass, entry)
-        coordinator.day_mode = "Travail"
+        set_day_mode(coordinator, "Travail")
 
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
             mock_dt.now.return_value = datetime(2026, 3, 7, 10, 0, 0)
@@ -260,7 +261,7 @@ class TestCustomModeMapping:
             return None
         hass.states.get.side_effect = get_state
         coordinator = HomeShiftCoordinator(hass, entry)
-        coordinator.day_mode = "Travail"
+        set_day_mode(coordinator, "Travail")
 
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
             mock_dt.now.return_value = datetime(2026, 5, 1, 10, 0, 0)
@@ -277,7 +278,7 @@ class TestCustomModeMapping:
             start_time="2026-03-04 09:00:00", end_time="2026-03-04 17:00:00",
         )
         coordinator = HomeShiftCoordinator(hass, entry)
-        coordinator.day_mode = "Travail"
+        set_day_mode(coordinator, "Travail")
 
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
             mock_dt.now.return_value = datetime(2026, 3, 4, 10, 0, 0)
@@ -294,7 +295,7 @@ class TestCustomModeMapping:
             start_time="2026-03-03 00:00:00", end_time="2026-03-04 00:00:00",
         )
         coordinator = HomeShiftCoordinator(hass, entry)
-        coordinator.day_mode = "Travail"
+        set_day_mode(coordinator, "Travail")
 
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
             mock_dt.now.return_value = datetime(2026, 3, 3, 10, 0, 0)
@@ -310,7 +311,7 @@ class TestCustomModeMapping:
             start_time="2026-03-07 10:00:00", end_time="2026-03-07 12:00:00",
         )
         coordinator = HomeShiftCoordinator(hass, entry)
-        coordinator.day_mode = "Travail"
+        set_day_mode(coordinator, "Travail")
 
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
             mock_dt.now.return_value = datetime(2026, 3, 7, 10, 0, 0)
@@ -326,7 +327,7 @@ class TestCustomModeMapping:
             start_time="2026-03-03 00:00:00", end_time="2026-03-04 00:00:00",
         )
         coordinator = HomeShiftCoordinator(hass, entry)
-        coordinator.day_mode = "Travail"
+        set_day_mode(coordinator, "Travail")
 
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
             mock_dt.now.return_value = datetime(2026, 3, 3, 10, 0, 0)
@@ -343,7 +344,7 @@ class TestCustomModeMapping:
             start_time="2026-03-07 00:00:00", end_time="2026-03-08 00:00:00",
         )
         coordinator = HomeShiftCoordinator(hass, entry)
-        coordinator.day_mode = "Maison"
+        set_day_mode(coordinator, "Maison")
 
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
             mock_dt.now.return_value = datetime(2026, 3, 7, 10, 0, 0)
@@ -370,7 +371,7 @@ class TestCustomModeMapping:
             return None
         hass.states.get.side_effect = get_state
         coordinator = HomeShiftCoordinator(hass, entry)
-        coordinator.day_mode = "Travail"
+        set_day_mode(coordinator, "Travail")
 
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
             mock_dt.now.return_value = datetime(2026, 5, 1, 10, 0, 0)
@@ -391,7 +392,7 @@ class TestConfigurableAbsenceMode:
         entry = make_mock_entry()
         hass.states.get.return_value = make_calendar_state(state="off")
         coordinator = HomeShiftCoordinator(hass, entry)
-        coordinator.day_mode = DEFAULT_MODE_ABSENCE
+        set_day_mode(coordinator, DEFAULT_MODE_ABSENCE)
 
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
             mock_dt.now.return_value = datetime(2026, 3, 4, 10, 0, 0)
@@ -405,7 +406,7 @@ class TestConfigurableAbsenceMode:
         entry.data[CONF_DAY_MODE_MAP] = "work:Travail, home:Maison, away:Vacances Longues, remote:Télétravail"
         hass.states.get.return_value = make_calendar_state(state="off")
         coordinator = HomeShiftCoordinator(hass, entry)
-        coordinator.day_mode = "Vacances Longues"
+        set_day_mode(coordinator, "Vacances Longues")
 
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
             mock_dt.now.return_value = datetime(2026, 3, 4, 10, 0, 0)
@@ -419,7 +420,7 @@ class TestConfigurableAbsenceMode:
         entry.data[CONF_DAY_MODE_MAP] = "work:Travail, home:Maison, away:Away, remote:Télétravail"
         hass.states.get.return_value = make_calendar_state(state="off")
         coordinator = HomeShiftCoordinator(hass, entry)
-        coordinator.day_mode = "Maison"
+        set_day_mode(coordinator, "Maison")
 
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
             mock_dt.now.return_value = datetime(2026, 3, 4, 10, 0, 0)
@@ -438,7 +439,7 @@ class TestConfigurableAbsenceMode:
         hass = make_mock_hass()
         entry = make_mock_entry()
         coordinator = HomeShiftCoordinator(hass, entry)
-        coordinator.day_mode = DEFAULT_MODE_ABSENCE
+        set_day_mode(coordinator, DEFAULT_MODE_ABSENCE)
         coordinator.async_refresh = AsyncMock()
 
         await coordinator.async_sync_calendar()
@@ -450,7 +451,7 @@ class TestConfigurableAbsenceMode:
         hass = make_mock_hass()
         entry = make_mock_entry()
         coordinator = HomeShiftCoordinator(hass, entry)
-        coordinator.day_mode = DEFAULT_MODE_DEFAULT
+        set_day_mode(coordinator, DEFAULT_MODE_DEFAULT)
         coordinator.async_refresh = AsyncMock()
 
         await coordinator.async_sync_calendar()
@@ -469,7 +470,7 @@ class TestHalfDayTransitionSequence:
         hass = make_mock_hass()
         entry = make_mock_entry()
         coordinator = HomeShiftCoordinator(hass, entry)
-        coordinator.day_mode = "Maison"
+        set_day_mode(coordinator, "Maison")
 
         hass.states.get.return_value = make_calendar_state(state="off")
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
@@ -507,7 +508,7 @@ class TestHalfDayTransitionSequence:
         hass = make_mock_hass()
         entry = make_mock_entry()
         coordinator = HomeShiftCoordinator(hass, entry)
-        coordinator.day_mode = "Maison"
+        set_day_mode(coordinator, "Maison")
 
         hass.states.get.return_value = make_calendar_state(
             state="on", message="Télétravail",
@@ -645,7 +646,7 @@ class TestCalendarDrivenAbsenceDoesNotFreezeTheIntegration:
             start_time="2026-03-04 00:00:00", end_time="2026-03-05 00:00:00",
         )
         coordinator = HomeShiftCoordinator(hass, self._entry())
-        coordinator.day_mode = "Travail"
+        set_day_mode(coordinator, "Travail")
 
         await self._run(coordinator, datetime(2026, 3, 4, 10, 0, 0))
         assert coordinator.day_mode == "Absence"  # set by the calendar
@@ -678,7 +679,7 @@ class TestCalendarDrivenAbsenceDoesNotFreezeTheIntegration:
         coordinator.async_refresh_schedulers = AsyncMock()
         coordinator._async_save_state = AsyncMock()
         coordinator.async_set_updated_data = MagicMock()
-        coordinator.day_mode = "Absence"
+        set_day_mode(coordinator, "Absence")
 
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
             mock_dt.now.return_value = datetime(2026, 3, 4, 9, 0, 0)

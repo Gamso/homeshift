@@ -19,6 +19,7 @@ from custom_components.homeshift.sensor import (
 )
 
 from .conftest import (
+    set_day_mode,
     DEFAULT_MODE_DEFAULT,
     DEFAULT_MODE_HOLIDAY,
     DEFAULT_MODE_WEEKEND,
@@ -222,7 +223,7 @@ class TestNextModeNoEvent:
             }
         )
         coordinator = HomeShiftCoordinator(hass, entry)
-        coordinator.day_mode = DEFAULT_MODE_DEFAULT
+        set_day_mode(coordinator, DEFAULT_MODE_DEFAULT)
 
         now = datetime(2026, 4, 30, 12, 0, 0)  # Thursday
         with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:

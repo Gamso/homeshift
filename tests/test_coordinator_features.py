@@ -1544,6 +1544,115 @@ class TestDailyCoverScheduleCompute:
         assert coordinator._cover_manager.daily_close_time is None
 
 
+class TestHeatProtectionOnSkipDays:
+    """'skip' suppresses the opening only, never heat protection (audit B3)."""
+
+    _make_entry = TestDailyCoverScheduleCompute._make_entry
+    _sun_state = TestDailyCoverScheduleCompute._sun_state
+    _run_compute = TestDailyCoverScheduleCompute._run_compute
+
+    def _heat_entry(self, open_time_map="away:skip"):
+        from custom_components.homeshift.const import (
+            CONF_COVER_ENTITIES,
+            CONF_COVER_TEMP_SENSOR,
+            CONF_COVER_TEMP_THRESHOLD,
+        )
+        entry = self._make_entry(open_time_map=open_time_map, earliest="07:10:00")
+        entry.options.update(
+            {
+                CONF_COVER_ENTITIES: ["cover.volet_sud"],
+                CONF_COVER_TEMP_SENSOR: "sensor.temp",
+                CONF_COVER_TEMP_THRESHOLD: 30.0,
+            }
+        )
+        return entry
+
+    def _states(self, cover_state="open", next_rising="2026-07-01T05:45:00+00:00"):
+        def _get(entity_id):
+            if entity_id == "sun.sun":
+                return self._sun_state(next_rising_iso=next_rising, next_setting_iso="2026-07-01T19:30:00+00:00")
+            if entity_id == "sensor.temp":
+                state = MagicMock()
+                state.state = "35.0"
+                return state
+            if entity_id == "cover.volet_sud":
+                state = MagicMock()
+                state.state = cover_state
+                return state
+            return None
+
+        return _get
+
+    async def test_the_window_starts_at_sunrise_on_a_skip_day(self):
+        hass = make_mock_hass()
+        hass.states.get.side_effect = self._states()
+
+        coordinator = await self._run_compute(hass, self._heat_entry(), datetime(2026, 7, 1, 0, 5, 0), day_mode_key="away")
+
+        manager = coordinator._cover_manager
+        assert manager.cover_open_time is None
+        assert manager.heat_window_start == "07:45"
+
+    async def test_the_window_starts_at_the_earliest_time_when_sunrise_is_unknown(self):
+        hass = make_mock_hass()
+        hass.states.get.side_effect = self._states(next_rising=None)
+
+        coordinator = await self._run_compute(hass, self._heat_entry(), datetime(2026, 7, 1, 0, 5, 0), day_mode_key="away")
+
+        assert coordinator._cover_manager.heat_window_start == "07:10"
+
+    async def test_an_opening_day_keeps_the_opening_time_as_window_start(self):
+        hass = make_mock_hass()
+        hass.states.get.side_effect = self._states()
+
+        coordinator = await self._run_compute(
+            hass, self._heat_entry(open_time_map="home:09:15"), datetime(2026, 7, 1, 0, 5, 0), day_mode_key="home"
+        )
+
+        assert coordinator._cover_manager.heat_window_start == "09:15"
+
+    async def test_a_hot_skip_day_still_closes_the_cover(self):
+        """Away with 'skip' during a heatwave: the south cover must still close."""
+        hass = make_mock_hass()
+        hass.services.async_call = AsyncMock()
+        hass.states.get.side_effect = self._states()
+        coordinator = await self._run_compute(hass, self._heat_entry(), datetime(2026, 7, 1, 0, 5, 0), day_mode_key="away")
+
+        await coordinator._cover_manager.async_check_heat_protection(datetime(2026, 7, 1, 14, 0, 0))
+
+        hass.services.async_call.assert_awaited_once()
+        assert hass.services.async_call.call_args.args[:2] == ("cover", "close_cover")
+
+    async def test_a_cover_already_closed_receives_nothing(self):
+        """No stop or My press on a cover still down from last night."""
+        hass = make_mock_hass()
+        hass.services.async_call = AsyncMock()
+        hass.states.get.side_effect = self._states(cover_state="closed")
+        coordinator = await self._run_compute(hass, self._heat_entry(), datetime(2026, 7, 1, 0, 5, 0), day_mode_key="away")
+
+        await coordinator._cover_manager.async_check_heat_protection(datetime(2026, 7, 1, 14, 0, 0))
+
+        hass.services.async_call.assert_not_called()
+
+    async def test_the_window_start_gets_a_timer_on_a_skip_day(self):
+        hass = make_mock_hass()
+        hass.states.get.side_effect = self._states()
+        coordinator = await self._run_compute(hass, self._heat_entry(), datetime(2026, 7, 1, 0, 5, 0), day_mode_key="away")
+
+        with (
+            patch("custom_components.homeshift.coordinator.dt_util") as mock_dt,
+            patch(
+                "custom_components.homeshift.coordinator.async_track_point_in_time",
+                return_value=MagicMock(),
+            ) as mock_track,
+        ):
+            mock_dt.now.return_value = datetime(2026, 7, 1, 0, 5, 0)
+            coordinator._schedule_cover_timers()
+
+        fire_times = [call.args[2] for call in mock_track.call_args_list]
+        assert datetime(2026, 7, 1, 7, 45, 0) in fire_times
+
+
 class TestDailyCoverScheduleUsesTodaysDayMode:
     """Regression: a midnight day-mode change must be applied BEFORE the daily
     cover schedule is computed for the new day, not after.

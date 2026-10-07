@@ -987,24 +987,35 @@ class CoverManager:
 
         A cover whose window sensor reports the window open is left up (and
         warned about); a cover with a My position button gets a press of
-        that button instead of close_cover; everything else gets one
-        close_cover. Inhibited covers are left alone and are not reported as
-        left up. Returns whether every service call succeeded, and the
-        covers left up as {cover: window sensor}.
+        that button instead of close_cover; everything else gets
+        close_cover. A cover that already reads closed — lowered by hand
+        before the close time — receives nothing: a My press would raise it
+        back to its favourite position, and some integrations reject a close
+        on a closed cover. Inhibited covers are left alone and are not
+        reported as left up. Each cover gets its own call, so one failing
+        cover never holds back the others, and the retry on the next poll
+        only reaches the covers still open. Returns whether every service
+        call succeeded, and the covers left up as {cover: window sensor}.
         """
         inhibited = set(self.inhibitions(now))
         blocked = self._covers_behind_an_open_window(inhibited)
-        presses = self._my_button_presses(blocked, inhibited)
-        # Covers with an open window, or with their own My button, are
-        # handled separately, inhibited ones are left alone — everything
-        # else gets one close_cover.
-        handled = set(blocked) | self._covers_with_my_button() | inhibited
+        already_closed = {entity_id for entity_id in targets if self._is_closed(entity_id)}
+        presses = [
+            (cover, button) for cover, button in self._my_button_presses(blocked, inhibited) if cover not in already_closed
+        ]
+        # Covers with an open window, with their own My button, already
+        # down, or inhibited are handled separately — everything else gets
+        # close_cover.
+        handled = set(blocked) | self._covers_with_my_button() | already_closed | inhibited
         close_targets = [entity_id for entity_id in targets if entity_id not in handled]
 
+        if already_closed:
+            _LOGGER.debug("%s: already closed, nothing to send: %s", context, sorted(already_closed))
+
         succeeded = True
-        if close_targets:
-            _LOGGER.info("%s: closing covers %s", context, close_targets)
-            succeeded = await self._async_call_service("cover", "close_cover", close_targets, context)
+        for cover in close_targets:
+            _LOGGER.info("%s: closing cover '%s'", context, cover)
+            succeeded = await self._async_call_service("cover", "close_cover", [cover], context) and succeeded
 
         for cover, button in presses:
             _LOGGER.info("%s: pressing My position button '%s' for cover '%s'", context, button, cover)
@@ -1014,6 +1025,11 @@ class CoverManager:
             _LOGGER.warning("%s: nothing closed — every cover left to close is behind an open window", context)
 
         return succeeded, blocked
+
+    def _is_closed(self, entity_id: str) -> bool:
+        """Return whether the cover's state reads closed."""
+        state = self._hass.states.get(entity_id)
+        return state is not None and state.state == "closed"
 
     # -- manual actions ----------------------------------------------------
 

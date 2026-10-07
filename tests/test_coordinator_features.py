@@ -2696,6 +2696,48 @@ class TestDailyCoverIndividualCovers:
 
         assert hass.services.async_call.call_args.args[2]["entity_id"] == ["cover.volets"]
 
+    async def test_a_cover_closed_by_hand_does_not_stop_the_others(self):
+        """A cover lowered before the close time is left alone; the others still close."""
+        hass = self._hass_with_states({"cover.chambre": self._entity_state("closed")})
+        entry = self._make_entry([], entities=["cover.salon", "cover.chambre", "cover.bureau"])
+        coordinator = self._make_coordinator(hass, entry)
+
+        await self._run_close(coordinator)
+
+        calls = [c.args[2]["entity_id"] for c in hass.services.async_call.call_args_list]
+        assert calls == [["cover.salon"], ["cover.bureau"]]
+        assert coordinator._cover_manager._daily_closed_date == date(2026, 7, 1)
+
+    async def test_one_failing_cover_does_not_hold_back_the_others(self):
+        """Each cover gets its own call; a failure is retried for that cover only."""
+        from homeassistant.exceptions import HomeAssistantError
+
+        states = {}
+        hass = self._hass_with_states(states)
+
+        async def _call(domain, service, data=None, **kwargs):
+            if data["entity_id"] == ["cover.salon"]:
+                raise HomeAssistantError("Cover already closed")
+            states[data["entity_id"][0]] = self._entity_state("closed")
+
+        hass.services.async_call.side_effect = _call
+        entry = self._make_entry([], entities=["cover.salon", "cover.chambre"])
+        coordinator = self._make_coordinator(hass, entry)
+
+        await self._run_close(coordinator)
+
+        calls = [c.args[2]["entity_id"] for c in hass.services.async_call.call_args_list]
+        assert calls == [["cover.salon"], ["cover.chambre"]]
+        assert coordinator._cover_manager._daily_closed_date is None
+
+        hass.services.async_call.reset_mock()
+        hass.services.async_call.side_effect = None
+        await coordinator._cover_manager.async_check_daily_schedule(datetime(2026, 7, 1, 21, 45, 0))
+
+        calls = [c.args[2]["entity_id"] for c in hass.services.async_call.call_args_list]
+        assert calls == [["cover.salon"]]
+        assert coordinator._cover_manager._daily_closed_date == date(2026, 7, 1)
+
     async def test_schedule_is_computed_with_individual_covers_only(self):
         """Individual covers alone are enough to configure the daily schedule (no group needed)."""
         hass = make_mock_hass()
@@ -2816,6 +2858,19 @@ class TestDailyCoverMyPositionButton:
             ("button", "press", "button.my_salon"),
             ("button", "press", "button.my_bureau"),
         ]
+
+    async def test_a_closed_cover_gets_no_press(self):
+        """Pressing My on a closed cover would raise it to its favourite position."""
+        hass = self._hass_with_states({"cover.salon": self._entity_state("closed")})
+        entry = self._make_entry(
+            [{"cover": "cover.salon", "window_sensor": "", "my_button": "button.my_salon"}],
+            entities=["cover.chambre"],
+        )
+        coordinator = self._make_coordinator(hass, entry)
+
+        await self._run_close(coordinator)
+
+        assert self._calls(hass) == [("cover", "close_cover", ["cover.chambre"])]
 
     async def test_morning_open_is_unaffected_by_the_button(self):
         """The My button only changes how a cover closes — it still opens normally."""

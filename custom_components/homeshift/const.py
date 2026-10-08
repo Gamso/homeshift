@@ -126,6 +126,7 @@ SENSOR_COVER_OPEN_TIME = "cover_open_time"
 SENSOR_COVER_CLOSE_TIME = "cover_close_time"
 BINARY_SENSOR_COVER_HEAT_ACTIVE = "cover_heat_active"
 BINARY_SENSOR_COVERS_LEFT_OPEN = "covers_left_open"
+SENSOR_COVERS_INHIBITED = "covers_inhibited"
 BUTTON_OPEN_COVERS = "open_covers"
 BUTTON_CLOSE_COVERS = "close_covers"
 
@@ -137,6 +138,14 @@ SERVICE_REFRESH_SCHEDULERS = "refresh_schedulers"
 SERVICE_SYNC_CALENDAR = "sync_calendar"
 SERVICE_OPEN_COVERS = "open_covers"
 SERVICE_CLOSE_COVERS = "close_covers"
+# Temporarily take covers out of the automation (daily open/close, heat
+# protection and the open/close-now actions), and hand them back. An
+# inhibition lasts for a duration, until a date, or until resumed — it
+# survives restarts.
+SERVICE_INHIBIT_COVERS = "inhibit_covers"
+SERVICE_RESUME_COVERS = "resume_covers"
+ATTR_DURATION = "duration"
+ATTR_UNTIL = "until"
 
 # Attributes
 ATTR_DAY_MODE = "day_mode"

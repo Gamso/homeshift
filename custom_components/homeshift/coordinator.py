@@ -538,6 +538,25 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
         """What produced today's closing time: 'sunset' or 'elevation'."""
         return self._cover_manager.daily_close_trigger
 
+    @property
+    def managed_covers(self) -> list[str]:
+        """Every cover HomeShift moves (daily schedule and heat protection)."""
+        return self._cover_manager.managed_covers()
+
+    def covers_inhibited(self, now: datetime) -> dict[str, datetime | None]:
+        """The covers currently taken out of the automation, as {cover: end or None}."""
+        return self._cover_manager.inhibitions(now)
+
+    async def async_inhibit_covers(self, covers: list[str], until: datetime | None) -> None:
+        """Take covers out of the automation until `until` (None: until resumed)."""
+        await self._cover_manager.async_inhibit(covers, until)
+        self.async_update_listeners()
+
+    async def async_resume_covers(self, covers: list[str] | None = None) -> None:
+        """Hand covers (all of them when None) back to the automation."""
+        await self._cover_manager.async_resume(covers)
+        self.async_update_listeners()
+
     def is_heat_protection_active(self, now: datetime) -> bool | None:
         """Return whether cover heat protection conditions are currently met.
 
@@ -739,6 +758,10 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
                 else "Next-mode prediction updated"
             ),
         )
+
+        # Drop the inhibitions that ran out, so the covers concerned are back
+        # in the actions below and the Covers Inhibited sensor stops listing them.
+        await self._cover_manager.async_prune_inhibitions(now)
 
         # Native daily cover open/close schedule — runs first so the morning
         # group open is never undone by a heat-protection action that fires

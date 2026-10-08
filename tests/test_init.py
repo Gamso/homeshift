@@ -3,8 +3,10 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
 from homeassistant.core import CoreState
+from homeassistant.exceptions import ServiceValidationError
 
 from custom_components.homeshift import (
     async_migrate_entry,
@@ -14,7 +16,9 @@ from custom_components.homeshift import (
 )
 from custom_components.homeshift.const import (
     DOMAIN,
+    SERVICE_INHIBIT_COVERS,
     SERVICE_REFRESH_SCHEDULERS,
+    SERVICE_RESUME_COVERS,
     SERVICE_SYNC_CALENDAR,
 )
 
@@ -373,7 +377,14 @@ class TestUnloadRemovesServices:
 
         assert result is True
         removed = {call.args[1] for call in hass.services.async_remove.call_args_list}
-        assert removed == {SERVICE_REFRESH_SCHEDULERS, SERVICE_SYNC_CALENDAR, "open_covers", "close_covers"}
+        assert removed == {
+            SERVICE_REFRESH_SCHEDULERS,
+            SERVICE_SYNC_CALENDAR,
+            "open_covers",
+            "close_covers",
+            SERVICE_INHIBIT_COVERS,
+            SERVICE_RESUME_COVERS,
+        }
         assert DOMAIN not in hass.data
 
     async def test_services_kept_while_another_entry_is_loaded(self):
@@ -407,7 +418,7 @@ class TestServicesTargetTheLoadedCoordinator:
         hass.data = {DOMAIN: {}}
         handlers: dict = {}
         hass.services.async_register = MagicMock(
-            side_effect=lambda _domain, name, handler: handlers.__setitem__(name, handler)
+            side_effect=lambda _domain, name, handler, **_kwargs: handlers.__setitem__(name, handler)
         )
         async_setup_services(hass)
         return hass, handlers
@@ -435,6 +446,44 @@ class TestServicesTargetTheLoadedCoordinator:
 
         stale.async_refresh_schedulers.assert_not_called()
 
+
+    def _cover_coordinator(self, hass, entry_id: str, covers: list[str]) -> MagicMock:
+        coordinator = MagicMock()
+        coordinator.managed_covers = covers
+        coordinator.async_inhibit_covers = AsyncMock()
+        coordinator.async_resume_covers = AsyncMock()
+        hass.data[DOMAIN][entry_id] = coordinator
+        return coordinator
+
+    async def test_inhibit_covers_reaches_the_coordinator_driving_them(self):
+        hass, handlers = self._register()
+        coordinator = self._cover_coordinator(hass, "entry_a", ["cover.a", "cover.b"])
+        call = MagicMock()
+        call.data = {"entity_id": ["cover.a"]}
+
+        await handlers[SERVICE_INHIBIT_COVERS](call)
+
+        coordinator.async_inhibit_covers.assert_awaited_once_with(["cover.a"], None)
+
+    async def test_inhibit_covers_refuses_a_cover_homeshift_does_not_drive(self):
+        hass, handlers = self._register()
+        coordinator = self._cover_coordinator(hass, "entry_a", ["cover.a"])
+        call = MagicMock()
+        call.data = {"entity_id": ["cover.a", "cover.garage"]}
+
+        with pytest.raises(ServiceValidationError):
+            await handlers[SERVICE_INHIBIT_COVERS](call)
+        coordinator.async_inhibit_covers.assert_not_called()
+
+    async def test_resume_covers_without_target_resumes_all(self):
+        hass, handlers = self._register()
+        coordinator = self._cover_coordinator(hass, "entry_a", ["cover.a"])
+        call = MagicMock()
+        call.data = {}
+
+        await handlers[SERVICE_RESUME_COVERS](call)
+
+        coordinator.async_resume_covers.assert_awaited_once_with(None)
 
 class TestMigrationToVersion4(_MigrationHarness):
     """v3 → v4 converts the retired sunset offset into the elevation it landed on.

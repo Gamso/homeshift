@@ -351,6 +351,9 @@
       },
       "cover_close_time": {
         "name": "Cover Close Time"
+      },
+      "covers_inhibited": {
+        "name": "Covers Inhibited"
       }
     },
     "binary_sensor": {
@@ -400,6 +403,42 @@
     "close_covers": {
       "name": "Close covers",
       "description": "Close the covers of the daily schedule now, like the evening close: a cover behind an open window stays up, a cover with a My button goes to its My position."
+    },
+    "inhibit_covers": {
+      "name": "Inhibit covers",
+      "description": "Temporarily take covers out of the automation (daily open/close, heat protection and the open/close-now actions). With neither a duration nor an end date, they stay inhibited until resumed.",
+      "fields": {
+        "entity_id": {
+          "name": "Covers",
+          "description": "Covers to leave alone. Only the covers HomeShift drives are accepted."
+        },
+        "duration": {
+          "name": "Duration",
+          "description": "How long the covers stay inhibited."
+        },
+        "until": {
+          "name": "Until",
+          "description": "When the inhibition ends (instead of a duration)."
+        }
+      }
+    },
+    "resume_covers": {
+      "name": "Resume covers",
+      "description": "Hand inhibited covers back to the automation. They rejoin the next scheduled action; nothing moves right away.",
+      "fields": {
+        "entity_id": {
+          "name": "Covers",
+          "description": "Covers to resume. Leave empty to resume every inhibited cover."
+        }
+      }
+    }
+  },
+  "exceptions": {
+    "cover_not_managed": {
+      "message": "HomeShift does not drive {covers} — only the covers of the daily schedule and of heat protection can be inhibited."
+    },
+    "inhibition_end_in_past": {
+      "message": "The end of the inhibition must be in the future."
     }
   }
 }

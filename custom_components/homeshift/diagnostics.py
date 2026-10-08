@@ -5,6 +5,7 @@ from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN
 from .coordinator import HomeShiftCoordinator
@@ -43,5 +44,9 @@ async def async_get_config_entry_diagnostics(hass: HomeAssistant, entry: ConfigE
         "heat_window_start": manager.heat_window_start,
         "covers_left_open": manager.covers_left_open,
         "covers_left_open_date": manager.covers_left_open_date.isoformat() if manager.covers_left_open_date else None,
+        "inhibited": {
+            cover: until.isoformat() if until else None
+            for cover, until in manager.inhibitions(dt_util.now()).items()
+        },
     }
     return diagnostics

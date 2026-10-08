@@ -88,7 +88,9 @@ async def test_names_follow_the_instance_language(hass: HomeAssistant) -> None:
 
     state = hass.states.get("select.homeshift_day_mode")
     assert state.attributes["friendly_name"] == "HomeShift Mode Jour"
-    assert state.state == "Maison"
+    # The mode itself depends on the day (work day, weekend); what this test
+    # checks is that it is shown with the French display names.
+    assert state.state in {"Maison", "Travail", "Télétravail", "Absence"}
 
 
 async def test_unconfigured_features_leave_no_stale_entity(hass: HomeAssistant) -> None:

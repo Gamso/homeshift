@@ -351,6 +351,9 @@
       },
       "cover_close_time": {
         "name": "Heure de fermeture des volets"
+      },
+      "covers_inhibited": {
+        "name": "Volets inhibés"
       }
     },
     "binary_sensor": {
@@ -400,6 +403,42 @@
     "close_covers": {
       "name": "Fermer les volets",
       "description": "Ferme maintenant les volets du planning quotidien, comme la fermeture du soir : un volet derrière une fenêtre ouverte reste ouvert, un volet avec bouton My va à sa position My."
+    },
+    "inhibit_covers": {
+      "name": "Inhiber des volets",
+      "description": "Retire temporairement des volets du pilotage automatique (ouverture/fermeture quotidienne, protection chaleur et ouverture/fermeture immédiate). Sans durée ni date de fin, ils restent inhibés jusqu'à leur reprise.",
+      "fields": {
+        "entity_id": {
+          "name": "Volets",
+          "description": "Volets à laisser tranquilles. Seuls les volets pilotés par HomeShift sont acceptés."
+        },
+        "duration": {
+          "name": "Durée",
+          "description": "Durée pendant laquelle les volets restent inhibés."
+        },
+        "until": {
+          "name": "Jusqu'au",
+          "description": "Fin de l'inhibition (à la place d'une durée)."
+        }
+      }
+    },
+    "resume_covers": {
+      "name": "Reprendre des volets",
+      "description": "Rend les volets inhibés au pilotage automatique. Ils reprennent à la prochaine action programmée ; rien ne bouge immédiatement.",
+      "fields": {
+        "entity_id": {
+          "name": "Volets",
+          "description": "Volets à reprendre. Laisser vide pour reprendre tous les volets inhibés."
+        }
+      }
+    }
+  },
+  "exceptions": {
+    "cover_not_managed": {
+      "message": "HomeShift ne pilote pas {covers} — seuls les volets du programme quotidien et de la protection chaleur peuvent être inhibés."
+    },
+    "inhibition_end_in_past": {
+      "message": "La fin de l'inhibition doit être dans le futur."
     }
   }
 }

@@ -28,10 +28,13 @@ Automatic day-mode and thermostat-mode management for Home Assistant, driven by 
     - [`binary_sensor.homeshift_covers_left_open`](#binary_sensorhomeshift_covers_left_open)
     - [`binary_sensor.homeshift_cover_heat_active`](#binary_sensorhomeshift_cover_heat_active)
     - [`button.homeshift_open_covers` / `button.homeshift_close_covers`](#buttonhomeshift_open_covers--buttonhomeshift_close_covers)
+    - [`sensor.homeshift_covers_inhibited`](#sensorhomeshift_covers_inhibited)
   - [🛠️ Services](#️-services)
     - [`homeshift.refresh_schedulers`](#homeshiftrefresh_schedulers)
     - [`homeshift.sync_calendar`](#homeshiftsync_calendar)
     - [`homeshift.open_covers` / `homeshift.close_covers`](#homeshiftopen_covers--homeshiftclose_covers)
+    - [`homeshift.inhibit_covers`](#homeshiftinhibit_covers)
+    - [`homeshift.resume_covers`](#homeshiftresume_covers)
   - [⚙️ Configuration Parameters](#️-configuration-parameters)
   - [🧠 Detection Logic](#-detection-logic)
     - [Half-Day Events](#half-day-events)
@@ -219,6 +222,17 @@ Open or close the covers of the daily schedule right now, whatever the time and 
 - **Only registered** when at least one cover is listed under **Individual Covers**.
 - **Always available:** a failed cover command is logged, it never turns the buttons (or any other HomeShift entity) unavailable.
 
+### `sensor.homeshift_covers_inhibited`
+Lists the covers taken out of the automation by [`homeshift.inhibit_covers`](#homeshiftinhibit_covers).
+
+- **Type:** Sensor
+- **Value:** how many covers are currently inhibited (`0` when none).
+- **Attributes:**
+  - `covers` — each inhibited cover with the end of its inhibition, e.g. `{"cover.volet_chambre": "2026-10-12T08:00:00+02:00", "cover.volet_bureau": null}` (`null`: until resumed)
+  - `managed_covers` — every cover HomeShift drives, i.e. every cover that can be inhibited
+- **Only registered** when HomeShift drives at least one cover (Individual Covers or heat protection).
+- An inhibition that runs out disappears at the next poll (within 5 minutes).
+
 ---
 
 ## 🛠️ Services
@@ -230,7 +244,32 @@ Immediately refreshes the scheduler switches based on the current day mode and t
 Manually triggers a calendar check and updates `select.homeshift_day_mode` if needed. This is also called automatically at regular intervals.
 
 ### `homeshift.open_covers` / `homeshift.close_covers`
-Same as pressing `button.homeshift_open_covers` / `button.homeshift_close_covers`: open or close the covers of the daily schedule now. No field. Does nothing (and logs a warning) when no cover is listed under **Individual Covers**.
+Same as pressing `button.homeshift_open_covers` / `button.homeshift_close_covers`: open or close the covers of the daily schedule now. No field. Does nothing (and logs a warning) when no cover is listed under **Individual Covers**. Inhibited covers are left where they are.
+
+### `homeshift.inhibit_covers`
+Temporarily takes one or more covers out of the automation — e.g. to keep a bedroom dark for a few days. An inhibited cover receives neither the daily open nor the evening close, heat protection leaves it alone, and the open/close-now buttons and services skip it.
+
+| Field | Required | Description |
+| --- | :---: | --- |
+| `entity_id` | ✅ | The covers to leave alone. Only covers HomeShift drives are accepted. |
+| `duration` | | How long, e.g. `{"days": 3}` or `"72:00:00"`. |
+| `until` | | When it ends, e.g. `"2026-10-12 08:00:00"` (read in Home Assistant's time zone). |
+
+Give either `duration` or `until`; with neither, the covers stay inhibited until [`homeshift.resume_covers`](#homeshiftresume_covers). Calling it again on an inhibited cover replaces its end. Inhibitions survive a restart.
+
+```yaml
+action: homeshift.inhibit_covers
+data:
+  entity_id:
+    - cover.volet_chambre
+  duration:
+    days: 3
+```
+
+Inhibiting or resuming does not move a cover by itself. When an inhibition ends, the cover simply takes part in the next scheduled action — a missed morning open is not replayed in the afternoon. Heat protection is the exception: it stays armed, so a cover released on a hot afternoon can still be closed by it. A My position button configured for heat protection moves all its covers at once, so it is not pressed while any of them is inhibited.
+
+### `homeshift.resume_covers`
+Hands inhibited covers back to the automation before their end. `entity_id` is optional: without it, every inhibited cover is resumed.
 
 ---
 
@@ -480,6 +519,7 @@ Both stores are deleted when the integration is removed. **Download diagnostics*
 | Skip the evening close when a window is open |  ✅  | See [Individual Covers](#individual-covers) |
 | Warning entity listing the covers left open |  ✅  | `binary_sensor.homeshift_covers_left_open` |
 | Per-cover My position instead of a full close |  ✅  | See [Individual Covers](#individual-covers) |
+| Temporarily inhibit the automation of chosen covers | ✅ | [`homeshift.inhibit_covers`](#homeshiftinhibit_covers), `sensor.homeshift_covers_inhibited` |
 | Open / close the covers on demand           |   ✅   | See [Opening and Closing on Demand](#opening-and-closing-on-demand) |
 | Cover reactive heat close                   |   ✅   | See [Reactive Close](#reactive-close); active window derived from Daily Cover Schedule; never reopens itself |
 | Cover proactive forecast-based close        |   ✅   | See [Proactive Forecast-Based Close](#proactive-forecast-based-close) |

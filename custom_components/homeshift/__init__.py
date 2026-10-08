@@ -2,15 +2,21 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime
+
+import voluptuous as vol
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EVENT_HOMEASSISTANT_STARTED, Platform
-from homeassistant.core import CoreState, Event, HomeAssistant, callback
-from homeassistant.helpers import entity_registry as er
+from homeassistant.core import CoreState, Event, HomeAssistant, ServiceCall, callback
+from homeassistant.exceptions import ServiceValidationError
+from homeassistant.helpers import config_validation as cv, entity_registry as er
 from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
 from .const import (
+    ATTR_DURATION,
+    ATTR_UNTIL,
     CLOSE_ELEVATION_MAX,
     CLOSE_ELEVATION_MIN,
     CONF_DAILY_COVER_CLOSE_ELEVATION,
@@ -30,8 +36,10 @@ from .const import (
     LOCALIZED_DEFAULTS,
     SENSOR_NEXT_SCAN,
     SERVICE_CLOSE_COVERS,
+    SERVICE_INHIBIT_COVERS,
     SERVICE_OPEN_COVERS,
     SERVICE_REFRESH_SCHEDULERS,
+    SERVICE_RESUME_COVERS,
     SERVICE_SYNC_CALENDAR,
     get_localized_defaults,
     parse_key_value_map,
@@ -50,7 +58,25 @@ PLATFORMS: list[Platform] = [
     Platform.BUTTON,
 ]
 
-SERVICES = (SERVICE_REFRESH_SCHEDULERS, SERVICE_SYNC_CALENDAR, SERVICE_OPEN_COVERS, SERVICE_CLOSE_COVERS)
+SERVICES = (
+    SERVICE_REFRESH_SCHEDULERS,
+    SERVICE_SYNC_CALENDAR,
+    SERVICE_OPEN_COVERS,
+    SERVICE_CLOSE_COVERS,
+    SERVICE_INHIBIT_COVERS,
+    SERVICE_RESUME_COVERS,
+)
+
+# With neither a duration nor an end date, an inhibition lasts until resumed.
+INHIBIT_COVERS_SCHEMA = vol.Schema(
+    {
+        vol.Required("entity_id"): cv.entity_ids,
+        vol.Exclusive(ATTR_DURATION, "end"): cv.positive_time_period,
+        vol.Exclusive(ATTR_UNTIL, "end"): cv.datetime,
+    }
+)
+# Without entity_id, every inhibited cover is resumed.
+RESUME_COVERS_SCHEMA = vol.Schema({vol.Optional("entity_id"): cv.entity_ids})
 
 # Settings the v3 -> v4 migration folds into CONF_DAILY_COVER_CLOSE_ELEVATION.
 _RETIRED_CLOSE_KEYS = frozenset({CONF_DAILY_COVER_CLOSE_MODE, CONF_DAILY_COVER_CLOSE_OFFSET_MINUTES})
@@ -391,3 +417,71 @@ def async_setup_services(hass: HomeAssistant) -> None:
 
     hass.services.async_register(DOMAIN, SERVICE_OPEN_COVERS, handle_open_covers)
     hass.services.async_register(DOMAIN, SERVICE_CLOSE_COVERS, handle_close_covers)
+
+    async def handle_inhibit_covers(call: ServiceCall) -> None:
+        """Take the given covers out of the automation for a while."""
+        covers: list[str] = call.data["entity_id"]
+        until = _inhibition_end(call.data)
+        targets = _coordinators_for(covers)
+        _LOGGER.info("Service call: inhibit_covers %s until %s", covers, until or "resumed")
+        for coordinator, managed in targets:
+            await coordinator.async_inhibit_covers(managed, until)
+
+    async def handle_resume_covers(call: ServiceCall) -> None:
+        """Hand the given covers (or all of them) back to the automation."""
+        covers: list[str] | None = call.data.get("entity_id")
+        _LOGGER.info("Service call: resume_covers %s", covers or "(all)")
+        for coordinator in _coordinators():
+            await coordinator.async_resume_covers(covers)
+
+    def _coordinators_for(covers: list[str]) -> list[tuple[HomeShiftCoordinator, list[str]]]:
+        """Pair each coordinator with the given covers it manages; refuse unknown ones."""
+        targets: list[tuple[HomeShiftCoordinator, list[str]]] = []
+        claimed: set[str] = set()
+        for coordinator in _coordinators():
+            managed = [cover for cover in covers if cover in coordinator.managed_covers]
+            if managed:
+                targets.append((coordinator, managed))
+                claimed.update(managed)
+        unknown = [cover for cover in covers if cover not in claimed]
+        if unknown:
+            raise ServiceValidationError(
+                f"HomeShift does not drive {', '.join(unknown)} — only the covers of the daily "
+                "schedule and of heat protection can be inhibited",
+                translation_domain=DOMAIN,
+                translation_key="cover_not_managed",
+                translation_placeholders={"covers": ", ".join(unknown)},
+            )
+        return targets
+
+    hass.services.async_register(
+        DOMAIN, SERVICE_INHIBIT_COVERS, handle_inhibit_covers, schema=INHIBIT_COVERS_SCHEMA
+    )
+    hass.services.async_register(
+        DOMAIN, SERVICE_RESUME_COVERS, handle_resume_covers, schema=RESUME_COVERS_SCHEMA
+    )
+
+
+def _inhibition_end(data: dict) -> datetime | None:
+    """Return when an inhibit_covers call ends, or None for "until resumed".
+
+    A date given without a time zone is read in Home Assistant's own zone,
+    which is what the UI date picker means. An end already past is refused:
+    it would inhibit nothing while looking like it worked.
+    """
+    now = dt_util.now()
+    if ATTR_DURATION in data:
+        until = now + data[ATTR_DURATION]
+    elif ATTR_UNTIL in data:
+        until = data[ATTR_UNTIL]
+        if until.tzinfo is None:
+            until = until.replace(tzinfo=dt_util.get_default_time_zone())
+    else:
+        return None
+    if until <= now:
+        raise ServiceValidationError(
+            "The end of the inhibition must be in the future",
+            translation_domain=DOMAIN,
+            translation_key="inhibition_end_in_past",
+        )
+    return until

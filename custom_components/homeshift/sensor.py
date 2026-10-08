@@ -9,6 +9,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.util import dt as dt_util
 
 from .const import (
     CLOSE_TRIGGER_ELEVATION,
@@ -18,6 +19,7 @@ from .const import (
     DOMAIN,
     SENSOR_COVER_CLOSE_TIME,
     SENSOR_COVER_OPEN_TIME,
+    SENSOR_COVERS_INHIBITED,
     SENSOR_NEXT_MODE,
     SENSOR_NEXT_MODE_AT,
 )
@@ -44,6 +46,10 @@ async def async_setup_entry(
         entities.append(HomeShiftCoverCloseTimeSensor(coordinator, entry))
     else:
         async_remove_stale_entities(hass, entry, SENSOR_DOMAIN, [SENSOR_COVER_OPEN_TIME, SENSOR_COVER_CLOSE_TIME])
+    if coordinator.managed_covers:
+        entities.append(HomeShiftCoversInhibitedSensor(coordinator, entry))
+    else:
+        async_remove_stale_entities(hass, entry, SENSOR_DOMAIN, [SENSOR_COVERS_INHIBITED])
     async_add_entities(entities)
 
 
@@ -143,4 +149,37 @@ class HomeShiftCoverCloseTimeSensor(CoordinatorEntity[HomeShiftCoordinator], Sen
                 CONF_DAILY_COVER_CLOSE_ELEVATION, DEFAULT_DAILY_COVER_CLOSE_ELEVATION
             ),
             "trigger": self.coordinator.cover_close_trigger or CLOSE_TRIGGER_ELEVATION,
+        }
+
+
+class HomeShiftCoversInhibitedSensor(CoordinatorEntity[HomeShiftCoordinator], SensorEntity):
+    """Count of the covers taken out of the automation by hand.
+
+    Only registered when HomeShift drives at least one cover (daily schedule
+    or heat protection). The attributes carry what a dashboard needs to show
+    and edit the inhibitions: each inhibited cover with its end (None until
+    resumed), and every cover that can be inhibited. An inhibition that runs
+    out disappears at the next poll.
+    """
+
+    _attr_icon = "mdi:window-shutter-cog"
+
+    def __init__(self, coordinator: HomeShiftCoordinator, entry: ConfigEntry) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        setup_entity(self, entry, SENSOR_DOMAIN, SENSOR_COVERS_INHIBITED)
+        self._entry = entry
+
+    @property
+    def native_value(self) -> int:
+        """Return how many covers are currently inhibited."""
+        return len(self.coordinator.covers_inhibited(dt_util.now()))
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        """List the inhibited covers with their end, and the covers that can be inhibited."""
+        inhibited = self.coordinator.covers_inhibited(dt_util.now())
+        return {
+            "covers": {cover: until.isoformat() if until else None for cover, until in inhibited.items()},
+            "managed_covers": self.coordinator.managed_covers,
         }

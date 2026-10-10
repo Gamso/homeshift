@@ -3583,3 +3583,211 @@ class TestCoversLeftOpenState:
         await coordinator._async_run_cover_checks()
 
         coordinator.async_update_listeners.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# Closing a cover once the window that held it up is shut
+# ---------------------------------------------------------------------------
+
+class TestCloseWhenTheWindowShuts:
+    """A cover left up by the evening close follows its window, when enabled."""
+
+    COVER = "cover.chambre"
+    SENSOR = "binary_sensor.fenetre_chambre"
+
+    def _state(self, value: str):
+        state = MagicMock()
+        state.state = value
+        state.attributes = {}
+        return state
+
+    def _manager(self, *, enabled=True, my_button="", stored=None):
+        from custom_components.homeshift.const import (
+            CONF_CLOSE_WHEN_WINDOW_SHUTS,
+            CONF_DAILY_COVER_ITEMS,
+        )
+
+        self.states = {self.SENSOR: self._state("on"), self.COVER: self._state("open")}
+        hass = make_mock_hass()
+        hass.services.async_call = AsyncMock()
+        hass.states.get.side_effect = lambda eid: self.states.get(eid)
+        entry = make_mock_entry()
+        entry.options = {
+            CONF_DAILY_COVER_ITEMS: [{"cover": self.COVER, "window_sensor": self.SENSOR, "my_button": my_button}],
+            CONF_CLOSE_WHEN_WINDOW_SHUTS: enabled,
+        }
+        manager = HomeShiftCoordinator(hass, entry)._cover_manager
+        store = MagicMock()
+        store.async_load = AsyncMock(return_value=stored)
+        store.async_save = AsyncMock()
+        manager._store = store
+        manager.cover_open_time = "08:30"
+        manager.daily_close_time = "21:40"
+        return manager
+
+    async def _evening_close(self, manager):
+        manager._daily_opened_date = date(2026, 7, 1)
+        await manager.async_check_daily_schedule(datetime(2026, 7, 1, 21, 40))
+        manager._hass.services.async_call.reset_mock()
+
+    def _shut_window(self):
+        self.states[self.SENSOR] = self._state("off")
+
+    async def test_the_cover_closes_when_its_window_shuts(self):
+        manager = self._manager()
+        await self._evening_close(manager)
+        assert manager.covers_left_open == {self.COVER: self.SENSOR}
+
+        self._shut_window()
+        changed = await manager.async_close_behind_shut_windows(datetime(2026, 7, 1, 22, 15))
+
+        assert changed is True
+        manager._hass.services.async_call.assert_awaited_once_with(
+            "cover", "close_cover", {"entity_id": [self.COVER]}, blocking=True
+        )
+        assert manager.covers_left_open == {}
+        assert manager._waiting_for_window == {}
+
+    async def test_nothing_happens_when_the_option_is_off(self):
+        manager = self._manager(enabled=False)
+        await self._evening_close(manager)
+
+        self._shut_window()
+        changed = await manager.async_close_behind_shut_windows(datetime(2026, 7, 1, 22, 15))
+
+        assert changed is False
+        manager._hass.services.async_call.assert_not_awaited()
+        assert manager.covers_left_open == {self.COVER: self.SENSOR}
+
+    async def test_a_my_position_cover_goes_to_its_position(self):
+        manager = self._manager(my_button="button.my_chambre")
+        await self._evening_close(manager)
+
+        self._shut_window()
+        await manager.async_close_behind_shut_windows(datetime(2026, 7, 1, 22, 15))
+
+        manager._hass.services.async_call.assert_awaited_once_with(
+            "button", "press", {"entity_id": "button.my_chambre"}, blocking=True
+        )
+
+    async def test_a_window_still_open_keeps_the_cover_waiting(self):
+        manager = self._manager()
+        await self._evening_close(manager)
+
+        await manager.async_close_behind_shut_windows(datetime(2026, 7, 1, 22, 15))
+
+        manager._hass.services.async_call.assert_not_awaited()
+        assert manager._waiting_for_window == {self.COVER: self.SENSOR}
+
+    async def test_an_unavailable_sensor_establishes_nothing(self):
+        manager = self._manager()
+        await self._evening_close(manager)
+
+        self.states[self.SENSOR] = self._state("unavailable")
+        await manager.async_close_behind_shut_windows(datetime(2026, 7, 1, 22, 15))
+
+        manager._hass.services.async_call.assert_not_awaited()
+        assert manager._waiting_for_window == {self.COVER: self.SENSOR}
+
+    async def test_a_window_shut_after_midnight_still_closes_the_cover(self):
+        """The night does not end at midnight: the times are still yesterday's."""
+        manager = self._manager()
+        await self._evening_close(manager)
+
+        self._shut_window()
+        await manager.async_close_behind_shut_windows(datetime(2026, 7, 2, 1, 30))
+
+        manager._hass.services.async_call.assert_awaited_once()
+
+    async def test_a_window_shut_in_the_daytime_does_nothing(self):
+        """A skip day never opens the covers, so nothing cleared the wait."""
+        manager = self._manager()
+        await self._evening_close(manager)
+        manager.cover_open_time = None
+        manager._heat_window_fallback = "06:30"
+
+        self._shut_window()
+        await manager.async_close_behind_shut_windows(datetime(2026, 7, 2, 14, 0))
+
+        manager._hass.services.async_call.assert_not_awaited()
+
+    async def test_the_morning_open_ends_the_wait(self):
+        manager = self._manager()
+        await self._evening_close(manager)
+
+        await manager.async_check_daily_schedule(datetime(2026, 7, 2, 8, 30))
+
+        assert manager._waiting_for_window == {}
+
+    async def test_an_inhibited_cover_keeps_waiting(self):
+        manager = self._manager()
+        await self._evening_close(manager)
+        manager._inhibited = {self.COVER: None}
+
+        self._shut_window()
+        await manager.async_close_behind_shut_windows(datetime(2026, 7, 1, 22, 15))
+
+        manager._hass.services.async_call.assert_not_awaited()
+        assert manager._waiting_for_window == {self.COVER: self.SENSOR}
+
+    async def test_a_cover_lowered_by_hand_stops_waiting(self):
+        manager = self._manager()
+        await self._evening_close(manager)
+
+        self._shut_window()
+        self.states[self.COVER] = self._state("closed")
+        changed = await manager.async_close_behind_shut_windows(datetime(2026, 7, 1, 22, 15))
+
+        assert changed is True
+        manager._hass.services.async_call.assert_not_awaited()
+        assert manager.covers_left_open == {}
+
+    async def test_the_poll_catches_up_a_window_shut_during_a_restart(self):
+        manager = self._manager(stored={"waiting_for_window": {self.COVER: self.SENSOR}})
+        await manager.async_restore_state()
+        manager._daily_opened_date = date(2026, 7, 1)
+        manager._daily_closed_date = date(2026, 7, 1)
+
+        self._shut_window()
+        await manager.async_check_daily_schedule(datetime(2026, 7, 1, 23, 0))
+
+        manager._hass.services.async_call.assert_awaited_once_with(
+            "cover", "close_cover", {"entity_id": [self.COVER]}, blocking=True
+        )
+
+    async def test_the_wait_is_persisted(self):
+        manager = self._manager()
+        await self._evening_close(manager)
+
+        saved = manager._store.async_save.call_args.args[0]
+
+        assert saved["waiting_for_window"] == {self.COVER: self.SENSOR}
+
+    def test_the_window_sensors_are_listened_to_only_when_enabled(self):
+        from custom_components.homeshift import cover_manager as module
+
+        for enabled, expected in ((True, [[self.SENSOR]]), (False, [])):
+            manager = self._manager(enabled=enabled)
+            with patch.object(module, "async_track_state_change_event", return_value=MagicMock()) as track:
+                manager.async_setup_listeners()
+            assert [call.args[1] for call in track.call_args_list] == expected, enabled
+
+    async def test_a_window_shutting_closes_the_cover_and_refreshes_the_entities(self):
+        from custom_components.homeshift import cover_manager as module
+
+        manager = self._manager()
+        await self._evening_close(manager)
+        on_change = MagicMock()
+        tasks = []
+        manager._hass.async_create_task = tasks.append
+        with patch.object(module, "async_track_state_change_event", return_value=MagicMock()) as track:
+            manager.async_setup_listeners(on_change=on_change)
+        listener = track.call_args.args[2]
+
+        self._shut_window()
+        with patch.object(module.dt_util, "now", return_value=datetime(2026, 7, 1, 22, 15)):
+            listener(MagicMock(data={"new_state": self.states[self.SENSOR]}))
+            await tasks[0]
+
+        manager._hass.services.async_call.assert_awaited_once()
+        on_change.assert_called_once()

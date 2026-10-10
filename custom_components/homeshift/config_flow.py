@@ -56,6 +56,8 @@ from .const import (
     DEFAULT_DAILY_COVER_CLOSE_ELEVATION,
     CONF_SUNRISE_EARLIEST,
     DEFAULT_SUNRISE_EARLIEST,
+    CONF_CLOSE_WHEN_WINDOW_SHUTS,
+    DEFAULT_CLOSE_WHEN_WINDOW_SHUTS,
     LOCALIZED_DEFAULTS,
     get_localized_defaults,
     parse_key_value_map,
@@ -568,6 +570,10 @@ def _daily_cover_schema(hass, data: dict[str, Any]) -> vol.Schema:
                 mode=selector.NumberSelectorMode.BOX,
             )
         ),
+        vol.Optional(
+            CONF_CLOSE_WHEN_WINDOW_SHUTS,
+            default=bool(data.get(CONF_CLOSE_WHEN_WINDOW_SHUTS, DEFAULT_CLOSE_WHEN_WINDOW_SHUTS)),
+        ): selector.BooleanSelector(),
     })
     open_fields: dict = {
         vol.Optional(
@@ -734,6 +740,7 @@ _COVER_FORM_DEFAULTS = {
     CONF_COVER_FORECAST_THRESHOLD: DEFAULT_COVER_FORECAST_THRESHOLD,
     CONF_DAILY_COVER_CLOSE_ELEVATION: DEFAULT_DAILY_COVER_CLOSE_ELEVATION,
     CONF_SUNRISE_EARLIEST: DEFAULT_SUNRISE_EARLIEST,
+    CONF_CLOSE_WHEN_WINDOW_SHUTS: DEFAULT_CLOSE_WHEN_WINDOW_SHUTS,
 }
 
 

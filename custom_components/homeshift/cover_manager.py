@@ -47,6 +47,9 @@ from .const import (
     CONF_ITEM_WINDOW_SENSOR,
     CONF_ITEM_MY_BUTTON,
     WINDOW_OPEN_STATES,
+    WINDOW_CLOSED_STATES,
+    CONF_CLOSE_WHEN_WINDOW_SHUTS,
+    DEFAULT_CLOSE_WHEN_WINDOW_SHUTS,
     CONF_DAILY_COVER_OPEN_TIME_MAP,
     CONF_DAILY_COVER_CLOSE_ELEVATION,
     CLOSE_TRIGGER_SUNSET,
@@ -215,9 +218,19 @@ class CoverManager:
         # The covers tonight's close had to leave up, as {cover: window sensor}.
         # Persisted so the warning entity survives a restart, and reset when a
         # new calendar day is computed — not when the window is closed, since
-        # the cover stays up either way until someone acts on it.
+        # the cover stays up until someone acts on it. The one exception is a
+        # cover closed behind its shut window (CONF_CLOSE_WHEN_WINDOW_SHUTS),
+        # which drops off the list.
         self.covers_left_open: dict[str, str] = {}
         self.covers_left_open_date: date | None = None
+        # The covers left up by the evening close, as {cover: window sensor},
+        # still waiting for their window to shut so they can be closed
+        # (CONF_CLOSE_WHEN_WINDOW_SHUTS). Unlike covers_left_open it is not
+        # reset at midnight: a window shut at 1 a.m. still closes its cover.
+        # It is cleared by the next morning open, and only acted on at night
+        # (see _is_night), so a window shut the next afternoon on a day the
+        # covers do not open ('skip') never lowers the cover.
+        self._waiting_for_window: dict[str, str] = {}
         # Heat protection state — whether the heat-protected cover has been
         # closed by this automation today (proactively or reactively). Once
         # closed, it stays closed for the rest of the day: heat protection
@@ -283,6 +296,8 @@ class CoverManager:
         stored_left_open = stored.get("covers_left_open")
         self.covers_left_open = dict(stored_left_open) if isinstance(stored_left_open, dict) else {}
         self.covers_left_open_date = _parse_stored_date(stored.get("covers_left_open_date"))
+        stored_waiting = stored.get("waiting_for_window")
+        self._waiting_for_window = dict(stored_waiting) if isinstance(stored_waiting, dict) else {}
         stored_inhibited = stored.get("inhibited")
         if isinstance(stored_inhibited, dict):
             self._inhibited = {
@@ -306,6 +321,7 @@ class CoverManager:
                     "schedule_computed_date": self._schedule_computed_date.isoformat() if self._schedule_computed_date else None,
                     "covers_left_open": self.covers_left_open,
                     "covers_left_open_date": self.covers_left_open_date.isoformat() if self.covers_left_open_date else None,
+                    "waiting_for_window": self._waiting_for_window,
                     "inhibited": {
                         cover: until.isoformat() if until else None
                         for cover, until in self._inhibited.items()
@@ -390,23 +406,52 @@ class CoverManager:
         await self._async_save_state()
         return True
 
-    def async_setup_listeners(self) -> Callable[[], None]:
-        """Register a state-change listener on the temperature sensor.
+    def async_setup_listeners(self, on_change: Callable[[], None] = lambda: None) -> Callable[[], None]:
+        """Register the state-change listeners of the cover automation.
 
-        When the sensor value changes, heat protection is checked immediately
-        rather than waiting for the next coordinator poll.
+        When the temperature sensor changes, heat protection is checked
+        immediately rather than waiting for the next coordinator poll. When
+        closing behind a shut window is on, so is a window sensor change: the
+        cover it held up closes the moment the window is shut, and on_change
+        is called so the entities reporting the covers left up refresh.
         Returns an unsub callable to register with entry.async_on_unload.
         """
+        unsubs: list[Callable[[], None]] = []
+
         temp_sensor = self._config.get(CONF_COVER_TEMP_SENSOR, "")
-        if not temp_sensor:
-            return lambda: None
+        if temp_sensor:
+
+            @callback
+            def _on_temp_change(_event: Event[EventStateChangedData]) -> None:
+                self._hass.async_create_task(self.async_check_heat_protection(dt_util.now()))
+
+            _LOGGER.debug("Cover heat protection: listening for changes on '%s'", temp_sensor)
+            unsubs.append(async_track_state_change_event(self._hass, [temp_sensor], _on_temp_change))
+
+        window_sensors = sorted(
+            {item[CONF_ITEM_WINDOW_SENSOR] for item in self._daily_cover_items() if item.get(CONF_ITEM_WINDOW_SENSOR)}
+        )
+        if window_sensors and self._close_when_window_shuts():
+
+            async def _close_and_notify() -> None:
+                if await self.async_close_behind_shut_windows(dt_util.now()):
+                    on_change()
+
+            @callback
+            def _on_window_change(event: Event[EventStateChangedData]) -> None:
+                new_state = event.data["new_state"]
+                if new_state is not None and new_state.state in WINDOW_CLOSED_STATES:
+                    self._hass.async_create_task(_close_and_notify())
+
+            _LOGGER.debug("Daily cover schedule: listening for windows shutting on %s", window_sensors)
+            unsubs.append(async_track_state_change_event(self._hass, window_sensors, _on_window_change))
 
         @callback
-        def _on_temp_change(_event: Event[EventStateChangedData]) -> None:
-            self._hass.async_create_task(self.async_check_heat_protection(dt_util.now()))
+        def _unsub_all() -> None:
+            for unsub in unsubs:
+                unsub()
 
-        _LOGGER.debug("Cover heat protection: listening for changes on '%s'", temp_sensor)
-        return async_track_state_change_event(self._hass, [temp_sensor], _on_temp_change)
+        return _unsub_all
 
     @property
     def heat_window_start(self) -> str | None:
@@ -953,6 +998,7 @@ class CoverManager:
                         self.cover_open_time,
                     )
                     self._daily_opened_date = today
+                    self._waiting_for_window = {}
                     await self._async_save_state()
                 else:
                     _LOGGER.info(
@@ -962,6 +1008,9 @@ class CoverManager:
                     )
                     if await self._async_call_service("cover", "open_cover", open_targets, "Daily cover schedule"):
                         self._daily_opened_date = today
+                        # Morning: a window shut from now on no longer closes
+                        # the cover it held up last night.
+                        self._waiting_for_window = {}
                         await self._async_save_state()
 
         if self._daily_closed_date != today and self.daily_close_time:
@@ -978,7 +1027,86 @@ class CoverManager:
                 self._daily_closed_date = today
                 self.covers_left_open = blocked
                 self.covers_left_open_date = today
+                self._waiting_for_window = dict(blocked)
                 await self._async_save_state()
+
+        await self._async_close_behind_shut_windows(now)
+
+    def _close_when_window_shuts(self) -> bool:
+        """Return whether a cover held up by its window closes once the window is shut."""
+        return bool(self._config.get(CONF_CLOSE_WHEN_WINDOW_SHUTS, DEFAULT_CLOSE_WHEN_WINDOW_SHUTS))
+
+    def _is_night(self, now: datetime) -> bool:
+        """Return True between today's evening close time and today's morning start.
+
+        The morning start is the heat window start: the opening time, or the
+        sunrise-based time on a day the covers do not open. Before the new
+        day's schedule is computed, just after midnight, the times are still
+        yesterday's — and the early hours sit before yesterday's start too.
+        """
+        current = now.time()
+        close_time = _parse_time_str(self.daily_close_time) if self.daily_close_time else None
+        start = _parse_time_str(self.heat_window_start) if self.heat_window_start else None
+        return (close_time is not None and current >= close_time) or (start is not None and current < start)
+
+    async def async_close_behind_shut_windows(self, now: datetime) -> bool:
+        """Close the covers held up last evening whose window has since been shut.
+
+        Returns whether a cover stopped waiting (closed, or found closed).
+        """
+        async with self._action_lock:
+            return await self._async_close_behind_shut_windows(now)
+
+    async def _async_close_behind_shut_windows(self, now: datetime) -> bool:
+        """Close the waiting covers whose window now reads shut (under _action_lock).
+
+        Runs from the window sensor listener, and from every poll so that a
+        window shut while Home Assistant was down is caught up. Does nothing
+        unless CONF_CLOSE_WHEN_WINDOW_SHUTS is on, and only at night: a
+        window shut in the daytime never lowers a cover. A window sensor that
+        is unavailable establishes nothing, so its cover keeps waiting. An
+        inhibited cover keeps waiting too, in case its inhibition ends
+        before the morning; one already lowered by hand just stops waiting.
+        A cover with a My position button goes to that position, as at the
+        evening close.
+        """
+        if not self._waiting_for_window or not self._close_when_window_shuts() or not self._is_night(now):
+            return False
+
+        inhibited = set(self.inhibitions(now))
+        buttons = {item[CONF_ITEM_COVER]: item.get(CONF_ITEM_MY_BUTTON, "") for item in self._daily_cover_items()}
+        done: list[str] = []
+        for cover, sensor in self._waiting_for_window.items():
+            if cover not in buttons:
+                done.append(cover)  # no longer a managed cover
+                continue
+            state = self._hass.states.get(sensor)
+            if state is None or state.state not in WINDOW_CLOSED_STATES or cover in inhibited:
+                continue
+            if self._is_closed(cover):
+                done.append(cover)
+                continue
+
+            context = f"Daily cover schedule: window '{sensor}' shut"
+            if button := buttons[cover]:
+                _LOGGER.info("%s — pressing My position button '%s' for cover '%s'", context, button, cover)
+                succeeded = await self._async_call_service("button", "press", button, context)
+            else:
+                _LOGGER.info("%s — closing cover '%s'", context, cover)
+                succeeded = await self._async_call_service("cover", "close_cover", [cover], context)
+            if succeeded:
+                done.append(cover)
+
+        if not done:
+            return False
+        self._waiting_for_window = {
+            cover: sensor for cover, sensor in self._waiting_for_window.items() if cover not in done
+        }
+        self.covers_left_open = {
+            cover: sensor for cover, sensor in self.covers_left_open.items() if cover not in done
+        }
+        await self._async_save_state()
+        return True
 
     async def _async_close_targets(
         self, targets: list[str], context: str, now: datetime

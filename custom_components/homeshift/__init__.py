@@ -299,8 +299,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Register services
     async_setup_services(hass)
 
-    # React immediately when the temperature sensor changes (no need to wait for the poll)
-    entry.async_on_unload(coordinator.cover_manager.async_setup_listeners())
+    # React immediately when the temperature sensor or a window sensor changes
+    # (no need to wait for the poll)
+    entry.async_on_unload(
+        coordinator.cover_manager.async_setup_listeners(on_change=coordinator.async_update_listeners)
+    )
 
     # Reload the integration when options are saved so the coordinator picks up changes
     entry.async_on_unload(entry.add_update_listener(_async_reload_on_options_update))

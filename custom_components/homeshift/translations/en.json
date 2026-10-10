@@ -172,10 +172,12 @@
             "name": "Evening close",
             "description": "Once a day, for every mode, when the sun goes below this elevation.",
             "data": {
-              "daily_cover_close_elevation": "Sun elevation"
+              "daily_cover_close_elevation": "Sun elevation",
+              "close_when_window_shuts": "Close as soon as the window is shut"
             },
             "data_description": {
-              "daily_cover_close_elevation": "0° = sunset, -2° (recommended) ≈ ten minutes later, -4° ≈ twenty to twenty-five minutes later, -6° = end of civil twilight. A positive value closes before sunset."
+              "daily_cover_close_elevation": "0° = sunset, -2° (recommended) ≈ ten minutes later, -4° ≈ twenty to twenty-five minutes later, -6° = end of civil twilight. A positive value closes before sunset.",
+              "close_when_window_shuts": "A cover left up in the evening because its window was open closes (or goes to its My position) as soon as the window is shut, until the next morning's opening."
             }
           },
           "open_section": {
@@ -220,7 +222,7 @@
         },
         "data_description": {
           "cover": "The cover to open and close on the daily times.",
-          "window_sensor": "Binary sensor that is 'on' while the window is open. Window open at the evening close: the cover is not closed and a warning is logged.",
+          "window_sensor": "Binary sensor that is 'on' while the window is open. Window open at the evening close: the cover is not closed and a warning is logged. With “Close as soon as the window is shut” (opening and closing times), it closes once the window is shut.",
           "my_button": "For a cover that must not close fully: the evening close presses this button instead of closing the cover."
         },
         "submit": "Save and back to the list"
@@ -241,7 +243,7 @@
           "my_button": "My favourite position button (optional)"
         },
         "data_description": {
-          "window_sensor": "Binary sensor that is 'on' while the window is open. Window open at the evening close: the cover is not closed and a warning is logged.",
+          "window_sensor": "Binary sensor that is 'on' while the window is open. Window open at the evening close: the cover is not closed and a warning is logged. With “Close as soon as the window is shut” (opening and closing times), it closes once the window is shut.",
           "my_button": "For a cover that must not close fully: the evening close presses this button instead of closing the cover."
         },
         "submit": "Save and back to the list"
@@ -437,10 +439,12 @@
             "name": "Evening close",
             "description": "Once a day, for every mode, when the sun goes below this elevation.",
             "data": {
-              "daily_cover_close_elevation": "Sun elevation"
+              "daily_cover_close_elevation": "Sun elevation",
+              "close_when_window_shuts": "Close as soon as the window is shut"
             },
             "data_description": {
-              "daily_cover_close_elevation": "0° = sunset, -2° (recommended) ≈ ten minutes later, -4° ≈ twenty to twenty-five minutes later, -6° = end of civil twilight. A positive value closes before sunset."
+              "daily_cover_close_elevation": "0° = sunset, -2° (recommended) ≈ ten minutes later, -4° ≈ twenty to twenty-five minutes later, -6° = end of civil twilight. A positive value closes before sunset.",
+              "close_when_window_shuts": "A cover left up in the evening because its window was open closes (or goes to its My position) as soon as the window is shut, until the next morning's opening."
             }
           },
           "open_section": {
@@ -485,7 +489,7 @@
         },
         "data_description": {
           "cover": "The cover to open and close on the daily times.",
-          "window_sensor": "Binary sensor that is 'on' while the window is open. Window open at the evening close: the cover is not closed and a warning is logged.",
+          "window_sensor": "Binary sensor that is 'on' while the window is open. Window open at the evening close: the cover is not closed and a warning is logged. With “Close as soon as the window is shut” (opening and closing times), it closes once the window is shut.",
           "my_button": "For a cover that must not close fully: the evening close presses this button instead of closing the cover."
         },
         "submit": "Save and back to the list"
@@ -506,7 +510,7 @@
           "my_button": "My favourite position button (optional)"
         },
         "data_description": {
-          "window_sensor": "Binary sensor that is 'on' while the window is open. Window open at the evening close: the cover is not closed and a warning is logged.",
+          "window_sensor": "Binary sensor that is 'on' while the window is open. Window open at the evening close: the cover is not closed and a warning is logged. With “Close as soon as the window is shut” (opening and closing times), it closes once the window is shut.",
           "my_button": "For a cover that must not close fully: the evening close presses this button instead of closing the cover."
         },
         "submit": "Save and back to the list"

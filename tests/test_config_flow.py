@@ -299,7 +299,15 @@ class TestDailyCoverSchema:
         schema = cf._daily_cover_schema(_make_hass(), {CONF_DAY_MODE_MAP: DEFAULT_DAY_MODE_MAP})
         assert [str(marker) for marker in schema.schema] == ["close_section", "open_section"]
         close = schema.schema[next(iter(schema.schema))].schema
-        assert {str(marker) for marker in close.schema} == {CONF_DAILY_COVER_CLOSE_ELEVATION}
+        assert {str(marker) for marker in close.schema} == {
+            CONF_DAILY_COVER_CLOSE_ELEVATION,
+            "close_when_window_shuts",
+        }
+
+    def test_closing_behind_a_shut_window_is_off_until_enabled(self):
+        assert _markers(cf._daily_cover_schema(_make_hass(), {}))["close_when_window_shuts"].default() is False
+        enabled = cf._daily_cover_schema(_make_hass(), {"close_when_window_shuts": True})
+        assert _markers(enabled)["close_when_window_shuts"].default() is True
 
     def test_no_independent_heat_window_fields(self):
         """Heat window start/end were merged into this schedule; no separate config remains."""

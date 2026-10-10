@@ -103,6 +103,13 @@ CONF_ITEM_MY_BUTTON = "my_button"
 # Window-sensor states that mean "the window is open" — a binary_sensor uses
 # 'on'; 'open' covers a field pointed at a door/window entity instead.
 WINDOW_OPEN_STATES = frozenset({"on", "open"})
+# ... and those that mean it is shut. Anything else (unknown, unavailable)
+# establishes neither.
+WINDOW_CLOSED_STATES = frozenset({"off", "closed"})
+# When on, a cover the evening close left up because its window was open is
+# closed as soon as that window is shut, until the next morning open.
+CONF_CLOSE_WHEN_WINDOW_SHUTS = "close_when_window_shuts"
+DEFAULT_CLOSE_WHEN_WINDOW_SHUTS = False
 
 DEFAULT_DAILY_COVER_OPEN_TIME = "08:30"
 # The offset the retired setting defaulted to, used only to convert an entry

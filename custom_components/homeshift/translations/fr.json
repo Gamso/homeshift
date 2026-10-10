@@ -172,10 +172,12 @@
             "name": "Fermeture du soir",
             "description": "Une fois par jour, pour tous les modes, quand le soleil descend sous cette élévation.",
             "data": {
-              "daily_cover_close_elevation": "Élévation du soleil"
+              "daily_cover_close_elevation": "Élévation du soleil",
+              "close_when_window_shuts": "Fermer dès que la fenêtre se referme"
             },
             "data_description": {
-              "daily_cover_close_elevation": "0° = coucher du soleil, -2° (recommandé) ≈ dix minutes après, -4° ≈ vingt à vingt-cinq minutes après, -6° = fin du crépuscule civil. Une valeur positive ferme avant le coucher du soleil."
+              "daily_cover_close_elevation": "0° = coucher du soleil, -2° (recommandé) ≈ dix minutes après, -4° ≈ vingt à vingt-cinq minutes après, -6° = fin du crépuscule civil. Une valeur positive ferme avant le coucher du soleil.",
+              "close_when_window_shuts": "Un volet resté ouvert le soir parce que sa fenêtre l'était se ferme (ou va en position My) dès que la fenêtre se referme, jusqu'à l'ouverture du lendemain matin."
             }
           },
           "open_section": {
@@ -220,7 +222,7 @@
         },
         "data_description": {
           "cover": "Le volet à ouvrir et fermer selon les horaires.",
-          "window_sensor": "Capteur binaire à « on » quand la fenêtre est ouverte. Fenêtre ouverte à la fermeture du soir : le volet n'est pas fermé et un avertissement est journalisé.",
+          "window_sensor": "Capteur binaire à « on » quand la fenêtre est ouverte. Fenêtre ouverte à la fermeture du soir : le volet n'est pas fermé et un avertissement est journalisé. Avec l'option « Fermer dès que la fenêtre se referme » (Horaires), il se ferme dès que la fenêtre est refermée.",
           "my_button": "Pour un volet qui ne doit pas se fermer entièrement : la fermeture du soir appuie sur ce bouton au lieu de fermer le volet."
         },
         "submit": "Valider et revenir à la liste"
@@ -241,7 +243,7 @@
           "my_button": "Bouton position favorite My (optionnel)"
         },
         "data_description": {
-          "window_sensor": "Capteur binaire à « on » quand la fenêtre est ouverte. Fenêtre ouverte à la fermeture du soir : le volet n'est pas fermé et un avertissement est journalisé.",
+          "window_sensor": "Capteur binaire à « on » quand la fenêtre est ouverte. Fenêtre ouverte à la fermeture du soir : le volet n'est pas fermé et un avertissement est journalisé. Avec l'option « Fermer dès que la fenêtre se referme » (Horaires), il se ferme dès que la fenêtre est refermée.",
           "my_button": "Pour un volet qui ne doit pas se fermer entièrement : la fermeture du soir appuie sur ce bouton au lieu de fermer le volet."
         },
         "submit": "Valider et revenir à la liste"
@@ -437,10 +439,12 @@
             "name": "Fermeture du soir",
             "description": "Une fois par jour, pour tous les modes, quand le soleil descend sous cette élévation.",
             "data": {
-              "daily_cover_close_elevation": "Élévation du soleil"
+              "daily_cover_close_elevation": "Élévation du soleil",
+              "close_when_window_shuts": "Fermer dès que la fenêtre se referme"
             },
             "data_description": {
-              "daily_cover_close_elevation": "0° = coucher du soleil, -2° (recommandé) ≈ dix minutes après, -4° ≈ vingt à vingt-cinq minutes après, -6° = fin du crépuscule civil. Une valeur positive ferme avant le coucher du soleil."
+              "daily_cover_close_elevation": "0° = coucher du soleil, -2° (recommandé) ≈ dix minutes après, -4° ≈ vingt à vingt-cinq minutes après, -6° = fin du crépuscule civil. Une valeur positive ferme avant le coucher du soleil.",
+              "close_when_window_shuts": "Un volet resté ouvert le soir parce que sa fenêtre l'était se ferme (ou va en position My) dès que la fenêtre se referme, jusqu'à l'ouverture du lendemain matin."
             }
           },
           "open_section": {
@@ -485,7 +489,7 @@
         },
         "data_description": {
           "cover": "Le volet à ouvrir et fermer selon les horaires.",
-          "window_sensor": "Capteur binaire à « on » quand la fenêtre est ouverte. Fenêtre ouverte à la fermeture du soir : le volet n'est pas fermé et un avertissement est journalisé.",
+          "window_sensor": "Capteur binaire à « on » quand la fenêtre est ouverte. Fenêtre ouverte à la fermeture du soir : le volet n'est pas fermé et un avertissement est journalisé. Avec l'option « Fermer dès que la fenêtre se referme » (Horaires), il se ferme dès que la fenêtre est refermée.",
           "my_button": "Pour un volet qui ne doit pas se fermer entièrement : la fermeture du soir appuie sur ce bouton au lieu de fermer le volet."
         },
         "submit": "Valider et revenir à la liste"
@@ -506,7 +510,7 @@
           "my_button": "Bouton position favorite My (optionnel)"
         },
         "data_description": {
-          "window_sensor": "Capteur binaire à « on » quand la fenêtre est ouverte. Fenêtre ouverte à la fermeture du soir : le volet n'est pas fermé et un avertissement est journalisé.",
+          "window_sensor": "Capteur binaire à « on » quand la fenêtre est ouverte. Fenêtre ouverte à la fermeture du soir : le volet n'est pas fermé et un avertissement est journalisé. Avec l'option « Fermer dès que la fenêtre se referme » (Horaires), il se ferme dès que la fenêtre est refermée.",
           "my_button": "Pour un volet qui ne doit pas se fermer entièrement : la fermeture du soir appuie sur ce bouton au lieu de fermer le volet."
         },
         "submit": "Valider et revenir à la liste"

@@ -187,7 +187,7 @@ Warns that tonight's close had to leave covers up, and names them.
   - `covers` — the entity ids left open, e.g. `["cover.volet_chambre"]`
   - `window_sensors` — the sensor that blocked each one, e.g. `{"cover.volet_chambre": "binary_sensor.fenetre_chambre"}`
   - `count`, `checked_on` — how many, and the day the close ran
-- **Clears** when the next calendar day's schedule is computed, **not** when the window is closed — the cover stays up either way until someone acts on it.
+- **Clears** when the next calendar day's schedule is computed, **not** when the window is closed — the cover stays up until someone acts on it. With [**Close When The Window Shuts**](#closing-once-the-window-is-shut) on, a cover drops off the list as soon as HomeShift closes it behind its shut window.
 - **Only registered** when at least one cover is listed under **Individual Covers**.
 - **Survives a restart:** the list is persisted with the rest of the day's cover state.
 
@@ -303,6 +303,7 @@ The dialog opens on a menu: **Calendars**, **Day modes**, **Schedulers** and **C
 | **Individual Covers**     | —                               | The covers opened and closed daily, added one at a time, each with an optional window sensor and an optional My position button (separate from Cover Entities above); Cover Heat Protection's active window is derived from this schedule |
 | **Open Time — *(per day mode)*** | `08:30`                  | One field per day mode: `sunrise`, `skip`, or a custom `HH:MM` value |
 | **Earliest Open Time**    | `07:00`                         | Floor time used when a day mode's Open Time is `sunrise`, and start of heat protection on a `skip` day when sunrise is unknown |
+| **Close When The Window Shuts** | off                       | A cover the evening close left up because of its open window closes once that window is shut, until the next morning open, see [Closing Once the Window Is Shut](#closing-once-the-window-is-shut) |
 | **Sun Elevation At Closing** | `-2°`                        | Covers close when the descending sun reaches this many degrees above the horizon, every day, for every mode — the same scale as `{{ state_attr('sun.sun', 'elevation') }}`. `0°` is sunset, negative is below the horizon |
 
 ---
@@ -447,6 +448,21 @@ The window sensor changes one thing: **the evening close skips a cover whose win
 WARNING ... Daily cover schedule: not closing cover 'cover.volet_chambre' — window sensor 'binary_sensor.fenetre_chambre' reports the window open
 ```
 
+#### Closing Once the Window Is Shut
+
+With **Close When The Window Shuts** on (*Covers → Opening and closing times*, evening close section), a cover left up because its window was open closes as soon as that window is shut:
+
+```
+INFO ... Daily cover schedule: window 'binary_sensor.fenetre_chambre' shut — closing cover 'cover.volet_chambre'
+```
+
+- **Only at night**, from the evening close until the next morning: past midnight still counts. The next morning open ends the wait. A window shut in the daytime never lowers a cover, even on a `skip` day when the covers do not open.
+- A cover with a **My position button** goes to that position, as at the evening close.
+- A cover **already lowered by hand** receives nothing. An **inhibited** cover keeps waiting, in case its inhibition ends before the morning.
+- A sensor that turns `unavailable` establishes nothing: the cover keeps waiting.
+- **Survives a restart:** the covers still waiting are persisted, and a window shut while Home Assistant was down is caught up at the next poll.
+- The cover then drops off `binary_sensor.homeshift_covers_left_open`.
+
 #### My Position Instead of a Full Close
 
 Some covers shouldn't come all the way down in the evening. Give such a cover a **My position button** — the button entity that sends a Somfy RTS (or similar) cover to its recorded favourite position — and the evening close presses that button instead of sending `close_cover` to it:
@@ -462,7 +478,7 @@ INFO ... Daily cover schedule: pressing My position button 'button.my_salon' for
 
 Details worth knowing:
 - **The morning open is never skipped** — an open window is only a reason not to close.
-- **A skipped cover is not retried later that night.** The day's close is marked done once it runs; the warning is the signal to close that cover by hand if you want it closed.
+- **A skipped cover is not retried later that night**, unless **Close When The Window Shuts** is on (below). Otherwise the day's close is marked done once it runs, and the warning is the signal to close that cover by hand if you want it closed.
 - **A sensor that is missing or `unavailable` closes the cover as usual**, with a warning — an unavailable sensor can't establish that the window is open.
 - **A cover reached through a group is not protected.** HomeShift sends the close to the entity ids you configured and does not look inside a group, so a cover that should keep its own window sensor or My position must be listed here individually (and dropped from the group).
 - Covers without a window sensor behave exactly as before.

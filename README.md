@@ -277,6 +277,8 @@ Hands inhibited covers back to the automation before their end. `entity_id` is o
 
 All parameters can be changed at any time via **Settings → Devices & Services → HomeShift → Configure**.
 
+The dialog opens on a menu: **Calendars**, **Day modes**, **Schedulers** and **Covers**, the last one a sub-menu grouping **Managed covers** (the [Individual Covers](#individual-covers) list), **Opening and closing times** (the [Daily Cover Schedule](#️-daily-cover-schedule)) and **Heat protection**. Each entry shows a one-line summary of its current settings. Saving a page brings you back to its menu; nothing is stored until **Save configuration**, and the menu lists the sections changed so far, since closing the dialog with ✕ discards them.
+
 | Parameter                 | Default                         | Description                                                   |
 | ------------------------- | ------------------------------- | ------------------------------------------------------------- |
 | **Work Calendar**         | —                               | Calendar entity containing your work/schedule events          |
@@ -437,7 +439,7 @@ WARNING ... Daily cover schedule: the sun never reaches 8.0° on 2026-06-21 — 
 
 ### Individual Covers
 
-The covers driven by the daily schedule are added **one at a time** from the *Individual Covers* menu: pick the cover, and optionally a **window opening sensor** (does that window stand open?) and a **My position button** (how should this cover close?). Adding a cover that is already in the list updates its settings instead of duplicating it. A cover group is a cover entity like any other, so driving the whole house through one group is simply a single entry.
+The covers driven by the daily schedule are added **one at a time** from *Covers → Managed covers*: pick the cover, and optionally a **window opening sensor** (does that window stand open?) and a **My position button** (how should this cover close?). **Edit a cover** changes the sensor or the button of a cover already in the list (clear a field to remove it); adding a cover that is already in the list does the same instead of duplicating it. A cover group is a cover entity like any other, so driving the whole house through one group is simply a single entry.
 
 The window sensor changes one thing: **the evening close skips a cover whose window is reported open.** Rather than closing a cover over an open window, HomeShift leaves it alone and logs a warning:
 

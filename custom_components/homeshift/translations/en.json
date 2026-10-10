@@ -2,156 +2,257 @@
   "config": {
     "step": {
       "menu": {
-        "title": "HomeShift Configuration",
-        "description": "Select a section to configure.",
+        "title": "HomeShift configuration",
+        "description": "Sections filled in: {pending}\n\nNothing is created before “Save configuration”: closing this dialog with ✕ drops the configuration.",
         "menu_options": {
-          "calendars": "Calendars & Schedule",
-          "mapping": "Mode Mapping",
+          "calendars": "Calendars",
+          "mapping": "Day modes",
           "schedulers": "Schedulers",
-          "covers": "Cover Heat Control",
-          "daily_cover_schedule": "Daily Cover Schedule",
-          "cover_items": "Individual Covers",
-          "finalize": "Save Configuration"
+          "covers_menu": "Covers",
+          "finalize": "Save configuration"
+        },
+        "menu_option_descriptions": {
+          "calendars": "{calendars}",
+          "mapping": "{modes}",
+          "schedulers": "{scheduler_count} schedulers assigned",
+          "covers_menu": "Managed covers: {cover_count} · closing tonight at {close_at}",
+          "finalize": "Apply the changes and close this dialog."
+        }
+      },
+      "covers_menu": {
+        "title": "Covers",
+        "description": "The covers opened and closed every day, their times, and heat protection.",
+        "menu_options": {
+          "cover_items": "Managed covers",
+          "daily_cover_schedule": "Opening and closing times",
+          "covers": "Heat protection",
+          "menu": "← Back to the main menu"
+        },
+        "menu_option_descriptions": {
+          "cover_items": "{cover_count} cover(s) · add, edit or remove",
+          "daily_cover_schedule": "Opening by day mode · closing tonight at {close_at}",
+          "covers": "Threshold: {heat_threshold} °C · protected covers: {heat_cover_count}"
         }
       },
       "calendars": {
-        "title": "Calendars & Schedule",
-        "description": "Configure the calendar entities.",
+        "title": "Calendars",
+        "description": "The work calendar decides the working days and their events; the holiday calendar switches the day to the holiday mode.",
         "data": {
-          "calendar_entity": "Work Calendar Entity",
-          "holiday_calendar": "Holiday Calendar Entity"
-        }
+          "calendar_entity": "Work calendar",
+          "holiday_calendar": "Holiday calendar"
+        },
+        "submit": "Save and back to the menu"
       },
       "mapping": {
-        "title": "Mode Mapping",
-        "description": "Configure day mode display names, default assignments, and event mapping.",
+        "title": "Day modes",
+        "description": "Choose the mode applied for each kind of day. The display names are folded further down.",
         "sections": {
-          "day_modes_section": {
-            "name": "Day Mode Display Names",
+          "defaults_section": {
+            "name": "Mode rules",
             "data": {
-              "day_display_home": "Home",
-              "day_display_work": "Work",
-              "day_display_remote": "Remote",
-              "day_display_away": "Away"
+              "mode_default": "Working day",
+              "mode_weekend": "Weekend",
+              "mode_holiday": "Public holiday",
+              "mode_absence": "Mode that pauses the automation",
+              "event_mode_map": "Calendar events (Keyword:ModeKey, ...)"
             },
             "data_description": {
-              "day_display_home": "Display name for key home",
-              "day_display_work": "Display name for key work",
-              "day_display_remote": "Display name for key remote",
-              "day_display_away": "Display name for key away"
+              "mode_absence": "Picking this mode yourself pauses the automatic updates until you leave it. A calendar event mapped to this mode pauses nothing.",
+              "event_mode_map": "An event whose title contains the keyword switches the day to that mode. The value is the mode key: home, work, remote or away."
             }
           },
-          "defaults_section": {
-            "name": "Default Mode Assignments",
+          "day_modes_section": {
+            "name": "Day mode display names",
+            "description": "The name shown for each mode. The technical key never changes.",
             "data": {
-              "mode_default": "Default Mode (work day)",
-              "mode_absence": "Away Mode (pauses auto-update when selected by hand)",
-              "mode_weekend": "Weekend Mode",
-              "mode_holiday": "Holiday Mode",
-              "event_mode_map": "Event-to-Mode Mapping (EventKeyword:ModeKey, ...)"
+              "day_display_home": "Mode home",
+              "day_display_work": "Mode work",
+              "day_display_remote": "Mode remote",
+              "day_display_away": "Mode away"
             },
             "data_description": {
-              "mode_absence": "Selecting this mode yourself pauses automatic updates until you leave it. A calendar event mapped to this mode does not pause anything."
+              "day_display_home": "Display name for the home key",
+              "day_display_work": "Display name for the work key",
+              "day_display_remote": "Display name for the remote key",
+              "day_display_away": "Display name for the away key"
             }
           },
           "thermostat_section": {
-            "name": "Thermostat Display Names",
+            "name": "Thermostat mode names",
             "data": {
-              "thermostat_display_off": "Off",
-              "thermostat_display_heating": "Heating",
-              "thermostat_display_cooling": "Cooling",
-              "thermostat_display_ventilation": "Ventilation"
+              "thermostat_display_off": "Mode off",
+              "thermostat_display_heating": "Mode heating",
+              "thermostat_display_cooling": "Mode cooling",
+              "thermostat_display_ventilation": "Mode ventilation"
             },
             "data_description": {
-              "thermostat_display_off": "Display name for key off",
-              "thermostat_display_heating": "Display name for key heating",
-              "thermostat_display_cooling": "Display name for key cooling",
-              "thermostat_display_ventilation": "Display name for key ventilation"
+              "thermostat_display_off": "Display name for the off key",
+              "thermostat_display_heating": "Display name for the heating key",
+              "thermostat_display_cooling": "Display name for the cooling key",
+              "thermostat_display_ventilation": "Display name for the ventilation key"
             }
           }
-        }
+        },
+        "submit": "Save and back to the menu"
       },
       "schedulers": {
         "title": "Schedulers",
-        "description": "Assign scheduler switch entities to each day mode. The switches of the active mode are turned on, those of every other mode are turned off.",
-        "data": {
-          "schedulers_home": "Schedulers — Home",
-          "schedulers_work": "Schedulers — Work",
-          "schedulers_remote": "Schedulers — Remote",
-          "schedulers_away": "Schedulers — Away"
-        }
+        "description": "The schedulers of the active mode are turned on, those of every other mode are turned off. Open a mode to edit its list.",
+        "sections": {
+          "mode_home": {
+            "name": "{name_home} · {count_home}",
+            "data": {
+              "schedulers_home": "Schedulers"
+            }
+          },
+          "mode_work": {
+            "name": "{name_work} · {count_work}",
+            "data": {
+              "schedulers_work": "Schedulers"
+            }
+          },
+          "mode_remote": {
+            "name": "{name_remote} · {count_remote}",
+            "data": {
+              "schedulers_remote": "Schedulers"
+            }
+          },
+          "mode_away": {
+            "name": "{name_away} · {count_away}",
+            "data": {
+              "schedulers_away": "Schedulers"
+            }
+          }
+        },
+        "submit": "Save and back to the menu"
       },
       "covers": {
-        "title": "Cover Heat Control",
-        "description": "Close a cover automatically when it's too hot. Once closed, it stays closed for the rest of the day — only the next day's normal open, or the daily schedule's own evening close, touch it again. The active window is entirely derived from Daily Cover Schedule's computed open/close times — configure that first.",
+        "title": "Heat protection",
+        "description": "Closes the chosen covers when it gets too hot. Protection only acts between the opening and closing times computed under “Opening and closing times”: set those first.",
         "data": {
-          "cover_entities": "Cover Entities",
-          "cover_temp_sensor": "Temperature Sensor",
-          "cover_temp_threshold": "Temperature Threshold (°C)",
-          "cover_action": "Cover Action",
-          "cover_my_button": "My position button",
-          "cover_weather_entity": "Weather Entity (proactive close)",
-          "cover_forecast_threshold": "Forecast Threshold (°C)"
+          "cover_entities": "Protected covers"
         },
         "data_description": {
-          "cover_entities": "Select the cover entities to control when it is too hot.",
-          "cover_temp_sensor": "Sensor providing the outdoor temperature.",
-          "cover_temp_threshold": "Temperature above which the selected action is triggered.",
-          "cover_action": "'Close' sends the standard close_cover command. 'Stop' sends stop_cover, halting movement mid-travel — useful for Somfy RTS covers (the My/favorite position is a separate button entity).",
-          "cover_my_button": "Button to press to send covers to their favorite (My) position. If set, this button is used instead of the action below.",
-          "cover_weather_entity": "Optional weather entity with daily forecasts. When set, the cover closes proactively at the day's cover open time if today's forecast high exceeds the forecast threshold, instead of waiting for the outdoor sensor to actually cross it.",
-          "cover_forecast_threshold": "Forecast daily high above which the proactive close triggers."
-        }
+          "cover_entities": "Separate from the managed covers: a cover can be protected from heat without following the daily times. Once closed by the heat, it stays closed until the next normal opening or the evening close."
+        },
+        "sections": {
+          "trigger_section": {
+            "name": "Trigger",
+            "data": {
+              "cover_temp_sensor": "Outdoor temperature sensor",
+              "cover_temp_threshold": "Temperature threshold",
+              "cover_weather_entity": "Weather entity (early close)",
+              "cover_forecast_threshold": "Forecast threshold"
+            },
+            "data_description": {
+              "cover_temp_threshold": "The covers close once the sensor goes above this temperature.",
+              "cover_weather_entity": "Optional. When today's forecast high is above the forecast threshold, the covers close from the opening time on, without waiting for the sensor.",
+              "cover_forecast_threshold": "Forecast high above which the early close triggers."
+            }
+          },
+          "action_section": {
+            "name": "Action",
+            "data": {
+              "cover_my_button": "Favourite position button (My)",
+              "cover_action": "Otherwise, cover action"
+            },
+            "data_description": {
+              "cover_my_button": "When set, this button is pressed instead of the action below.",
+              "cover_action": "“Close” sends close_cover. “Stop” sends stop_cover, which interrupts the current movement: useful for Somfy RTS covers."
+            }
+          }
+        },
+        "submit": "Save and back to covers"
       },
       "daily_cover_schedule": {
-        "title": "Daily Cover Schedule",
-        "description": "Natively open and close your covers every day, without a separate Scheduler-integration entity. Which covers are driven is set under Individual Covers; this section sets the times. Kept independent from Cover Heat Control, which targets a single cover. For each day mode below, set 'sunrise', 'skip', or a custom 'HH:MM' opening time — modes sharing the same value form a batch. Closing always happens once per day, for every mode, when the setting sun drops past the elevation below.\n\nAt {close_elevation}°, that is {close_at_elevation} tonight.",
-        "data": {
-          "daily_cover_close_elevation": "Sun elevation at closing",
-          "sunrise_earliest": "Earliest Allowed Opening Time",
-          "daily_open_time_home": "Open Time — Home",
-          "daily_open_time_work": "Open Time — Work",
-          "daily_open_time_remote": "Open Time — Remote",
-          "daily_open_time_away": "Open Time — Away"
+        "title": "Opening and closing times",
+        "description": "Applies to the covers listed under “Managed covers”.\n\n**At {close_elevation}°, the covers will close at {close_at_elevation} tonight.**",
+        "sections": {
+          "close_section": {
+            "name": "Evening close",
+            "description": "Once a day, for every mode, when the sun goes below this elevation.",
+            "data": {
+              "daily_cover_close_elevation": "Sun elevation"
+            },
+            "data_description": {
+              "daily_cover_close_elevation": "0° = sunset, -2° (recommended) ≈ ten minutes later, -4° ≈ twenty to twenty-five minutes later, -6° = end of civil twilight. A positive value closes before sunset."
+            }
+          },
+          "open_section": {
+            "name": "Morning opening",
+            "description": "For each mode: at sunrise, no opening, or a fixed HH:MM time. Modes set the same way open together.",
+            "data": {
+              "sunrise_earliest": "Not before",
+              "daily_open_time_home": "{name_home}",
+              "daily_open_time_work": "{name_work}",
+              "daily_open_time_remote": "{name_remote}",
+              "daily_open_time_away": "{name_away}"
+            },
+            "data_description": {
+              "sunrise_earliest": "At sunrise, the covers open no earlier than this time."
+            }
+          }
         },
-        "data_description": {
-          "daily_cover_close_elevation": "Degrees above the horizon — the 'elevation' attribute of sun.sun, so a light level rather than a delay. 0° is sunset, -2° (recommended) is about ten minutes later, -4° is twenty to twenty-five minutes later with the room already dark, -6° is the end of civil twilight. Positive values close while the sun is still up.",
-          "sunrise_earliest": "The sunrise-based opening time will be the later of actual sunrise and this value.",
-          "daily_open_time_home": "Opening time for the Home day mode: 'sunrise', 'skip', or a custom 'HH:MM' value.",
-          "daily_open_time_work": "Opening time for the Work day mode: 'sunrise', 'skip', or a custom 'HH:MM' value.",
-          "daily_open_time_remote": "Opening time for the Remote day mode: 'sunrise', 'skip', or a custom 'HH:MM' value.",
-          "daily_open_time_away": "Opening time for the Away day mode: 'sunrise', 'skip', or a custom 'HH:MM' value."
-        }
+        "submit": "Save and back to covers"
       },
       "cover_items": {
-        "title": "Individual Covers",
-        "description": "The covers opened and closed by the Daily Cover Schedule, added one at a time — a cover group counts as one cover. Each can carry an optional window sensor and an optional My position button. At the evening close, a cover whose window sensor reports the window open is left alone and a warning is logged instead.\n\nCurrently configured:\n{covers}",
+        "title": "Managed covers",
+        "description": "The covers opened and closed every day; a cover group counts as one. In the evening, a cover whose window is reported open is not closed and a warning is logged.\n\n{covers}",
         "menu_options": {
-          "cover_item_add": "➕ Add a cover",
+          "cover_item_add": "Add a cover",
+          "cover_item_pick": "Edit a cover",
           "cover_item_remove": "Remove covers",
-          "menu": "← Back to the main menu"
+          "covers_menu": "← Back to the covers menu"
+        },
+        "menu_option_descriptions": {
+          "cover_item_add": "With, if needed, a window sensor and a My button",
+          "cover_item_pick": "Change its window sensor or My button",
+          "cover_item_remove": "Remove them from HomeShift, leaving the entities alone"
         }
       },
       "cover_item_add": {
-        "title": "Add a Cover",
-        "description": "Pick the cover and, optionally, the sensor telling whether its window is open. Selecting a cover that is already in the list updates its window sensor instead of adding it twice. A cover with a My position button closes to that position instead of closing fully.",
+        "title": "Add a cover",
+        "description": "Choose the cover and, if needed, its window sensor and its favourite position button.",
         "data": {
           "cover": "Cover",
           "window_sensor": "Window opening sensor (optional)",
-          "my_button": "My position button (optional)"
+          "my_button": "My favourite position button (optional)"
         },
         "data_description": {
-          "cover": "The cover to open and close with the daily schedule.",
-          "window_sensor": "Binary sensor that is 'on' when the window is open. If it reports open at the evening close, this cover is not closed and a warning is logged.",
-          "my_button": "Button that sends this cover to its recorded favourite (My) position — for a cover that must not close fully. When set, the evening close presses this button instead of sending a close command."
-        }
+          "cover": "The cover to open and close on the daily times.",
+          "window_sensor": "Binary sensor that is 'on' while the window is open. Window open at the evening close: the cover is not closed and a warning is logged.",
+          "my_button": "For a cover that must not close fully: the evening close presses this button instead of closing the cover."
+        },
+        "submit": "Save and back to the list"
+      },
+      "cover_item_pick": {
+        "title": "Edit a cover",
+        "description": "Choose the cover to edit.",
+        "data": {
+          "cover": "Cover"
+        },
+        "submit": "Next"
+      },
+      "cover_item_edit": {
+        "title": "Edit a cover",
+        "description": "Cover: **{cover}**. Clear a field to remove the sensor or the button.",
+        "data": {
+          "window_sensor": "Window opening sensor (optional)",
+          "my_button": "My favourite position button (optional)"
+        },
+        "data_description": {
+          "window_sensor": "Binary sensor that is 'on' while the window is open. Window open at the evening close: the cover is not closed and a warning is logged.",
+          "my_button": "For a cover that must not close fully: the evening close presses this button instead of closing the cover."
+        },
+        "submit": "Save and back to the list"
       },
       "cover_item_remove": {
-        "title": "Remove Covers",
-        "description": "Select the covers to remove from the individual list. The cover group configured in Daily Cover Schedule is not affected.",
+        "title": "Remove covers",
+        "description": "The ticked covers are no longer opened or closed by HomeShift. The entities themselves are left alone.",
         "data": {
           "remove_covers": "Covers to remove"
-        }
+        },
+        "submit": "Save and back to the list"
       }
     },
     "error": {
@@ -166,159 +267,261 @@
   "options": {
     "step": {
       "menu": {
-        "title": "HomeShift Options",
-        "description": "Select a section to configure.",
+        "title": "HomeShift options",
+        "description": "Changed, not saved yet: {pending}\n\nNothing is saved before “Save configuration”: closing this dialog with ✕ discards the changes.",
         "menu_options": {
-          "calendars": "Calendars & Schedule",
-          "mapping": "Mode Mapping",
+          "calendars": "Calendars",
+          "mapping": "Day modes",
           "schedulers": "Schedulers",
-          "covers": "Cover Heat Control",
-          "daily_cover_schedule": "Daily Cover Schedule",
-          "cover_items": "Individual Covers",
-          "finalize": "Save Configuration"
+          "covers_menu": "Covers",
+          "finalize": "Save configuration"
+        },
+        "menu_option_descriptions": {
+          "calendars": "{calendars}",
+          "mapping": "{modes}",
+          "schedulers": "{scheduler_count} schedulers assigned",
+          "covers_menu": "Managed covers: {cover_count} · closing tonight at {close_at}",
+          "finalize": "Apply the changes and close this dialog."
+        }
+      },
+      "covers_menu": {
+        "title": "Covers",
+        "description": "The covers opened and closed every day, their times, and heat protection.",
+        "menu_options": {
+          "cover_items": "Managed covers",
+          "daily_cover_schedule": "Opening and closing times",
+          "covers": "Heat protection",
+          "menu": "← Back to the main menu"
+        },
+        "menu_option_descriptions": {
+          "cover_items": "{cover_count} cover(s) · add, edit or remove",
+          "daily_cover_schedule": "Opening by day mode · closing tonight at {close_at}",
+          "covers": "Threshold: {heat_threshold} °C · protected covers: {heat_cover_count}"
         }
       },
       "calendars": {
-        "title": "Calendars & Schedule",
-        "description": "Configure the calendar entities.",
+        "title": "Calendars",
+        "description": "The work calendar decides the working days and their events; the holiday calendar switches the day to the holiday mode.",
         "data": {
-          "calendar_entity": "Work Calendar Entity",
-          "holiday_calendar": "Holiday Calendar Entity"
-        }
+          "calendar_entity": "Work calendar",
+          "holiday_calendar": "Holiday calendar"
+        },
+        "submit": "Save and back to the menu"
       },
       "mapping": {
-        "title": "Mode Mapping",
-        "description": "Configure day mode display names, default assignments, and event mapping.",
+        "title": "Day modes",
+        "description": "Choose the mode applied for each kind of day. The display names are folded further down.",
         "sections": {
-          "day_modes_section": {
-            "name": "Day Mode Display Names",
+          "defaults_section": {
+            "name": "Mode rules",
             "data": {
-              "day_display_home": "Home",
-              "day_display_work": "Work",
-              "day_display_remote": "Remote",
-              "day_display_away": "Away"
+              "mode_default": "Working day",
+              "mode_weekend": "Weekend",
+              "mode_holiday": "Public holiday",
+              "mode_absence": "Mode that pauses the automation",
+              "event_mode_map": "Calendar events (Keyword:ModeKey, ...)"
             },
             "data_description": {
-              "day_display_home": "Display name for key home",
-              "day_display_work": "Display name for key work",
-              "day_display_remote": "Display name for key remote",
-              "day_display_away": "Display name for key away"
+              "mode_absence": "Picking this mode yourself pauses the automatic updates until you leave it. A calendar event mapped to this mode pauses nothing.",
+              "event_mode_map": "An event whose title contains the keyword switches the day to that mode. The value is the mode key: home, work, remote or away."
             }
           },
-          "defaults_section": {
-            "name": "Default Mode Assignments",
+          "day_modes_section": {
+            "name": "Day mode display names",
+            "description": "The name shown for each mode. The technical key never changes.",
             "data": {
-              "mode_default": "Default Mode (work day)",
-              "mode_absence": "Away Mode (pauses auto-update when selected by hand)",
-              "mode_weekend": "Weekend Mode",
-              "mode_holiday": "Holiday Mode",
-              "event_mode_map": "Event-to-Mode Mapping (EventKeyword:ModeKey, ...)"
+              "day_display_home": "Mode home",
+              "day_display_work": "Mode work",
+              "day_display_remote": "Mode remote",
+              "day_display_away": "Mode away"
             },
             "data_description": {
-              "mode_absence": "Selecting this mode yourself pauses automatic updates until you leave it. A calendar event mapped to this mode does not pause anything."
+              "day_display_home": "Display name for the home key",
+              "day_display_work": "Display name for the work key",
+              "day_display_remote": "Display name for the remote key",
+              "day_display_away": "Display name for the away key"
             }
           },
           "thermostat_section": {
-            "name": "Thermostat Display Names",
+            "name": "Thermostat mode names",
             "data": {
-              "thermostat_display_off": "Off",
-              "thermostat_display_heating": "Heating",
-              "thermostat_display_cooling": "Cooling",
-              "thermostat_display_ventilation": "Ventilation"
+              "thermostat_display_off": "Mode off",
+              "thermostat_display_heating": "Mode heating",
+              "thermostat_display_cooling": "Mode cooling",
+              "thermostat_display_ventilation": "Mode ventilation"
             },
             "data_description": {
-              "thermostat_display_off": "Display name for key off",
-              "thermostat_display_heating": "Display name for key heating",
-              "thermostat_display_cooling": "Display name for key cooling",
-              "thermostat_display_ventilation": "Display name for key ventilation"
+              "thermostat_display_off": "Display name for the off key",
+              "thermostat_display_heating": "Display name for the heating key",
+              "thermostat_display_cooling": "Display name for the cooling key",
+              "thermostat_display_ventilation": "Display name for the ventilation key"
             }
           }
-        }
+        },
+        "submit": "Save and back to the menu"
       },
       "schedulers": {
         "title": "Schedulers",
-        "description": "Assign scheduler switch entities to each day mode. The switches of the active mode are turned on, those of every other mode are turned off.",
-        "data": {
-          "schedulers_home": "Schedulers — Home",
-          "schedulers_work": "Schedulers — Work",
-          "schedulers_remote": "Schedulers — Remote",
-          "schedulers_away": "Schedulers — Away"
-        }
+        "description": "The schedulers of the active mode are turned on, those of every other mode are turned off. Open a mode to edit its list.",
+        "sections": {
+          "mode_home": {
+            "name": "{name_home} · {count_home}",
+            "data": {
+              "schedulers_home": "Schedulers"
+            }
+          },
+          "mode_work": {
+            "name": "{name_work} · {count_work}",
+            "data": {
+              "schedulers_work": "Schedulers"
+            }
+          },
+          "mode_remote": {
+            "name": "{name_remote} · {count_remote}",
+            "data": {
+              "schedulers_remote": "Schedulers"
+            }
+          },
+          "mode_away": {
+            "name": "{name_away} · {count_away}",
+            "data": {
+              "schedulers_away": "Schedulers"
+            }
+          }
+        },
+        "submit": "Save and back to the menu"
       },
       "covers": {
-        "title": "Cover Heat Control",
-        "description": "Close a cover automatically when it's too hot. Once closed, it stays closed for the rest of the day — only the next day's normal open, or the daily schedule's own evening close, touch it again. The active window is entirely derived from Daily Cover Schedule's computed open/close times — configure that first.",
+        "title": "Heat protection",
+        "description": "Closes the chosen covers when it gets too hot. Protection only acts between the opening and closing times computed under “Opening and closing times”: set those first.",
         "data": {
-          "cover_entities": "Cover Entities",
-          "cover_temp_sensor": "Temperature Sensor",
-          "cover_temp_threshold": "Temperature Threshold (°C)",
-          "cover_action": "Cover Action",
-          "cover_my_button": "My position button",
-          "cover_weather_entity": "Weather Entity (proactive close)",
-          "cover_forecast_threshold": "Forecast Threshold (°C)"
+          "cover_entities": "Protected covers"
         },
         "data_description": {
-          "cover_entities": "Select the cover entities to control when it is too hot.",
-          "cover_temp_sensor": "Sensor providing the outdoor temperature.",
-          "cover_temp_threshold": "Temperature above which the selected action is triggered.",
-          "cover_action": "'Close' sends the standard close_cover command. 'Stop' sends stop_cover, halting movement mid-travel — useful for Somfy RTS covers (the My/favorite position is a separate button entity).",
-          "cover_my_button": "Button to press to send covers to their favorite (My) position. If set, this button is used instead of the action below.",
-          "cover_weather_entity": "Optional weather entity with daily forecasts. When set, the cover closes proactively at the day's cover open time if today's forecast high exceeds the forecast threshold, instead of waiting for the outdoor sensor to actually cross it.",
-          "cover_forecast_threshold": "Forecast daily high above which the proactive close triggers."
-        }
+          "cover_entities": "Separate from the managed covers: a cover can be protected from heat without following the daily times. Once closed by the heat, it stays closed until the next normal opening or the evening close."
+        },
+        "sections": {
+          "trigger_section": {
+            "name": "Trigger",
+            "data": {
+              "cover_temp_sensor": "Outdoor temperature sensor",
+              "cover_temp_threshold": "Temperature threshold",
+              "cover_weather_entity": "Weather entity (early close)",
+              "cover_forecast_threshold": "Forecast threshold"
+            },
+            "data_description": {
+              "cover_temp_threshold": "The covers close once the sensor goes above this temperature.",
+              "cover_weather_entity": "Optional. When today's forecast high is above the forecast threshold, the covers close from the opening time on, without waiting for the sensor.",
+              "cover_forecast_threshold": "Forecast high above which the early close triggers."
+            }
+          },
+          "action_section": {
+            "name": "Action",
+            "data": {
+              "cover_my_button": "Favourite position button (My)",
+              "cover_action": "Otherwise, cover action"
+            },
+            "data_description": {
+              "cover_my_button": "When set, this button is pressed instead of the action below.",
+              "cover_action": "“Close” sends close_cover. “Stop” sends stop_cover, which interrupts the current movement: useful for Somfy RTS covers."
+            }
+          }
+        },
+        "submit": "Save and back to covers"
       },
       "daily_cover_schedule": {
-        "title": "Daily Cover Schedule",
-        "description": "Natively open and close your covers every day, without a separate Scheduler-integration entity. Which covers are driven is set under Individual Covers; this section sets the times. Kept independent from Cover Heat Control, which targets a single cover. For each day mode below, set 'sunrise', 'skip', or a custom 'HH:MM' opening time — modes sharing the same value form a batch. Closing always happens once per day, for every mode, when the setting sun drops past the elevation below.\n\nAt {close_elevation}°, that is {close_at_elevation} tonight.",
-        "data": {
-          "daily_cover_close_elevation": "Sun elevation at closing",
-          "sunrise_earliest": "Earliest Allowed Opening Time",
-          "daily_open_time_home": "Open Time — Home",
-          "daily_open_time_work": "Open Time — Work",
-          "daily_open_time_remote": "Open Time — Remote",
-          "daily_open_time_away": "Open Time — Away"
+        "title": "Opening and closing times",
+        "description": "Applies to the covers listed under “Managed covers”.\n\n**At {close_elevation}°, the covers will close at {close_at_elevation} tonight.**",
+        "sections": {
+          "close_section": {
+            "name": "Evening close",
+            "description": "Once a day, for every mode, when the sun goes below this elevation.",
+            "data": {
+              "daily_cover_close_elevation": "Sun elevation"
+            },
+            "data_description": {
+              "daily_cover_close_elevation": "0° = sunset, -2° (recommended) ≈ ten minutes later, -4° ≈ twenty to twenty-five minutes later, -6° = end of civil twilight. A positive value closes before sunset."
+            }
+          },
+          "open_section": {
+            "name": "Morning opening",
+            "description": "For each mode: at sunrise, no opening, or a fixed HH:MM time. Modes set the same way open together.",
+            "data": {
+              "sunrise_earliest": "Not before",
+              "daily_open_time_home": "{name_home}",
+              "daily_open_time_work": "{name_work}",
+              "daily_open_time_remote": "{name_remote}",
+              "daily_open_time_away": "{name_away}"
+            },
+            "data_description": {
+              "sunrise_earliest": "At sunrise, the covers open no earlier than this time."
+            }
+          }
         },
-        "data_description": {
-          "daily_cover_close_elevation": "Degrees above the horizon — the 'elevation' attribute of sun.sun, so a light level rather than a delay. 0° is sunset, -2° (recommended) is about ten minutes later, -4° is twenty to twenty-five minutes later with the room already dark, -6° is the end of civil twilight. Positive values close while the sun is still up.",
-          "sunrise_earliest": "The sunrise-based opening time will be the later of actual sunrise and this value.",
-          "daily_open_time_home": "Opening time for the Home day mode: 'sunrise', 'skip', or a custom 'HH:MM' value.",
-          "daily_open_time_work": "Opening time for the Work day mode: 'sunrise', 'skip', or a custom 'HH:MM' value.",
-          "daily_open_time_remote": "Opening time for the Remote day mode: 'sunrise', 'skip', or a custom 'HH:MM' value.",
-          "daily_open_time_away": "Opening time for the Away day mode: 'sunrise', 'skip', or a custom 'HH:MM' value."
-        }
+        "submit": "Save and back to covers"
       },
       "cover_items": {
-        "title": "Individual Covers",
-        "description": "The covers opened and closed by the Daily Cover Schedule, added one at a time — a cover group counts as one cover. Each can carry an optional window sensor and an optional My position button. At the evening close, a cover whose window sensor reports the window open is left alone and a warning is logged instead.\n\nCurrently configured:\n{covers}",
+        "title": "Managed covers",
+        "description": "The covers opened and closed every day; a cover group counts as one. In the evening, a cover whose window is reported open is not closed and a warning is logged.\n\n{covers}",
         "menu_options": {
-          "cover_item_add": "➕ Add a cover",
+          "cover_item_add": "Add a cover",
+          "cover_item_pick": "Edit a cover",
           "cover_item_remove": "Remove covers",
-          "menu": "← Back to the main menu"
+          "covers_menu": "← Back to the covers menu"
+        },
+        "menu_option_descriptions": {
+          "cover_item_add": "With, if needed, a window sensor and a My button",
+          "cover_item_pick": "Change its window sensor or My button",
+          "cover_item_remove": "Remove them from HomeShift, leaving the entities alone"
         }
       },
       "cover_item_add": {
-        "title": "Add a Cover",
-        "description": "Pick the cover and, optionally, the sensor telling whether its window is open. Selecting a cover that is already in the list updates its window sensor instead of adding it twice. A cover with a My position button closes to that position instead of closing fully.",
+        "title": "Add a cover",
+        "description": "Choose the cover and, if needed, its window sensor and its favourite position button.",
         "data": {
           "cover": "Cover",
           "window_sensor": "Window opening sensor (optional)",
-          "my_button": "My position button (optional)"
+          "my_button": "My favourite position button (optional)"
         },
         "data_description": {
-          "cover": "The cover to open and close with the daily schedule.",
-          "window_sensor": "Binary sensor that is 'on' when the window is open. If it reports open at the evening close, this cover is not closed and a warning is logged.",
-          "my_button": "Button that sends this cover to its recorded favourite (My) position — for a cover that must not close fully. When set, the evening close presses this button instead of sending a close command."
-        }
+          "cover": "The cover to open and close on the daily times.",
+          "window_sensor": "Binary sensor that is 'on' while the window is open. Window open at the evening close: the cover is not closed and a warning is logged.",
+          "my_button": "For a cover that must not close fully: the evening close presses this button instead of closing the cover."
+        },
+        "submit": "Save and back to the list"
+      },
+      "cover_item_pick": {
+        "title": "Edit a cover",
+        "description": "Choose the cover to edit.",
+        "data": {
+          "cover": "Cover"
+        },
+        "submit": "Next"
+      },
+      "cover_item_edit": {
+        "title": "Edit a cover",
+        "description": "Cover: **{cover}**. Clear a field to remove the sensor or the button.",
+        "data": {
+          "window_sensor": "Window opening sensor (optional)",
+          "my_button": "My favourite position button (optional)"
+        },
+        "data_description": {
+          "window_sensor": "Binary sensor that is 'on' while the window is open. Window open at the evening close: the cover is not closed and a warning is logged.",
+          "my_button": "For a cover that must not close fully: the evening close presses this button instead of closing the cover."
+        },
+        "submit": "Save and back to the list"
       },
       "cover_item_remove": {
-        "title": "Remove Covers",
-        "description": "Select the covers to remove from the individual list. The cover group configured in Daily Cover Schedule is not affected.",
+        "title": "Remove covers",
+        "description": "The ticked covers are no longer opened or closed by HomeShift. The entities themselves are left alone.",
         "data": {
           "remove_covers": "Covers to remove"
-        }
+        },
+        "submit": "Save and back to the list"
       }
     },
     "error": {
+      "invalid_calendar": "The specified calendar entity does not exist",
       "elevation_unreachable": "The sun does not reach this elevation every day of the year at your location. Pick a value inside the sun's yearly range — 0° is sunset, negative values are below the horizon."
     }
   },
@@ -376,14 +579,14 @@
   "selector": {
     "cover_action": {
       "options": {
-        "close_cover": "Close the covers (close_cover)",
+        "close_cover": "Close the covers",
         "stop_cover": "Stop the movement (stop_cover)"
       }
     },
     "daily_open_time": {
       "options": {
-        "sunrise": "Sunrise (floored at the earliest opening time)",
-        "skip": "Skip (do not open automatically)"
+        "sunrise": "At sunrise",
+        "skip": "Do not open"
       }
     }
   },

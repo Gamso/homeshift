@@ -307,11 +307,17 @@ async def test_french_setup_without_the_mapping_step_drives_the_schedulers(hass:
         flow["flow_id"], {CONF_CALENDAR_ENTITY: WORK_CALENDAR, CONF_HOLIDAY_CALENDAR: HOLIDAY_CALENDAR}
     )
     flow = await hass.config_entries.flow.async_configure(flow["flow_id"], {"next_step_id": "schedulers"})
-    fields = [str(marker) for marker in flow["data_schema"].schema]
-    assert fields == ["schedulers_home", "schedulers_work", "schedulers_remote", "schedulers_away"]
+    sections = [str(marker) for marker in flow["data_schema"].schema]
+    assert sections == ["mode_home", "mode_work", "mode_remote", "mode_away"]
+    assert flow["description_placeholders"]["name_work"] == "Travail"
     flow = await hass.config_entries.flow.async_configure(
         flow["flow_id"],
-        {"schedulers_work": ["switch.schedule_bureau"], "schedulers_home": ["switch.schedule_maison"]},
+        {
+            "mode_home": {"schedulers_home": ["switch.schedule_maison"]},
+            "mode_work": {"schedulers_work": ["switch.schedule_bureau"]},
+            "mode_remote": {},
+            "mode_away": {},
+        },
     )
     flow = await hass.config_entries.flow.async_configure(flow["flow_id"], {"next_step_id": "finalize"})
     assert flow["type"] is FlowResultType.CREATE_ENTRY
@@ -324,6 +330,56 @@ async def test_french_setup_without_the_mapping_step_drives_the_schedulers(hass:
     assert "switch.schedule_bureau" in turned_on
     assert "switch.schedule_maison" in turned_off
     assert "switch.schedule_bureau" not in turned_off
+
+
+async def test_options_menu_names_the_unsaved_sections(hass: HomeAssistant, freezer) -> None:
+    """Sectioned input goes through the real flow manager, and the menu names
+    the changed section with its label from the loaded translations."""
+    from homeassistant.data_entry_flow import FlowResultType
+
+    freezer.move_to("2026-03-03 18:00:00+00:00")
+    hass.config.language = "fr"
+    entry = make_entry(data={CONF_DAILY_COVER_ITEMS: COVER_ITEMS})
+    await setup_entry(hass, entry)
+    options = hass.config_entries.options
+
+    flow = await options.async_init(entry.entry_id)
+    assert flow["step_id"] == "menu"
+    assert flow["description_placeholders"]["pending"] == "—"
+    assert flow["description_placeholders"]["cover_count"] == "1"
+
+    # Pages submitted untouched, on an entry that never stored their values,
+    # write the form defaults: no change to report.
+    for step, untouched in (
+        ("mapping", {"defaults_section": {}, "day_modes_section": {}, "thermostat_section": {}}),
+        ("schedulers", {"mode_home": {}, "mode_work": {}, "mode_remote": {}, "mode_away": {}}),
+    ):
+        flow = await options.async_configure(flow["flow_id"], {"next_step_id": step})
+        flow = await options.async_configure(flow["flow_id"], untouched)
+    assert flow["description_placeholders"]["pending"] == "—"
+    flow = await options.async_configure(flow["flow_id"], {"next_step_id": "covers_menu"})
+    flow = await options.async_configure(flow["flow_id"], {"next_step_id": "covers"})
+    flow = await options.async_configure(flow["flow_id"], {"trigger_section": {}, "action_section": {}})
+    assert flow["description_placeholders"]["pending"] == "—"
+    flow = await options.async_configure(flow["flow_id"], {"next_step_id": "daily_cover_schedule"})
+    flow = await options.async_configure(flow["flow_id"], {"close_section": {}, "open_section": {}})
+    assert flow["description_placeholders"]["pending"] == "—"
+
+    flow = await options.async_configure(flow["flow_id"], {"next_step_id": "daily_cover_schedule"})
+    assert flow["type"] is FlowResultType.FORM
+    flow = await options.async_configure(
+        flow["flow_id"],
+        {"close_section": {"daily_cover_close_elevation": -4}, "open_section": {}},
+    )
+    assert flow["step_id"] == "covers_menu"
+
+    flow = await options.async_configure(flow["flow_id"], {"next_step_id": "menu"})
+    assert flow["description_placeholders"]["pending"] == "Horaires d'ouverture et de fermeture"
+
+    flow = await options.async_configure(flow["flow_id"], {"next_step_id": "finalize"})
+    assert flow["type"] is FlowResultType.CREATE_ENTRY
+    assert entry.options["daily_cover_close_elevation"] == -4
+    assert "close_section" not in entry.options
 
 
 # ---------------------------------------------------------------------------

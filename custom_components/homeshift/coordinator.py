@@ -602,6 +602,28 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
                 return display
         return None
 
+    async def _async_follow_mode_change(self, now: datetime, reason: str) -> None:
+        """Recompute today's cover open time after a day-mode change, until the covers opened.
+
+        The schedule is computed once per day, at midnight, from the mode in
+        force at that moment — and at midnight the calendar entity can still
+        show the event that just ended (or not yet the one that starts): its
+        state updates on its own schedule, a few seconds or a poll later. A
+        Friday 'Remote' event then gave Saturday the remote opening time. So
+        while the morning open has not run, a mode change moves the open time
+        with it. Once the covers opened, the day's schedule stays as it is.
+        """
+        today = now.date()
+        if self._cover_schedule_date != today or self._cover_manager.opened_on(today):
+            return
+        _LOGGER.info(
+            "Day mode is now '%s' (%s) before the morning open — recomputing today's cover schedule",
+            self.day_mode_key,
+            reason,
+        )
+        await self._cover_manager.async_compute_daily_schedule(now, self.day_mode_key)
+        self._schedule_cover_timers()
+
     async def async_set_day_mode(self, mode: str) -> None:
         """Set day mode manually (from UI select or service call).
 
@@ -636,6 +658,8 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
             self._override_until = None
             _LOGGER.info("Manual change: day_mode '%s' -> '%s' (key=%s)", old_mode, resolved, self.day_mode_key)
         await self.async_refresh_schedulers()
+        if self._day_mode != old_mode:
+            await self._async_follow_mode_change(dt_util.now(), "manual mode change")
         # Rebuild and broadcast the full data dict so downstream sensors pick up
         # the new day_mode and override_until immediately (rather than stale data).
         self.async_set_updated_data(self._build_result())
@@ -732,6 +756,7 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
             self._today_type = EVENT_NONE
             self._today_date = today
 
+        mode_key_before = self.day_mode_key
         if not unreadable:
             await self._async_apply_calendar(calendar_entity, calendar_state, now)
 
@@ -747,6 +772,8 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
             self._schedule_cover_timers()
             self._cover_schedule_date = today
             self._cover_schedule_provisional = bool(unreadable)
+        elif self.day_mode_key != mode_key_before:
+            await self._async_follow_mode_change(now, "automatic mode change")
 
         # Compute when and to what mode the next automatic change is expected
         await self._async_refresh_next_mode_prediction(
@@ -827,7 +854,21 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
         self._current_event = None
         today_type = EVENT_NONE
 
-        if calendar_state.state == "on":
+        # Right at an event's end (midnight for an all-day event) the
+        # calendar entity can still report it for a few seconds: its state
+        # updates on its own schedule. An event already over is no longer
+        # today's, so it must not set the new day's mode.
+        event_end = _parse_event_dt(calendar_state.attributes.get("end_time", ""), now.tzinfo)
+        event_over = calendar_state.state == "on" and event_end is not None and event_end <= now
+        if event_over:
+            _LOGGER.debug(
+                "Calendar '%s' still reports '%s', which ended at %s — ignored",
+                calendar_entity,
+                calendar_state.attributes.get("message", ""),
+                event_end,
+            )
+
+        if calendar_state.state == "on" and not event_over:
             event_message = calendar_state.attributes.get("message", "")
 
             if event_message:
@@ -846,7 +887,7 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
 
         # Early switch: if calendar is currently off and early_switch_minutes > 0, check
         # if a timed (non-all-day) event starts within the early window.
-        if calendar_state.state != "on" and self._early_switch_minutes > 0:
+        if (calendar_state.state != "on" or event_over) and self._early_switch_minutes > 0:
             early_end = now + timedelta(minutes=self._early_switch_minutes)
             early_events = await self._async_get_upcoming_events(calendar_entity, now, early_end)
             now_naive = self._to_naive(now)

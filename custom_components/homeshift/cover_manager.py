@@ -805,9 +805,10 @@ class CoverManager:
         Close time comes from _resolve_close_time(): the moment the setting
         sun reaches CONF_DAILY_COVER_CLOSE_ELEVATION degrees above the
         horizon. Unlike opening, closing is not mode-dependent.
-        Called once when a new calendar day is detected. Computed once per
-        day — a day-mode change later that same day does not recompute the
-        open time. Also resets heat protection's closed state, but only when
+        Called when a new calendar day is detected, and again when the day
+        mode changes before the morning open has run (the coordinator's
+        _async_follow_mode_change): once the covers opened, a later mode
+        change no longer moves the open time. Also resets heat protection's closed state, but only when
         the calendar day actually changed: the coordinator's "new day" flag
         lives in memory only, so an HA restart re-runs this for today, and
         clearing the flag then would let heat protection close a cover a
@@ -873,6 +874,10 @@ class CoverManager:
         if sunrise_time is None or earliest_time is None:
             return None
         return sunrise_time if sunrise_time > earliest_time else earliest_time
+
+    def opened_on(self, day: date) -> bool:
+        """Return True once the scheduled morning open has run on `day`."""
+        return self._daily_opened_date == day
 
     def open_datetime(self, now: datetime) -> datetime | None:
         """Return today's computed cover_open_time combined with now's date/tz.

@@ -1747,6 +1747,136 @@ class TestDailyCoverScheduleUsesTodaysDayMode:
         assert coordinator._cover_manager.cover_open_time == "07:10"
 
 
+class TestCoverScheduleFollowsLateModeChange:
+    """Regression: on Saturday 2026-10-10 the covers opened at the Friday
+    'Remote' time. At 00:00:00 the calendar entity still reported Friday's
+    all-day 'Télétravail' event (its state updates on its own schedule), the
+    schedule was computed with 'remote', and the switch to 'Maison' at the
+    next poll did not move the opening time.
+    """
+
+    OPEN_TIME_MAP = "home:08:30, work:07:10, remote:07:44"
+
+    def _coordinator(self, calendar_states: list):
+        from custom_components.homeshift.const import (
+            CONF_DAILY_COVER_ITEMS,
+            CONF_DAILY_COVER_OPEN_TIME_MAP,
+        )
+
+        hass = make_mock_hass()
+        hass.services.async_call = AsyncMock()
+        entry = make_mock_entry()
+        entry.options = {
+            CONF_DAILY_COVER_ITEMS: _cover_items("cover.volets"),
+            CONF_DAILY_COVER_OPEN_TIME_MAP: self.OPEN_TIME_MAP,
+        }
+        sun_state = MagicMock()
+        sun_state.attributes = {"next_setting": "2026-10-10T17:08:00+00:00"}
+        current = {"calendar": calendar_states[0]}
+
+        def _states_get(entity_id):
+            if entity_id == "sun.sun":
+                return sun_state
+            if entity_id == "calendar.teletravail":
+                return current["calendar"]
+            return make_calendar_state(state="off")
+
+        hass.states.get.side_effect = _states_get
+        coordinator = HomeShiftCoordinator(hass, entry)
+        coordinator._cover_manager._store = MagicMock()
+        coordinator._cover_manager._store.async_save = AsyncMock()
+        return coordinator, current
+
+    async def _update_at(self, coordinator, at: datetime) -> None:
+        with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt, \
+             patch("custom_components.homeshift.cover_manager.dt_util") as mock_cover_dt:
+            from datetime import timedelta as tdelta, timezone
+
+            mock_dt.now.return_value = at
+            mock_cover_dt.now.return_value = at
+            mock_cover_dt.as_local.side_effect = lambda dt: dt.astimezone(timezone(tdelta(hours=2)))
+            await coordinator.async_update_data()
+
+    async def test_event_that_just_ended_does_not_set_the_new_day_mode(self):
+        friday_event = make_calendar_state(
+            state="on",
+            message="Télétravail",
+            start_time="2026-10-09 00:00:00",
+            end_time="2026-10-10 00:00:00",
+        )
+        coordinator, _ = self._coordinator([friday_event])
+        set_day_mode(coordinator, "Télétravail")
+        coordinator._today_date = date(2026, 10, 9)
+        coordinator._schedule_next_mode_timer = MagicMock()
+        coordinator._schedule_cover_timers = MagicMock()
+
+        await self._update_at(coordinator, datetime(2026, 10, 10, 0, 0, 0))
+
+        assert coordinator.day_mode == "Maison"
+        assert coordinator._cover_manager.cover_open_time == "08:30"
+
+    async def test_mode_change_after_midnight_moves_the_open_time(self):
+        # Monday: at midnight the remote event is not visible yet.
+        coordinator, current = self._coordinator([make_calendar_state(state="off")])
+        set_day_mode(coordinator, "Maison")
+        coordinator._today_date = date(2026, 10, 11)
+        coordinator._schedule_next_mode_timer = MagicMock()
+        coordinator._schedule_cover_timers = MagicMock()
+
+        await self._update_at(coordinator, datetime(2026, 10, 12, 0, 0, 0))
+        assert coordinator._cover_manager.cover_open_time == "07:10"
+
+        current["calendar"] = make_calendar_state(
+            state="on",
+            message="Télétravail",
+            start_time="2026-10-12 00:00:00",
+            end_time="2026-10-13 00:00:00",
+        )
+        await self._update_at(coordinator, datetime(2026, 10, 12, 0, 5, 0))
+
+        assert coordinator.day_mode == "Télétravail"
+        assert coordinator._cover_manager.cover_open_time == "07:44"
+        coordinator._schedule_cover_timers.assert_called()
+
+    async def test_open_time_kept_once_the_covers_opened(self):
+        coordinator, current = self._coordinator([make_calendar_state(state="off")])
+        set_day_mode(coordinator, "Travail")
+        coordinator._today_date = date(2026, 10, 11)
+        coordinator._schedule_next_mode_timer = MagicMock()
+        coordinator._schedule_cover_timers = MagicMock()
+        await self._update_at(coordinator, datetime(2026, 10, 12, 0, 0, 0))
+        await self._update_at(coordinator, datetime(2026, 10, 12, 7, 10, 0))
+        assert coordinator._cover_manager.opened_on(date(2026, 10, 12))
+
+        current["calendar"] = make_calendar_state(
+            state="on",
+            message="Télétravail",
+            start_time="2026-10-12 13:00:00",
+            end_time="2026-10-12 18:00:00",
+        )
+        await self._update_at(coordinator, datetime(2026, 10, 12, 13, 0, 0))
+
+        assert coordinator.day_mode == "Télétravail"
+        assert coordinator._cover_manager.cover_open_time == "07:10"
+
+    async def test_manual_change_before_the_open_moves_the_open_time(self):
+        coordinator, _ = self._coordinator([make_calendar_state(state="off")])
+        set_day_mode(coordinator, "Travail")
+        coordinator._today_date = date(2026, 10, 11)
+        coordinator._schedule_next_mode_timer = MagicMock()
+        coordinator._schedule_cover_timers = MagicMock()
+        coordinator.async_refresh_schedulers = AsyncMock()
+        coordinator._async_save_state = AsyncMock()
+        coordinator.async_set_updated_data = MagicMock()
+        await self._update_at(coordinator, datetime(2026, 10, 12, 0, 0, 0))
+
+        with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
+            mock_dt.now.return_value = datetime(2026, 10, 12, 6, 30, 0)
+            await coordinator.async_set_day_mode("Maison")
+
+        assert coordinator._cover_manager.cover_open_time == "08:30"
+
+
 # ---------------------------------------------------------------------------
 # Daily cover schedule — check (open/close actions)
 # ---------------------------------------------------------------------------

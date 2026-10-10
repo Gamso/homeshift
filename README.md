@@ -399,6 +399,8 @@ Once per day, shortly after midnight, HomeShift computes:
   Day modes sharing the same value effectively form a batch (e.g. both `Work` and `Remote` set to `sunrise`). A day mode with no value configured falls back to `08:30`. There's no separate "skip modes" list — set a mode's Open Time to `skip` directly.
 - **Close time** — when the setting sun reaches the configured elevation, always, for every day mode (closing is not mode-dependent): see below.
 
+If the day mode changes before the covers opened — an all-day calendar event that the calendar entity only drops or shows a few minutes after midnight, or a mode picked by hand in the morning — the open time is computed again for the new mode. Once the covers opened, a later change (a half-day event in the afternoon) leaves the day's times as they are.
+
 A one-shot timer fires the open/close action at the exact scheduled minute; the periodic coordinator poll (every 5 minutes) acts as a fallback in case the timer is missed (e.g. a HA restart). Each action fires at most once per calendar day. A command that fails (a cover integration timing out, an entity removed) is logged as a warning and sent again at the next poll; it never makes the HomeShift entities unavailable.
 
 **`sensor.homeshift_cover_open_time`** and **`sensor.homeshift_cover_close_time`** reflect today's computed times, so you can display them on your dashboard.

@@ -3,64 +3,87 @@
     "step": {
       "menu": {
         "title": "Configuration HomeShift",
-        "description": "Sélectionnez une section à configurer.",
+        "description": "Sections renseignées : {pending}\n\nRien n'est créé avant « Enregistrer la configuration » : fermer cette fenêtre avec ✕ abandonne la configuration.",
         "menu_options": {
-          "calendars": "Calendriers et planification",
-          "mapping": "Mapping des modes",
+          "calendars": "Calendriers",
+          "mapping": "Modes de journée",
           "schedulers": "Schedulers",
-          "covers": "Contrôle des volets (chaleur)",
-          "daily_cover_schedule": "Planning quotidien des volets",
-          "cover_items": "Volets individuels",
+          "covers_menu": "Volets",
           "finalize": "Enregistrer la configuration"
+        },
+        "menu_option_descriptions": {
+          "calendars": "{calendars}",
+          "mapping": "{modes}",
+          "schedulers": "{scheduler_count} schedulers assignés",
+          "covers_menu": "Volets gérés : {cover_count} · fermeture ce soir à {close_at}",
+          "finalize": "Applique les changements et ferme cette fenêtre."
+        }
+      },
+      "covers_menu": {
+        "title": "Volets",
+        "description": "Les volets ouverts et fermés chaque jour, leurs horaires, et la protection contre la chaleur.",
+        "menu_options": {
+          "cover_items": "Volets gérés",
+          "daily_cover_schedule": "Horaires d'ouverture et de fermeture",
+          "covers": "Protection contre la chaleur",
+          "menu": "← Retour au menu principal"
+        },
+        "menu_option_descriptions": {
+          "cover_items": "{cover_count} volet(s) · ajouter, modifier ou retirer",
+          "daily_cover_schedule": "Ouverture selon le mode de journée · fermeture ce soir à {close_at}",
+          "covers": "Seuil : {heat_threshold} °C · volets protégés : {heat_cover_count}"
         }
       },
       "calendars": {
-        "title": "Calendriers et planification",
-        "description": "Configurez les entités calendrier.",
+        "title": "Calendriers",
+        "description": "Le calendrier de travail décide des jours ouvrés et de leurs événements ; le calendrier des jours fériés fait passer la journée en mode jour férié.",
         "data": {
-          "calendar_entity": "Entité Calendrier Travail",
-          "holiday_calendar": "Entité Calendrier Jours Fériés"
-        }
+          "calendar_entity": "Calendrier de travail",
+          "holiday_calendar": "Calendrier des jours fériés"
+        },
+        "submit": "Valider et revenir au menu"
       },
       "mapping": {
-        "title": "Mapping des modes",
-        "description": "Configurez les noms d'affichage des modes, les assignations par défaut et le mapping événement.",
+        "title": "Modes de journée",
+        "description": "Choisissez le mode appliqué selon le type de jour. Les noms d'affichage sont repliés plus bas.",
         "sections": {
-          "day_modes_section": {
-            "name": "Noms d'affichage des modes jour",
+          "defaults_section": {
+            "name": "Règles de choix du mode",
             "data": {
-              "day_display_home": "Home",
-              "day_display_work": "Work",
-              "day_display_remote": "Remote",
-              "day_display_absence": "Absence"
+              "mode_default": "Jour ouvré",
+              "mode_weekend": "Week-end",
+              "mode_holiday": "Jour férié",
+              "mode_absence": "Mode qui met en pause l'automatisation",
+              "event_mode_map": "Événements du calendrier (MotClé:CléMode, ...)"
+            },
+            "data_description": {
+              "mode_absence": "Choisir ce mode vous-même met en pause les mises à jour automatiques jusqu'à ce que vous en sortiez. Un événement de calendrier associé à ce mode ne met rien en pause.",
+              "event_mode_map": "Un événement dont le titre contient le mot-clé fait passer la journée dans ce mode. La valeur est la clé du mode : home, work, remote ou away."
+            }
+          },
+          "day_modes_section": {
+            "name": "Noms d'affichage des modes",
+            "description": "Le nom montré pour chaque mode. La clé technique, elle, ne change jamais.",
+            "data": {
+              "day_display_home": "Mode home",
+              "day_display_work": "Mode work",
+              "day_display_remote": "Mode remote",
+              "day_display_away": "Mode away"
             },
             "data_description": {
               "day_display_home": "Nom affiché pour la clé home",
               "day_display_work": "Nom affiché pour la clé work",
               "day_display_remote": "Nom affiché pour la clé remote",
-              "day_display_absence": "Nom affiché pour la clé away"
-            }
-          },
-          "defaults_section": {
-            "name": "Assignations de modes par défaut",
-            "data": {
-              "mode_default": "Mode par défaut (jour ouvré)",
-              "mode_absence": "Mode Absence (met en pause l'auto-update s'il est choisi à la main)",
-              "mode_weekend": "Mode week-end",
-              "mode_holiday": "Mode jour férié",
-              "event_mode_map": "Mapping événement vers mode (MotClé:CléMode, ...)"
-            },
-            "data_description": {
-              "mode_absence": "Choisir ce mode vous-même met en pause les mises à jour automatiques jusqu'à ce que vous en sortiez. Un événement de calendrier associé à ce mode ne met rien en pause."
+              "day_display_away": "Nom affiché pour la clé away"
             }
           },
           "thermostat_section": {
-            "name": "Noms d'affichage thermostat",
+            "name": "Noms des modes thermostat",
             "data": {
-              "thermostat_display_off": "Off",
-              "thermostat_display_heating": "Heating",
-              "thermostat_display_cooling": "Cooling",
-              "thermostat_display_ventilation": "Ventilation"
+              "thermostat_display_off": "Mode off",
+              "thermostat_display_heating": "Mode heating",
+              "thermostat_display_cooling": "Mode cooling",
+              "thermostat_display_ventilation": "Mode ventilation"
             },
             "data_description": {
               "thermostat_display_off": "Nom affiché pour la clé off",
@@ -69,83 +92,169 @@
               "thermostat_display_ventilation": "Nom affiché pour la clé ventilation"
             }
           }
-        }
+        },
+        "submit": "Valider et revenir au menu"
       },
       "schedulers": {
         "title": "Schedulers",
-        "description": "Assignez les schedulers à chaque mode jour."
+        "description": "Les schedulers du mode actif sont allumés, ceux de tous les autres modes sont éteints. Ouvrez un mode pour modifier sa liste.",
+        "sections": {
+          "mode_home": {
+            "name": "{name_home} · {count_home}",
+            "data": {
+              "schedulers_home": "Schedulers"
+            }
+          },
+          "mode_work": {
+            "name": "{name_work} · {count_work}",
+            "data": {
+              "schedulers_work": "Schedulers"
+            }
+          },
+          "mode_remote": {
+            "name": "{name_remote} · {count_remote}",
+            "data": {
+              "schedulers_remote": "Schedulers"
+            }
+          },
+          "mode_away": {
+            "name": "{name_away} · {count_away}",
+            "data": {
+              "schedulers_away": "Schedulers"
+            }
+          }
+        },
+        "submit": "Valider et revenir au menu"
       },
       "covers": {
-        "title": "Contrôle des volets (chaleur)",
-        "description": "Fermer un volet automatiquement en cas de forte chaleur. Une fois fermé, il reste fermé pour le reste de la journée — seule l'ouverture normale du lendemain, ou la fermeture du soir du planning quotidien, le touchent à nouveau. La plage active est entièrement dérivée des heures d'ouverture/fermeture calculées par le Planning quotidien des volets — configurez-le d'abord.",
+        "title": "Protection contre la chaleur",
+        "description": "Ferme les volets choisis quand il fait trop chaud. La protection n'agit qu'entre l'ouverture et la fermeture calculées dans « Horaires d'ouverture et de fermeture » : réglez-les d'abord.",
         "data": {
-          "cover_entities": "Entités volets",
-          "cover_temp_sensor": "Capteur de température",
-          "cover_temp_threshold": "Seuil de température (°C)",
-          "cover_action": "Action sur les volets",
-          "cover_my_button": "Bouton position favorite (My)",
-          "cover_weather_entity": "Entité météo (fermeture proactive)",
-          "cover_forecast_threshold": "Seuil de prévision (°C)"
+          "cover_entities": "Volets protégés"
         },
         "data_description": {
-          "cover_entities": "Sélectionnez les entités volets à contrôler en cas de forte chaleur.",
-          "cover_temp_sensor": "Capteur fournissant la température extérieure.",
-          "cover_temp_threshold": "Température au-dessus de laquelle l'action sélectionnée est déclenchée.",
-          "cover_action": "'Fermer' envoie close_cover (volets standard). 'Arrêter' envoie stop_cover, qui interrompt le mouvement en cours — utile pour les volets Somfy RTS (la position favorite My est un bouton séparé).",
-          "cover_my_button": "Bouton à appuyer pour envoyer les volets en position favorite (My). Si renseigné, ce bouton est utilisé à la place de l'action ci-dessous.",
-          "cover_weather_entity": "Entité météo optionnelle avec prévisions journalières. Si renseignée, le volet se ferme de manière proactive à l'heure d'ouverture du jour si la prévision du jour dépasse le seuil de prévision, sans attendre que le capteur extérieur le dépasse réellement.",
-          "cover_forecast_threshold": "Température maximale prévue au-delà de laquelle la fermeture proactive se déclenche."
-        }
+          "cover_entities": "Indépendants des volets gérés : un volet peut être protégé de la chaleur sans suivre les horaires. Une fois fermé par la chaleur, il le reste jusqu'à la prochaine ouverture normale ou la fermeture du soir."
+        },
+        "sections": {
+          "trigger_section": {
+            "name": "Déclenchement",
+            "data": {
+              "cover_temp_sensor": "Capteur de température extérieure",
+              "cover_temp_threshold": "Seuil de température",
+              "cover_weather_entity": "Entité météo (fermeture anticipée)",
+              "cover_forecast_threshold": "Seuil de prévision"
+            },
+            "data_description": {
+              "cover_temp_threshold": "Les volets se ferment quand le capteur dépasse cette température.",
+              "cover_weather_entity": "Optionnelle. Si la prévision du jour dépasse le seuil de prévision, les volets se ferment dès l'heure d'ouverture, sans attendre le capteur.",
+              "cover_forecast_threshold": "Température maximale prévue au-delà de laquelle la fermeture anticipée se déclenche."
+            }
+          },
+          "action_section": {
+            "name": "Action",
+            "data": {
+              "cover_my_button": "Bouton position favorite (My)",
+              "cover_action": "Sinon, action sur les volets"
+            },
+            "data_description": {
+              "cover_my_button": "S'il est renseigné, ce bouton est appuyé à la place de l'action ci-dessous.",
+              "cover_action": "« Fermer » envoie close_cover. « Arrêter » envoie stop_cover, qui interrompt le mouvement en cours : utile pour les volets Somfy RTS."
+            }
+          }
+        },
+        "submit": "Valider et revenir aux volets"
       },
       "daily_cover_schedule": {
-        "title": "Planning quotidien des volets",
-        "description": "Ouvre et ferme vos volets tous les jours nativement, sans passer par une entité Scheduler séparée. Les volets concernés se définissent dans Volets individuels ; cette section règle les horaires. Reste indépendant du Contrôle des volets (chaleur), qui cible un volet unitaire. Pour chaque mode de journée ci-dessous, définissez 'sunrise', 'skip', ou une heure personnalisée 'HH:MM' — les modes partageant la même valeur forment un lot. La fermeture a toujours lieu une fois par jour, pour tous les modes, quand le soleil descend sous l'élévation ci-dessous.\n\nÀ {close_elevation}°, ce sera {close_at_elevation} ce soir.",
-        "data": {
-          "daily_cover_close_elevation": "Élévation du soleil à la fermeture",
-          "sunrise_earliest": "Heure d'ouverture minimale",
-          "daily_open_time_home": "Heure d'ouverture — Maison",
-          "daily_open_time_work": "Heure d'ouverture — Travail",
-          "daily_open_time_remote": "Heure d'ouverture — Télétravail",
-          "daily_open_time_away": "Heure d'ouverture — Absence"
+        "title": "Horaires d'ouverture et de fermeture",
+        "description": "S'applique aux volets de « Volets gérés ».\n\n**À {close_elevation}°, les volets fermeront à {close_at_elevation} ce soir.**",
+        "sections": {
+          "close_section": {
+            "name": "Fermeture du soir",
+            "description": "Une fois par jour, pour tous les modes, quand le soleil descend sous cette élévation.",
+            "data": {
+              "daily_cover_close_elevation": "Élévation du soleil",
+              "close_when_window_shuts": "Fermer dès que la fenêtre se referme"
+            },
+            "data_description": {
+              "daily_cover_close_elevation": "0° = coucher du soleil, -2° (recommandé) ≈ dix minutes après, -4° ≈ vingt à vingt-cinq minutes après, -6° = fin du crépuscule civil. Une valeur positive ferme avant le coucher du soleil.",
+              "close_when_window_shuts": "Un volet resté ouvert le soir parce que sa fenêtre l'était se ferme (ou va en position My) dès que la fenêtre se referme, jusqu'à l'ouverture du lendemain matin."
+            }
+          },
+          "open_section": {
+            "name": "Ouverture du matin",
+            "description": "Pour chaque mode : au lever du soleil, pas d'ouverture, ou une heure fixe HH:MM. Les modes réglés pareil s'ouvrent ensemble.",
+            "data": {
+              "sunrise_earliest": "Pas avant",
+              "daily_open_time_home": "{name_home}",
+              "daily_open_time_work": "{name_work}",
+              "daily_open_time_remote": "{name_remote}",
+              "daily_open_time_away": "{name_away}"
+            },
+            "data_description": {
+              "sunrise_earliest": "Au lever du soleil, les volets s'ouvrent au plus tôt à cette heure."
+            }
+          }
         },
-        "data_description": {
-          "daily_cover_close_elevation": "Degrés au-dessus de l'horizon — l'attribut « elevation » de sun.sun, donc un niveau de lumière plutôt qu'un délai. 0° = coucher du soleil, -2° (recommandé) ≈ dix minutes plus tard, -4° ≈ vingt à vingt-cinq minutes plus tard, pièce déjà sombre, -6° = fin du crépuscule civil. Une valeur positive ferme alors que le soleil est encore levé.",
-          "sunrise_earliest": "L'heure d'ouverture au lever du soleil sera la plus tardive entre le lever réel et cette valeur.",
-          "daily_open_time_home": "Heure d'ouverture pour le mode Maison : 'sunrise', 'skip', ou une valeur personnalisée 'HH:MM'.",
-          "daily_open_time_work": "Heure d'ouverture pour le mode Travail : 'sunrise', 'skip', ou une valeur personnalisée 'HH:MM'.",
-          "daily_open_time_remote": "Heure d'ouverture pour le mode Télétravail : 'sunrise', 'skip', ou une valeur personnalisée 'HH:MM'.",
-          "daily_open_time_away": "Heure d'ouverture pour le mode Absence : 'sunrise', 'skip', ou une valeur personnalisée 'HH:MM'."
-        }
+        "submit": "Valider et revenir aux volets"
       },
       "cover_items": {
-        "title": "Volets individuels",
-        "description": "Les volets ouverts et fermés par le Planning quotidien des volets, ajoutés un par un — un groupe de volets compte pour un volet. Chacun peut recevoir un capteur d'ouverture optionnel et un bouton de position favorite optionnel. Lors de la fermeture du soir, un volet dont le capteur signale la fenêtre ouverte n'est pas fermé : un avertissement est journalisé à la place.\n\nActuellement configurés :\n{covers}",
+        "title": "Volets gérés",
+        "description": "Les volets ouverts et fermés chaque jour ; un groupe de volets compte pour un. Le soir, un volet dont la fenêtre est signalée ouverte n'est pas fermé et un avertissement est journalisé.\n\n{covers}",
         "menu_options": {
-          "cover_item_add": "➕ Ajouter un volet",
-          "cover_item_remove": "Supprimer des volets",
-          "menu": "← Retour au menu principal"
+          "cover_item_add": "Ajouter un volet",
+          "cover_item_pick": "Modifier un volet",
+          "cover_item_remove": "Retirer des volets",
+          "covers_menu": "← Retour au menu Volets"
+        },
+        "menu_option_descriptions": {
+          "cover_item_add": "Avec, si besoin, un capteur d'ouverture et un bouton My",
+          "cover_item_pick": "Changer son capteur d'ouverture ou son bouton My",
+          "cover_item_remove": "Les retirer de HomeShift, sans toucher aux entités"
         }
       },
       "cover_item_add": {
         "title": "Ajouter un volet",
-        "description": "Choisissez le volet et, si vous le souhaitez, le capteur indiquant si sa fenêtre est ouverte. Sélectionner un volet déjà présent dans la liste met à jour son capteur au lieu de l'ajouter en double. Un volet avec un bouton de position favorite se place à cette position au lieu de se fermer entièrement.",
+        "description": "Choisissez le volet et, si besoin, le capteur de sa fenêtre et son bouton de position favorite.",
         "data": {
           "cover": "Volet",
           "window_sensor": "Capteur d'ouverture de la fenêtre (optionnel)",
           "my_button": "Bouton position favorite My (optionnel)"
         },
         "data_description": {
-          "cover": "Le volet à ouvrir et fermer selon le planning quotidien.",
-          "window_sensor": "Capteur binaire à 'on' quand la fenêtre est ouverte. S'il signale une fenêtre ouverte lors de la fermeture du soir, ce volet n'est pas fermé et un avertissement est journalisé.",
-          "my_button": "Bouton envoyant ce volet à sa position favorite (My) — pour un volet qui ne doit pas se fermer entièrement. S'il est renseigné, la fermeture du soir appuie sur ce bouton au lieu d'envoyer une commande de fermeture."
-        }
+          "cover": "Le volet à ouvrir et fermer selon les horaires.",
+          "window_sensor": "Capteur binaire à « on » quand la fenêtre est ouverte. Fenêtre ouverte à la fermeture du soir : le volet n'est pas fermé et un avertissement est journalisé. Avec l'option « Fermer dès que la fenêtre se referme » (Horaires), il se ferme dès que la fenêtre est refermée.",
+          "my_button": "Pour un volet qui ne doit pas se fermer entièrement : la fermeture du soir appuie sur ce bouton au lieu de fermer le volet."
+        },
+        "submit": "Valider et revenir à la liste"
+      },
+      "cover_item_pick": {
+        "title": "Modifier un volet",
+        "description": "Choisissez le volet à modifier.",
+        "data": {
+          "cover": "Volet"
+        },
+        "submit": "Suivant"
+      },
+      "cover_item_edit": {
+        "title": "Modifier un volet",
+        "description": "Volet : **{cover}**. Videz un champ pour retirer le capteur ou le bouton.",
+        "data": {
+          "window_sensor": "Capteur d'ouverture de la fenêtre (optionnel)",
+          "my_button": "Bouton position favorite My (optionnel)"
+        },
+        "data_description": {
+          "window_sensor": "Capteur binaire à « on » quand la fenêtre est ouverte. Fenêtre ouverte à la fermeture du soir : le volet n'est pas fermé et un avertissement est journalisé. Avec l'option « Fermer dès que la fenêtre se referme » (Horaires), il se ferme dès que la fenêtre est refermée.",
+          "my_button": "Pour un volet qui ne doit pas se fermer entièrement : la fermeture du soir appuie sur ce bouton au lieu de fermer le volet."
+        },
+        "submit": "Valider et revenir à la liste"
       },
       "cover_item_remove": {
-        "title": "Supprimer des volets",
-        "description": "Sélectionnez les volets à retirer de la liste individuelle. Le groupe de volets configuré dans le Planning quotidien des volets n'est pas affecté.",
+        "title": "Retirer des volets",
+        "description": "Les volets cochés ne sont plus ouverts ni fermés par HomeShift. Les entités elles-mêmes ne sont pas touchées.",
         "data": {
-          "remove_covers": "Volets à supprimer"
-        }
+          "remove_covers": "Volets à retirer"
+        },
+        "submit": "Valider et revenir à la liste"
       }
     },
     "error": {
@@ -161,64 +270,87 @@
     "step": {
       "menu": {
         "title": "Options HomeShift",
-        "description": "Sélectionnez une section à configurer.",
+        "description": "Modifié, pas encore enregistré : {pending}\n\nRien n'est sauvegardé avant « Enregistrer la configuration » : fermer cette fenêtre avec ✕ annule les changements.",
         "menu_options": {
-          "calendars": "Calendriers et planification",
-          "mapping": "Mapping des modes",
+          "calendars": "Calendriers",
+          "mapping": "Modes de journée",
           "schedulers": "Schedulers",
-          "covers": "Contrôle des volets (chaleur)",
-          "daily_cover_schedule": "Planning quotidien des volets",
-          "cover_items": "Volets individuels",
+          "covers_menu": "Volets",
           "finalize": "Enregistrer la configuration"
+        },
+        "menu_option_descriptions": {
+          "calendars": "{calendars}",
+          "mapping": "{modes}",
+          "schedulers": "{scheduler_count} schedulers assignés",
+          "covers_menu": "Volets gérés : {cover_count} · fermeture ce soir à {close_at}",
+          "finalize": "Applique les changements et ferme cette fenêtre."
+        }
+      },
+      "covers_menu": {
+        "title": "Volets",
+        "description": "Les volets ouverts et fermés chaque jour, leurs horaires, et la protection contre la chaleur.",
+        "menu_options": {
+          "cover_items": "Volets gérés",
+          "daily_cover_schedule": "Horaires d'ouverture et de fermeture",
+          "covers": "Protection contre la chaleur",
+          "menu": "← Retour au menu principal"
+        },
+        "menu_option_descriptions": {
+          "cover_items": "{cover_count} volet(s) · ajouter, modifier ou retirer",
+          "daily_cover_schedule": "Ouverture selon le mode de journée · fermeture ce soir à {close_at}",
+          "covers": "Seuil : {heat_threshold} °C · volets protégés : {heat_cover_count}"
         }
       },
       "calendars": {
-        "title": "Calendriers et planification",
-        "description": "Configurez les entités calendrier.",
+        "title": "Calendriers",
+        "description": "Le calendrier de travail décide des jours ouvrés et de leurs événements ; le calendrier des jours fériés fait passer la journée en mode jour férié.",
         "data": {
-          "calendar_entity": "Entité Calendrier Travail",
-          "holiday_calendar": "Entité Calendrier Jours Fériés"
-        }
+          "calendar_entity": "Calendrier de travail",
+          "holiday_calendar": "Calendrier des jours fériés"
+        },
+        "submit": "Valider et revenir au menu"
       },
       "mapping": {
-        "title": "Mapping des modes",
-        "description": "Configurez les noms d'affichage des modes, les assignations par défaut et le mapping événement.",
+        "title": "Modes de journée",
+        "description": "Choisissez le mode appliqué selon le type de jour. Les noms d'affichage sont repliés plus bas.",
         "sections": {
-          "day_modes_section": {
-            "name": "Noms d'affichage des modes jour",
+          "defaults_section": {
+            "name": "Règles de choix du mode",
             "data": {
-              "day_display_home": "Home",
-              "day_display_work": "Work",
-              "day_display_remote": "Remote",
-              "day_display_absence": "Absence"
+              "mode_default": "Jour ouvré",
+              "mode_weekend": "Week-end",
+              "mode_holiday": "Jour férié",
+              "mode_absence": "Mode qui met en pause l'automatisation",
+              "event_mode_map": "Événements du calendrier (MotClé:CléMode, ...)"
+            },
+            "data_description": {
+              "mode_absence": "Choisir ce mode vous-même met en pause les mises à jour automatiques jusqu'à ce que vous en sortiez. Un événement de calendrier associé à ce mode ne met rien en pause.",
+              "event_mode_map": "Un événement dont le titre contient le mot-clé fait passer la journée dans ce mode. La valeur est la clé du mode : home, work, remote ou away."
+            }
+          },
+          "day_modes_section": {
+            "name": "Noms d'affichage des modes",
+            "description": "Le nom montré pour chaque mode. La clé technique, elle, ne change jamais.",
+            "data": {
+              "day_display_home": "Mode home",
+              "day_display_work": "Mode work",
+              "day_display_remote": "Mode remote",
+              "day_display_away": "Mode away"
             },
             "data_description": {
               "day_display_home": "Nom affiché pour la clé home",
               "day_display_work": "Nom affiché pour la clé work",
               "day_display_remote": "Nom affiché pour la clé remote",
-              "day_display_absence": "Nom affiché pour la clé away"
-            }
-          },
-          "defaults_section": {
-            "name": "Assignations de modes par défaut",
-            "data": {
-              "mode_default": "Mode par défaut (jour ouvré)",
-              "mode_absence": "Mode Absence (met en pause l'auto-update s'il est choisi à la main)",
-              "mode_weekend": "Mode week-end",
-              "mode_holiday": "Mode jour férié",
-              "event_mode_map": "Mapping événement vers mode (MotClé:CléMode, ...)"
-            },
-            "data_description": {
-              "mode_absence": "Choisir ce mode vous-même met en pause les mises à jour automatiques jusqu'à ce que vous en sortiez. Un événement de calendrier associé à ce mode ne met rien en pause."
+              "day_display_away": "Nom affiché pour la clé away"
             }
           },
           "thermostat_section": {
-            "name": "Noms d'affichage thermostat",
+            "name": "Noms des modes thermostat",
             "data": {
-              "thermostat_display_off": "Off",
-              "thermostat_display_heating": "Heating",
-              "thermostat_display_cooling": "Cooling",
-              "thermostat_display_ventilation": "Ventilation"
+              "thermostat_display_off": "Mode off",
+              "thermostat_display_heating": "Mode heating",
+              "thermostat_display_cooling": "Mode cooling",
+              "thermostat_display_ventilation": "Mode ventilation"
             },
             "data_description": {
               "thermostat_display_off": "Nom affiché pour la clé off",
@@ -227,92 +359,173 @@
               "thermostat_display_ventilation": "Nom affiché pour la clé ventilation"
             }
           }
-        }
+        },
+        "submit": "Valider et revenir au menu"
       },
       "schedulers": {
         "title": "Schedulers",
-        "description": "Assignez les schedulers à chaque mode jour.",
-        "data": {
-          "schedulers_off": "Schedulers pour le mode 'Off' (Eteint)",
-          "schedulers_heating": "Schedulers pour le mode 'Heating' (Chauffage)",
-          "schedulers_cooling": "Schedulers pour le mode 'Cooling' (Climatisation)",
-          "schedulers_ventilation": "Schedulers pour le mode 'Ventilation'"
-        }
+        "description": "Les schedulers du mode actif sont allumés, ceux de tous les autres modes sont éteints. Ouvrez un mode pour modifier sa liste.",
+        "sections": {
+          "mode_home": {
+            "name": "{name_home} · {count_home}",
+            "data": {
+              "schedulers_home": "Schedulers"
+            }
+          },
+          "mode_work": {
+            "name": "{name_work} · {count_work}",
+            "data": {
+              "schedulers_work": "Schedulers"
+            }
+          },
+          "mode_remote": {
+            "name": "{name_remote} · {count_remote}",
+            "data": {
+              "schedulers_remote": "Schedulers"
+            }
+          },
+          "mode_away": {
+            "name": "{name_away} · {count_away}",
+            "data": {
+              "schedulers_away": "Schedulers"
+            }
+          }
+        },
+        "submit": "Valider et revenir au menu"
       },
       "covers": {
-        "title": "Contrôle des volets (chaleur)",
-        "description": "Fermer un volet automatiquement en cas de forte chaleur. Une fois fermé, il reste fermé pour le reste de la journée — seule l'ouverture normale du lendemain, ou la fermeture du soir du planning quotidien, le touchent à nouveau. La plage active est entièrement dérivée des heures d'ouverture/fermeture calculées par le Planning quotidien des volets — configurez-le d'abord.",
+        "title": "Protection contre la chaleur",
+        "description": "Ferme les volets choisis quand il fait trop chaud. La protection n'agit qu'entre l'ouverture et la fermeture calculées dans « Horaires d'ouverture et de fermeture » : réglez-les d'abord.",
         "data": {
-          "cover_entities": "Entités volets",
-          "cover_temp_sensor": "Capteur de température",
-          "cover_temp_threshold": "Seuil de température (°C)",
-          "cover_action": "Action sur les volets",
-          "cover_my_button": "Bouton position favorite (My)",
-          "cover_weather_entity": "Entité météo (fermeture proactive)",
-          "cover_forecast_threshold": "Seuil de prévision (°C)"
+          "cover_entities": "Volets protégés"
         },
         "data_description": {
-          "cover_entities": "Sélectionnez les entités volets à contrôler en cas de forte chaleur.",
-          "cover_temp_sensor": "Capteur fournissant la température extérieure.",
-          "cover_temp_threshold": "Température au-dessus de laquelle l'action sélectionnée est déclenchée.",
-          "cover_action": "'Fermer' envoie close_cover (volets standard). 'Arrêter' envoie stop_cover, qui interrompt le mouvement en cours — utile pour les volets Somfy RTS (la position favorite My est un bouton séparé).",
-          "cover_my_button": "Bouton à appuyer pour envoyer les volets en position favorite (My). Si renseigné, ce bouton est utilisé à la place de l'action ci-dessous.",
-          "cover_weather_entity": "Entité météo optionnelle avec prévisions journalières. Si renseignée, le volet se ferme de manière proactive à l'heure d'ouverture du jour si la prévision du jour dépasse le seuil de prévision, sans attendre que le capteur extérieur le dépasse réellement.",
-          "cover_forecast_threshold": "Température maximale prévue au-delà de laquelle la fermeture proactive se déclenche."
-        }
+          "cover_entities": "Indépendants des volets gérés : un volet peut être protégé de la chaleur sans suivre les horaires. Une fois fermé par la chaleur, il le reste jusqu'à la prochaine ouverture normale ou la fermeture du soir."
+        },
+        "sections": {
+          "trigger_section": {
+            "name": "Déclenchement",
+            "data": {
+              "cover_temp_sensor": "Capteur de température extérieure",
+              "cover_temp_threshold": "Seuil de température",
+              "cover_weather_entity": "Entité météo (fermeture anticipée)",
+              "cover_forecast_threshold": "Seuil de prévision"
+            },
+            "data_description": {
+              "cover_temp_threshold": "Les volets se ferment quand le capteur dépasse cette température.",
+              "cover_weather_entity": "Optionnelle. Si la prévision du jour dépasse le seuil de prévision, les volets se ferment dès l'heure d'ouverture, sans attendre le capteur.",
+              "cover_forecast_threshold": "Température maximale prévue au-delà de laquelle la fermeture anticipée se déclenche."
+            }
+          },
+          "action_section": {
+            "name": "Action",
+            "data": {
+              "cover_my_button": "Bouton position favorite (My)",
+              "cover_action": "Sinon, action sur les volets"
+            },
+            "data_description": {
+              "cover_my_button": "S'il est renseigné, ce bouton est appuyé à la place de l'action ci-dessous.",
+              "cover_action": "« Fermer » envoie close_cover. « Arrêter » envoie stop_cover, qui interrompt le mouvement en cours : utile pour les volets Somfy RTS."
+            }
+          }
+        },
+        "submit": "Valider et revenir aux volets"
       },
       "daily_cover_schedule": {
-        "title": "Planning quotidien des volets",
-        "description": "Ouvre et ferme vos volets tous les jours nativement, sans passer par une entité Scheduler séparée. Les volets concernés se définissent dans Volets individuels ; cette section règle les horaires. Reste indépendant du Contrôle des volets (chaleur), qui cible un volet unitaire. Pour chaque mode de journée ci-dessous, définissez 'sunrise', 'skip', ou une heure personnalisée 'HH:MM' — les modes partageant la même valeur forment un lot. La fermeture a toujours lieu une fois par jour, pour tous les modes, quand le soleil descend sous l'élévation ci-dessous.\n\nÀ {close_elevation}°, ce sera {close_at_elevation} ce soir.",
-        "data": {
-          "daily_cover_close_elevation": "Élévation du soleil à la fermeture",
-          "sunrise_earliest": "Heure d'ouverture minimale",
-          "daily_open_time_home": "Heure d'ouverture — Maison",
-          "daily_open_time_work": "Heure d'ouverture — Travail",
-          "daily_open_time_remote": "Heure d'ouverture — Télétravail",
-          "daily_open_time_away": "Heure d'ouverture — Absence"
+        "title": "Horaires d'ouverture et de fermeture",
+        "description": "S'applique aux volets de « Volets gérés ».\n\n**À {close_elevation}°, les volets fermeront à {close_at_elevation} ce soir.**",
+        "sections": {
+          "close_section": {
+            "name": "Fermeture du soir",
+            "description": "Une fois par jour, pour tous les modes, quand le soleil descend sous cette élévation.",
+            "data": {
+              "daily_cover_close_elevation": "Élévation du soleil",
+              "close_when_window_shuts": "Fermer dès que la fenêtre se referme"
+            },
+            "data_description": {
+              "daily_cover_close_elevation": "0° = coucher du soleil, -2° (recommandé) ≈ dix minutes après, -4° ≈ vingt à vingt-cinq minutes après, -6° = fin du crépuscule civil. Une valeur positive ferme avant le coucher du soleil.",
+              "close_when_window_shuts": "Un volet resté ouvert le soir parce que sa fenêtre l'était se ferme (ou va en position My) dès que la fenêtre se referme, jusqu'à l'ouverture du lendemain matin."
+            }
+          },
+          "open_section": {
+            "name": "Ouverture du matin",
+            "description": "Pour chaque mode : au lever du soleil, pas d'ouverture, ou une heure fixe HH:MM. Les modes réglés pareil s'ouvrent ensemble.",
+            "data": {
+              "sunrise_earliest": "Pas avant",
+              "daily_open_time_home": "{name_home}",
+              "daily_open_time_work": "{name_work}",
+              "daily_open_time_remote": "{name_remote}",
+              "daily_open_time_away": "{name_away}"
+            },
+            "data_description": {
+              "sunrise_earliest": "Au lever du soleil, les volets s'ouvrent au plus tôt à cette heure."
+            }
+          }
         },
-        "data_description": {
-          "daily_cover_close_elevation": "Degrés au-dessus de l'horizon — l'attribut « elevation » de sun.sun, donc un niveau de lumière plutôt qu'un délai. 0° = coucher du soleil, -2° (recommandé) ≈ dix minutes plus tard, -4° ≈ vingt à vingt-cinq minutes plus tard, pièce déjà sombre, -6° = fin du crépuscule civil. Une valeur positive ferme alors que le soleil est encore levé.",
-          "sunrise_earliest": "L'heure d'ouverture au lever du soleil sera la plus tardive entre le lever réel et cette valeur.",
-          "daily_open_time_home": "Heure d'ouverture pour le mode Maison : 'sunrise', 'skip', ou une valeur personnalisée 'HH:MM'.",
-          "daily_open_time_work": "Heure d'ouverture pour le mode Travail : 'sunrise', 'skip', ou une valeur personnalisée 'HH:MM'.",
-          "daily_open_time_remote": "Heure d'ouverture pour le mode Télétravail : 'sunrise', 'skip', ou une valeur personnalisée 'HH:MM'.",
-          "daily_open_time_away": "Heure d'ouverture pour le mode Absence : 'sunrise', 'skip', ou une valeur personnalisée 'HH:MM'."
-        }
+        "submit": "Valider et revenir aux volets"
       },
       "cover_items": {
-        "title": "Volets individuels",
-        "description": "Les volets ouverts et fermés par le Planning quotidien des volets, ajoutés un par un — un groupe de volets compte pour un volet. Chacun peut recevoir un capteur d'ouverture optionnel et un bouton de position favorite optionnel. Lors de la fermeture du soir, un volet dont le capteur signale la fenêtre ouverte n'est pas fermé : un avertissement est journalisé à la place.\n\nActuellement configurés :\n{covers}",
+        "title": "Volets gérés",
+        "description": "Les volets ouverts et fermés chaque jour ; un groupe de volets compte pour un. Le soir, un volet dont la fenêtre est signalée ouverte n'est pas fermé et un avertissement est journalisé.\n\n{covers}",
         "menu_options": {
-          "cover_item_add": "➕ Ajouter un volet",
-          "cover_item_remove": "Supprimer des volets",
-          "menu": "← Retour au menu principal"
+          "cover_item_add": "Ajouter un volet",
+          "cover_item_pick": "Modifier un volet",
+          "cover_item_remove": "Retirer des volets",
+          "covers_menu": "← Retour au menu Volets"
+        },
+        "menu_option_descriptions": {
+          "cover_item_add": "Avec, si besoin, un capteur d'ouverture et un bouton My",
+          "cover_item_pick": "Changer son capteur d'ouverture ou son bouton My",
+          "cover_item_remove": "Les retirer de HomeShift, sans toucher aux entités"
         }
       },
       "cover_item_add": {
         "title": "Ajouter un volet",
-        "description": "Choisissez le volet et, si vous le souhaitez, le capteur indiquant si sa fenêtre est ouverte. Sélectionner un volet déjà présent dans la liste met à jour son capteur au lieu de l'ajouter en double. Un volet avec un bouton de position favorite se place à cette position au lieu de se fermer entièrement.",
+        "description": "Choisissez le volet et, si besoin, le capteur de sa fenêtre et son bouton de position favorite.",
         "data": {
           "cover": "Volet",
           "window_sensor": "Capteur d'ouverture de la fenêtre (optionnel)",
           "my_button": "Bouton position favorite My (optionnel)"
         },
         "data_description": {
-          "cover": "Le volet à ouvrir et fermer selon le planning quotidien.",
-          "window_sensor": "Capteur binaire à 'on' quand la fenêtre est ouverte. S'il signale une fenêtre ouverte lors de la fermeture du soir, ce volet n'est pas fermé et un avertissement est journalisé.",
-          "my_button": "Bouton envoyant ce volet à sa position favorite (My) — pour un volet qui ne doit pas se fermer entièrement. S'il est renseigné, la fermeture du soir appuie sur ce bouton au lieu d'envoyer une commande de fermeture."
-        }
+          "cover": "Le volet à ouvrir et fermer selon les horaires.",
+          "window_sensor": "Capteur binaire à « on » quand la fenêtre est ouverte. Fenêtre ouverte à la fermeture du soir : le volet n'est pas fermé et un avertissement est journalisé. Avec l'option « Fermer dès que la fenêtre se referme » (Horaires), il se ferme dès que la fenêtre est refermée.",
+          "my_button": "Pour un volet qui ne doit pas se fermer entièrement : la fermeture du soir appuie sur ce bouton au lieu de fermer le volet."
+        },
+        "submit": "Valider et revenir à la liste"
+      },
+      "cover_item_pick": {
+        "title": "Modifier un volet",
+        "description": "Choisissez le volet à modifier.",
+        "data": {
+          "cover": "Volet"
+        },
+        "submit": "Suivant"
+      },
+      "cover_item_edit": {
+        "title": "Modifier un volet",
+        "description": "Volet : **{cover}**. Videz un champ pour retirer le capteur ou le bouton.",
+        "data": {
+          "window_sensor": "Capteur d'ouverture de la fenêtre (optionnel)",
+          "my_button": "Bouton position favorite My (optionnel)"
+        },
+        "data_description": {
+          "window_sensor": "Capteur binaire à « on » quand la fenêtre est ouverte. Fenêtre ouverte à la fermeture du soir : le volet n'est pas fermé et un avertissement est journalisé. Avec l'option « Fermer dès que la fenêtre se referme » (Horaires), il se ferme dès que la fenêtre est refermée.",
+          "my_button": "Pour un volet qui ne doit pas se fermer entièrement : la fermeture du soir appuie sur ce bouton au lieu de fermer le volet."
+        },
+        "submit": "Valider et revenir à la liste"
       },
       "cover_item_remove": {
-        "title": "Supprimer des volets",
-        "description": "Sélectionnez les volets à retirer de la liste individuelle. Le groupe de volets configuré dans le Planning quotidien des volets n'est pas affecté.",
+        "title": "Retirer des volets",
+        "description": "Les volets cochés ne sont plus ouverts ni fermés par HomeShift. Les entités elles-mêmes ne sont pas touchées.",
         "data": {
-          "remove_covers": "Volets à supprimer"
-        }
+          "remove_covers": "Volets à retirer"
+        },
+        "submit": "Valider et revenir à la liste"
       }
     },
     "error": {
+      "invalid_calendar": "L'entité calendrier spécifiée n'existe pas",
       "elevation_unreachable": "À votre position, le soleil n'atteint pas cette élévation tous les jours de l'année. Choisissez une valeur dans l'amplitude annuelle du soleil — 0° = coucher du soleil, les valeurs négatives sont sous l'horizon."
     }
   },
@@ -340,8 +553,14 @@
       "next_mode_at": {
         "name": "Prochain changement à"
       },
+      "cover_open_time": {
+        "name": "Heure d'ouverture des volets"
+      },
       "cover_close_time": {
         "name": "Heure de fermeture des volets"
+      },
+      "covers_inhibited": {
+        "name": "Volets inhibés"
       }
     },
     "binary_sensor": {
@@ -350,6 +569,28 @@
       },
       "covers_left_open": {
         "name": "Volets non fermés"
+      }
+    },
+    "button": {
+      "open_covers": {
+        "name": "Ouvrir les volets"
+      },
+      "close_covers": {
+        "name": "Fermer les volets"
+      }
+    }
+  },
+  "selector": {
+    "cover_action": {
+      "options": {
+        "close_cover": "Fermer les volets",
+        "stop_cover": "Arrêter le mouvement (stop_cover)"
+      }
+    },
+    "daily_open_time": {
+      "options": {
+        "sunrise": "Au lever du soleil",
+        "skip": "Ne pas ouvrir"
       }
     }
   },
@@ -361,6 +602,50 @@
     "sync_calendar": {
       "name": "Synchroniser le Calendrier",
       "description": "Re-synchronise le calendrier et met à jour le mode jour courant"
+    },
+    "open_covers": {
+      "name": "Ouvrir les volets",
+      "description": "Ouvre maintenant les volets du planning quotidien, quels que soient l'heure et le mode jour."
+    },
+    "close_covers": {
+      "name": "Fermer les volets",
+      "description": "Ferme maintenant les volets du planning quotidien, comme la fermeture du soir : un volet derrière une fenêtre ouverte reste ouvert, un volet avec bouton My va à sa position My."
+    },
+    "inhibit_covers": {
+      "name": "Inhiber des volets",
+      "description": "Retire temporairement des volets du pilotage automatique (ouverture/fermeture quotidienne, protection chaleur et ouverture/fermeture immédiate). Sans durée ni date de fin, ils restent inhibés jusqu'à leur reprise.",
+      "fields": {
+        "entity_id": {
+          "name": "Volets",
+          "description": "Volets à laisser tranquilles. Seuls les volets pilotés par HomeShift sont acceptés."
+        },
+        "duration": {
+          "name": "Durée",
+          "description": "Durée pendant laquelle les volets restent inhibés."
+        },
+        "until": {
+          "name": "Jusqu'au",
+          "description": "Fin de l'inhibition (à la place d'une durée)."
+        }
+      }
+    },
+    "resume_covers": {
+      "name": "Reprendre des volets",
+      "description": "Rend les volets inhibés au pilotage automatique. Ils reprennent à la prochaine action programmée ; rien ne bouge immédiatement.",
+      "fields": {
+        "entity_id": {
+          "name": "Volets",
+          "description": "Volets à reprendre. Laisser vide pour reprendre tous les volets inhibés."
+        }
+      }
+    }
+  },
+  "exceptions": {
+    "cover_not_managed": {
+      "message": "HomeShift ne pilote pas {covers} — seuls les volets du programme quotidien et de la protection chaleur peuvent être inhibés."
+    },
+    "inhibition_end_in_past": {
+      "message": "La fin de l'inhibition doit être dans le futur."
     }
   }
 }

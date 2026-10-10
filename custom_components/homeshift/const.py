@@ -21,9 +21,6 @@ CONF_MODE_ABSENCE = "mode_absence"  # Day mode key that blocks automatic updates
 # Default values (keys are stable English identifiers)
 DEFAULT_DAY_MODE_MAP = "home:Home, work:Work, remote:Remote, away:Away"
 DEFAULT_THERMOSTAT_MODE_MAP = "off:Off, heating:Heating, cooling:Cooling, ventilation:Ventilation"
-# Internal key that means 'thermostat is off' — schedulers with any thermostat
-# tag are disabled when the thermostat mode matches this key.
-THERMOSTAT_OFF_KEY = "off"
 SCAN_INTERVAL_MINUTES = 5  # hardcoded periodic refresh interval
 DEFAULT_OVERRIDE_DURATION = 0  # 0 = disabled
 DEFAULT_EARLY_SWITCH_MINUTES = 0  # 0 = disabled
@@ -106,6 +103,13 @@ CONF_ITEM_MY_BUTTON = "my_button"
 # Window-sensor states that mean "the window is open" — a binary_sensor uses
 # 'on'; 'open' covers a field pointed at a door/window entity instead.
 WINDOW_OPEN_STATES = frozenset({"on", "open"})
+# ... and those that mean it is shut. Anything else (unknown, unavailable)
+# establishes neither.
+WINDOW_CLOSED_STATES = frozenset({"off", "closed"})
+# When on, a cover the evening close left up because its window was open is
+# closed as soon as that window is shut, until the next morning open.
+CONF_CLOSE_WHEN_WINDOW_SHUTS = "close_when_window_shuts"
+DEFAULT_CLOSE_WHEN_WINDOW_SHUTS = False
 
 DEFAULT_DAILY_COVER_OPEN_TIME = "08:30"
 # The offset the retired setting defaulted to, used only to convert an entry
@@ -129,6 +133,9 @@ SENSOR_COVER_OPEN_TIME = "cover_open_time"
 SENSOR_COVER_CLOSE_TIME = "cover_close_time"
 BINARY_SENSOR_COVER_HEAT_ACTIVE = "cover_heat_active"
 BINARY_SENSOR_COVERS_LEFT_OPEN = "covers_left_open"
+SENSOR_COVERS_INHIBITED = "covers_inhibited"
+BUTTON_OPEN_COVERS = "open_covers"
+BUTTON_CLOSE_COVERS = "close_covers"
 
 # Sentinel value used as today_type when no calendar event is active
 EVENT_NONE = "None"
@@ -136,6 +143,16 @@ EVENT_NONE = "None"
 # Service names
 SERVICE_REFRESH_SCHEDULERS = "refresh_schedulers"
 SERVICE_SYNC_CALENDAR = "sync_calendar"
+SERVICE_OPEN_COVERS = "open_covers"
+SERVICE_CLOSE_COVERS = "close_covers"
+# Temporarily take covers out of the automation (daily open/close, heat
+# protection and the open/close-now actions), and hand them back. An
+# inhibition lasts for a duration, until a date, or until resumed — it
+# survives restarts.
+SERVICE_INHIBIT_COVERS = "inhibit_covers"
+SERVICE_RESUME_COVERS = "resume_covers"
+ATTR_DURATION = "duration"
+ATTR_UNTIL = "until"
 
 # Attributes
 ATTR_DAY_MODE = "day_mode"

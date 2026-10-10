@@ -2,11 +2,14 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from datetime import datetime, date, timedelta
-from typing import Any, Callable
+from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import STATE_UNAVAILABLE, STATE_UNKNOWN
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.event import async_track_point_in_time
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
@@ -37,7 +40,6 @@ from .const import (
     DEFAULT_EVENT_MODE_MAP,
     DEFAULT_MODE_ABSENCE,
     EVENT_NONE,
-    THERMOSTAT_OFF_KEY,
     get_localized_defaults,
     parse_key_value_map,
 )
@@ -105,6 +107,15 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
         # Stored as the matched event keyword (locale-independent) or EVENT_NONE.
         self._today_type: str = EVENT_NONE
         self._today_date: date | None = None
+        # True while a calendar cannot be read (missing, unavailable or
+        # unknown): the day mode is then kept rather than recomputed from an
+        # absence of events. Tracked to warn once per outage, not every poll.
+        self._calendar_unreadable: bool = False
+        # Day today's cover schedule was computed for, and whether it was
+        # computed while the calendar was unreadable (from a day mode that may
+        # still change once the calendar answers, so computed again then).
+        self._cover_schedule_date: date | None = None
+        self._cover_schedule_provisional: bool = False
         # Manual override duration (minutes) — mutable at runtime via number entity
         override_raw = _config.get(CONF_OVERRIDE_DURATION, DEFAULT_OVERRIDE_DURATION)
         try:
@@ -221,6 +232,13 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
             # persist if it had been selected by hand, so assume it was.
             self._absence_is_manual = self._day_mode == self._mode_absence
 
+        # A manual override survives a restart: without it, the first sync
+        # after the reboot would overwrite the mode picked by hand.
+        override_until = dt_util.parse_datetime(str(stored.get("override_until") or ""))
+        if override_until is not None and override_until > dt_util.now():
+            _LOGGER.info("Restoring manual override until %s", override_until.isoformat())
+            self._override_until = override_until
+
         thermostat_mode_key = stored.get("thermostat_mode_key")
         if thermostat_mode_key and thermostat_mode_key in self._thermostat_mode_map:
             resolved = self._thermostat_mode_map[thermostat_mode_key]
@@ -232,13 +250,14 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
             self._thermostat_mode = resolved
 
     async def _async_save_state(self) -> None:
-        """Persist current day_mode_key and thermostat_mode_key to storage."""
+        """Persist the current mode keys, the absence flag and the manual override."""
         try:
             await self._store.async_save(
                 {
                     "day_mode_key": self.day_mode_key,
                     "thermostat_mode_key": self.thermostat_mode_key,
                     "absence_is_manual": self._absence_is_manual,
+                    "override_until": self._override_until.isoformat() if self._override_until else None,
                 }
             )
         except Exception as err:  # noqa: BLE001
@@ -311,7 +330,9 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
         def _on_cover_timer(_now: datetime) -> None:
             self.hass.async_create_task(self._async_run_cover_checks())
 
-        open_at = self._cover_manager.open_datetime(now)
+        # On a 'skip' day the covers do not open, but heat protection's
+        # window still starts (at the sunrise-based time): fire then instead.
+        open_at = self._cover_manager.open_datetime(now) or self._cover_manager.heat_window_start_datetime(now)
         if open_at is not None:
             self._cancel_cover_open_timer = async_track_point_in_time(self.hass, _on_cover_timer, open_at)
             _LOGGER.debug("Scheduled cover open timer at %s", open_at)
@@ -457,17 +478,6 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
         """Return current day mode."""
         return self._day_mode
 
-    @day_mode.setter
-    def day_mode(self, value: str) -> None:
-        """Set day mode directly (no override logic or scheduler refresh).
-
-        Intended for test setup only. Use async_set_day_mode() at runtime.
-        Like a manual selection, this marks absence as hand-picked — the
-        automatic path is what clears that flag.
-        """
-        self._day_mode = value
-        self._absence_is_manual = value == self._mode_absence
-
     @property
     def thermostat_mode(self) -> str:
         """Return current thermostat mode."""
@@ -528,6 +538,25 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
         """What produced today's closing time: 'sunset' or 'elevation'."""
         return self._cover_manager.daily_close_trigger
 
+    @property
+    def managed_covers(self) -> list[str]:
+        """Every cover HomeShift moves (daily schedule and heat protection)."""
+        return self._cover_manager.managed_covers()
+
+    def covers_inhibited(self, now: datetime) -> dict[str, datetime | None]:
+        """The covers currently taken out of the automation, as {cover: end or None}."""
+        return self._cover_manager.inhibitions(now)
+
+    async def async_inhibit_covers(self, covers: list[str], until: datetime | None) -> None:
+        """Take covers out of the automation until `until` (None: until resumed)."""
+        await self._cover_manager.async_inhibit(covers, until)
+        self.async_update_listeners()
+
+    async def async_resume_covers(self, covers: list[str] | None = None) -> None:
+        """Hand covers (all of them when None) back to the automation."""
+        await self._cover_manager.async_resume(covers)
+        self.async_update_listeners()
+
     def is_heat_protection_active(self, now: datetime) -> bool | None:
         """Return whether cover heat protection conditions are currently met.
 
@@ -573,6 +602,28 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
                 return display
         return None
 
+    async def _async_follow_mode_change(self, now: datetime, reason: str) -> None:
+        """Recompute today's cover open time after a day-mode change, until the covers opened.
+
+        The schedule is computed once per day, at midnight, from the mode in
+        force at that moment — and at midnight the calendar entity can still
+        show the event that just ended (or not yet the one that starts): its
+        state updates on its own schedule, a few seconds or a poll later. A
+        Friday 'Remote' event then gave Saturday the remote opening time. So
+        while the morning open has not run, a mode change moves the open time
+        with it. Once the covers opened, the day's schedule stays as it is.
+        """
+        today = now.date()
+        if self._cover_schedule_date != today or self._cover_manager.opened_on(today):
+            return
+        _LOGGER.info(
+            "Day mode is now '%s' (%s) before the morning open — recomputing today's cover schedule",
+            self.day_mode_key,
+            reason,
+        )
+        await self._cover_manager.async_compute_daily_schedule(now, self.day_mode_key)
+        self._schedule_cover_timers()
+
     async def async_set_day_mode(self, mode: str) -> None:
         """Set day mode manually (from UI select or service call).
 
@@ -607,6 +658,8 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
             self._override_until = None
             _LOGGER.info("Manual change: day_mode '%s' -> '%s' (key=%s)", old_mode, resolved, self.day_mode_key)
         await self.async_refresh_schedulers()
+        if self._day_mode != old_mode:
+            await self._async_follow_mode_change(dt_util.now(), "manual mode change")
         # Rebuild and broadcast the full data dict so downstream sensors pick up
         # the new day_mode and override_until immediately (rather than stale data).
         self.async_set_updated_data(self._build_result())
@@ -692,23 +745,102 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
             self._day_mode,
         )
 
+        calendar_state = self.hass.states.get(calendar_entity) if calendar_entity else None
+        unreadable = self._unreadable_calendars(calendar_entity, calendar_state)
+        self._log_calendar_readability(unreadable)
+
+        # Reset day-level event type at midnight (new calendar day)
+        today = now.date()
+        if today != self._today_date:
+            _LOGGER.info("New calendar day (%s), resetting today_type", today)
+            self._today_type = EVENT_NONE
+            self._today_date = today
+
+        mode_key_before = self.day_mode_key
+        if not unreadable:
+            await self._async_apply_calendar(calendar_entity, calendar_state, now)
+
+        # Compute today's native daily cover open/close times using TODAY's
+        # day mode — resolved just above, since a midnight mode change (e.g.
+        # Sunday 'Home' -> Monday 'Work') must be applied before this runs,
+        # not after — then schedule precise timers so open/close fire exactly
+        # on time. The covers do not wait for the calendar: with it unreadable
+        # (still loading at boot, CalDAV down) the schedule is computed from
+        # the mode kept so far, and computed again once the calendar answers.
+        if self._cover_schedule_date != today or (self._cover_schedule_provisional and not unreadable):
+            await self._cover_manager.async_compute_daily_schedule(now, self.day_mode_key)
+            self._schedule_cover_timers()
+            self._cover_schedule_date = today
+            self._cover_schedule_provisional = bool(unreadable)
+        elif self.day_mode_key != mode_key_before:
+            await self._async_follow_mode_change(now, "automatic mode change")
+
+        # Compute when and to what mode the next automatic change is expected
+        await self._async_refresh_next_mode_prediction(
+            None if unreadable else calendar_state,
+            now,
+            context=(
+                "Next-mode fallback: calendar entity unavailable"
+                if unreadable
+                else "Next-mode prediction updated"
+            ),
+        )
+
+        # Drop the inhibitions that ran out, so the covers concerned are back
+        # in the actions below and the Covers Inhibited sensor stops listing them.
+        await self._cover_manager.async_prune_inhibitions(now)
+
+        # Native daily cover open/close schedule — runs first so the morning
+        # group open is never undone by a heat-protection action that fires
+        # at the same cover_open_time (the heat-protected cover is typically
+        # also a member of the daily-schedule cover group).
+        await self._cover_manager.async_check_daily_schedule(now)
+
+        # Cover heat protection — close covers if temperature exceeds threshold in window
+        await self._cover_manager.async_check_heat_protection(now)
+
+        return self._build_result()
+
+    def _unreadable_calendars(self, calendar_entity: str | None, calendar_state) -> list[str]:
+        """Return a description of each calendar that cannot be read right now.
+
+        A calendar that is missing, unavailable or unknown says nothing about
+        today: reading it as "no event" would switch a remote-work day to
+        work (and cancel a calendar absence) for as long as the outage
+        lasts, then switch back. The mode is kept instead.
+        """
+        unreadable: list[str] = []
         if not calendar_entity:
-            _LOGGER.warning("No calendar entity configured, skipping sync")
-            self._next_mode, self._next_mode_at = None, None
-            self._schedule_next_mode_timer()
-            return self._build_result()
+            unreadable.append("no calendar entity configured")
+        elif calendar_state is None:
+            unreadable.append(f"'{calendar_entity}' not found in Home Assistant states")
+        elif calendar_state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN):
+            unreadable.append(f"'{calendar_entity}' is {calendar_state.state}")
 
-        # Get calendar state
-        calendar_state = self.hass.states.get(calendar_entity)
-        if not calendar_state:
-            _LOGGER.warning("Calendar entity '%s' not found in Home Assistant states", calendar_entity)
-            await self._async_refresh_next_mode_prediction(
-                None,
-                now,
-                context="Next-mode fallback: calendar entity unavailable",
+        holiday_calendar = self._config.get(CONF_HOLIDAY_CALENDAR)
+        if holiday_calendar:
+            holiday_state = self.hass.states.get(holiday_calendar)
+            if holiday_state is None:
+                unreadable.append(f"holiday calendar '{holiday_calendar}' not found in Home Assistant states")
+            elif holiday_state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN):
+                unreadable.append(f"holiday calendar '{holiday_calendar}' is {holiday_state.state}")
+        return unreadable
+
+    def _log_calendar_readability(self, unreadable: list[str]) -> None:
+        """Warn once when a calendar becomes unreadable, and once when it recovers."""
+        if unreadable:
+            log = _LOGGER.warning if not self._calendar_unreadable else _LOGGER.debug
+            log(
+                "Calendar unreadable (%s) — keeping day mode '%s' until it answers again",
+                "; ".join(unreadable),
+                self._day_mode,
             )
-            return self._build_result()
+        elif self._calendar_unreadable:
+            _LOGGER.info("Calendars readable again, resuming automatic mode changes")
+        self._calendar_unreadable = bool(unreadable)
 
+    async def _async_apply_calendar(self, calendar_entity: str, calendar_state, now: datetime) -> None:
+        """Read the running event and switch the day mode automatically."""
         _LOGGER.debug(
             "Calendar '%s' -> state=%s | event='%s' | start=%s end=%s",
             calendar_entity,
@@ -722,15 +854,21 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
         self._current_event = None
         today_type = EVENT_NONE
 
-        # Reset day-level event type at midnight (new calendar day)
-        today = now.date()
-        is_new_day = today != self._today_date
-        if is_new_day:
-            _LOGGER.info("New calendar day (%s), resetting today_type", today)
-            self._today_type = EVENT_NONE
-            self._today_date = today
+        # Right at an event's end (midnight for an all-day event) the
+        # calendar entity can still report it for a few seconds: its state
+        # updates on its own schedule. An event already over is no longer
+        # today's, so it must not set the new day's mode.
+        event_end = _parse_event_dt(calendar_state.attributes.get("end_time", ""), now.tzinfo)
+        event_over = calendar_state.state == "on" and event_end is not None and event_end <= now
+        if event_over:
+            _LOGGER.debug(
+                "Calendar '%s' still reports '%s', which ended at %s — ignored",
+                calendar_entity,
+                calendar_state.attributes.get("message", ""),
+                event_end,
+            )
 
-        if calendar_state.state == "on":
+        if calendar_state.state == "on" and not event_over:
             event_message = calendar_state.attributes.get("message", "")
 
             if event_message:
@@ -749,7 +887,7 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
 
         # Early switch: if calendar is currently off and early_switch_minutes > 0, check
         # if a timed (non-all-day) event starts within the early window.
-        if calendar_state.state != "on" and self._early_switch_minutes > 0:
+        if (calendar_state.state != "on" or event_over) and self._early_switch_minutes > 0:
             early_end = now + timedelta(minutes=self._early_switch_minutes)
             early_events = await self._async_get_upcoming_events(calendar_entity, now, early_end)
             now_naive = self._to_naive(now)
@@ -817,33 +955,6 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
                     self._day_mode,
                     self._current_event,
                 )
-
-        if is_new_day:
-            # Compute today's native daily cover open/close times using
-            # TODAY's day mode — resolved just above, since a midnight
-            # mode change (e.g. Sunday 'Home' -> Monday 'Work') must be
-            # applied before this runs, not after — then schedule precise
-            # timers so open/close fire exactly on time.
-            await self._cover_manager.async_compute_daily_schedule(now, self.day_mode_key)
-            self._schedule_cover_timers()
-
-        # Compute when and to what mode the next automatic change is expected
-        await self._async_refresh_next_mode_prediction(
-            calendar_state,
-            now,
-            context="Next-mode prediction updated",
-        )
-
-        # Native daily cover open/close schedule — runs first so the morning
-        # group open is never undone by a heat-protection action that fires
-        # at the same cover_open_time (the heat-protected cover is typically
-        # also a member of the daily-schedule cover group).
-        await self._cover_manager.async_check_daily_schedule(now)
-
-        # Cover heat protection — close covers if temperature exceeds threshold in window
-        await self._cover_manager.async_check_heat_protection(now)
-
-        return self._build_result()
 
     def _build_result(self) -> dict:
         """Build the data dict returned by the coordinator."""
@@ -1254,11 +1365,14 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
             self._thermostat_mode,
         )
 
-        # Build activate / deactivate sets
-        to_enable: set[str] = set(schedulers_per_mode.get(self._day_mode, []))
+        # Build activate / deactivate sets. Schedulers are stored per day mode
+        # KEY (home, work, ...): the display label depends on the language and
+        # can be renamed, so it cannot identify a mode.
+        mode_key = self.day_mode_key
+        to_enable: set[str] = set(schedulers_per_mode.get(mode_key, [])) if mode_key else set()
         to_disable: set[str] = set()
         for mode, switches in schedulers_per_mode.items():
-            if mode != self._day_mode:
+            if mode != mode_key:
                 for sw in switches:
                     if sw not in to_enable:  # never disable a shared switch
                         to_disable.add(sw)
@@ -1299,22 +1413,35 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
         # Turn off first so we don't have conflicting schedulers briefly active
         if to_disable:
             _LOGGER.info("Turning OFF schedulers: %s", sorted(to_disable))
-            await self.hass.services.async_call(
-                "switch",
-                "turn_off",
-                {"entity_id": sorted(to_disable)},
-                blocking=False,
-            )
+            await self._async_switch("turn_off", sorted(to_disable))
 
         if to_enable:
             _LOGGER.info("Turning ON schedulers: %s", sorted(to_enable))
-            await self.hass.services.async_call(
-                "switch",
-                "turn_on",
-                {"entity_id": sorted(to_enable)},
-                blocking=False,
-            )
-        elif self._day_mode and schedulers_per_mode.get(self._day_mode) is not None:
+            await self._async_switch("turn_on", sorted(to_enable))
+        elif mode_key and schedulers_per_mode.get(mode_key) is not None:
             _LOGGER.debug(
-                "No schedulers assigned to day_mode '%s'", self._day_mode
+                "No schedulers assigned to day_mode '%s' (key=%s)", self._day_mode, mode_key
             )
+
+    async def async_open_covers(self) -> None:
+        """Open the daily-schedule covers now (button / homeshift.open_covers)."""
+        await self._cover_manager.async_open_covers_now()
+        self.async_update_listeners()
+
+    async def async_close_covers(self) -> None:
+        """Close the daily-schedule covers now (button / homeshift.close_covers)."""
+        await self._cover_manager.async_close_covers_now()
+        self.async_update_listeners()
+
+    async def _async_switch(self, service: str, entity_ids: list[str]) -> None:
+        """Call switch.turn_on/turn_off and wait for it, logging a failure.
+
+        Blocking, so a failure (a scheduler switch deleted, the Scheduler
+        integration unloaded) surfaces here instead of vanishing in a
+        fire-and-forget task, and caught, so it cannot fail the coordinator
+        update that triggered the mode change.
+        """
+        try:
+            await self.hass.services.async_call("switch", service, {"entity_id": entity_ids}, blocking=True)
+        except HomeAssistantError as err:
+            _LOGGER.warning("Scheduler switch.%s failed for %s: %s", service, entity_ids, err)

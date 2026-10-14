@@ -385,6 +385,13 @@ Suppose your thermostat modes are `Heating` and `Cooling`. You create the follow
 
 When `select.homeshift_thermostat_mode` is set to **Off**, HomeShift will force-disable all switches tagged with `Heating` or `Cooling`, regardless of the current day mode. Switches without any thermostat tag (like `switch.schedule_presence_light`) are left untouched.
 
+Disabling a scheduler alone would leave its climate running, so a change of thermostat mode from the select (or the card) also drives the `climate` entities the tagged schedulers act on:
+
+- **Off** — every one of them is turned off (`hvac_mode: off`).
+- **Heating / Cooling / Ventilation** — the climates of the schedulers tagged with that mode switch to `heat` / `cool` / `fan_only` (when they support it), and the enabled schedulers of that mode run their current slot (`scheduler.run_action`) so the setpoint applies right away. Climates only driven by schedulers of another mode are turned off.
+
+A climate already in the right mode, unavailable, or lacking that HVAC mode is left alone. Climates no tagged scheduler acts on are never touched.
+
 > **How to add a tag in the Scheduler card:** Open the Scheduler card → edit a schedule → scroll to *Tags* → add the thermostat mode name exactly as defined in your thermostat mode map (e.g. `Heating`, `Cooling`).
 
 ---

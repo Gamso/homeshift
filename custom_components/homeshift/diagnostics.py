@@ -44,6 +44,8 @@ async def async_get_config_entry_diagnostics(hass: HomeAssistant, entry: ConfigE
         "heat_window_start": manager.heat_window_start,
         "covers_left_open": manager.covers_left_open,
         "covers_left_open_date": manager.covers_left_open_date.isoformat() if manager.covers_left_open_date else None,
+        "close_when_window_shuts": manager.close_when_window_shuts,
+        "waiting_for_window": manager.waiting_for_window,
         "inhibited": {
             cover: until.isoformat() if until else None
             for cover, until in manager.inhibitions(dt_util.now()).items()

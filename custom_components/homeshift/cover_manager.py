@@ -297,7 +297,19 @@ class CoverManager:
         self.covers_left_open = dict(stored_left_open) if isinstance(stored_left_open, dict) else {}
         self.covers_left_open_date = _parse_stored_date(stored.get("covers_left_open_date"))
         stored_waiting = stored.get("waiting_for_window")
-        self._waiting_for_window = dict(stored_waiting) if isinstance(stored_waiting, dict) else {}
+        if isinstance(stored_waiting, dict):
+            self._waiting_for_window = dict(stored_waiting)
+        elif "waiting_for_window" not in stored and self._closed_since_last_open():
+            # State saved by a version that did not keep the wait: the covers
+            # last evening's close left up, if no morning open ran since, are
+            # still waiting — so an upgrade on the evening of a blocked close
+            # does not silently drop them.
+            self._waiting_for_window = dict(self.covers_left_open)
+        if self._waiting_for_window:
+            _LOGGER.info(
+                "Daily cover schedule: covers waiting for their window to shut: %s",
+                self._waiting_for_window,
+            )
         stored_inhibited = stored.get("inhibited")
         if isinstance(stored_inhibited, dict):
             self._inhibited = {
@@ -443,7 +455,7 @@ class CoverManager:
                 if new_state is not None and new_state.state in WINDOW_CLOSED_STATES:
                     self._hass.async_create_task(_close_and_notify())
 
-            _LOGGER.debug("Daily cover schedule: listening for windows shutting on %s", window_sensors)
+            _LOGGER.info("Daily cover schedule: closing covers behind shut windows, listening on %s", window_sensors)
             unsubs.append(async_track_state_change_event(self._hass, window_sensors, _on_window_change))
 
         @callback
@@ -1028,6 +1040,14 @@ class CoverManager:
                 self.covers_left_open = blocked
                 self.covers_left_open_date = today
                 self._waiting_for_window = dict(blocked)
+                if blocked and self._close_when_window_shuts():
+                    for cover, sensor in blocked.items():
+                        _LOGGER.info(
+                            "Daily cover schedule: cover '%s' will close once window sensor '%s' "
+                            "reports the window shut (until the next morning open)",
+                            cover,
+                            sensor,
+                        )
                 await self._async_save_state()
 
         await self._async_close_behind_shut_windows(now)
@@ -1035,6 +1055,25 @@ class CoverManager:
     def _close_when_window_shuts(self) -> bool:
         """Return whether a cover held up by its window closes once the window is shut."""
         return bool(self._config.get(CONF_CLOSE_WHEN_WINDOW_SHUTS, DEFAULT_CLOSE_WHEN_WINDOW_SHUTS))
+
+    @property
+    def close_when_window_shuts(self) -> bool:
+        """Whether closing behind a shut window is enabled (for diagnostics)."""
+        return self._close_when_window_shuts()
+
+    @property
+    def waiting_for_window(self) -> dict[str, str]:
+        """The covers waiting for their window to shut, as {cover: window sensor}."""
+        return dict(self._waiting_for_window)
+
+    def _closed_since_last_open(self) -> bool:
+        """Return True when the latest scheduled action was the evening close.
+
+        Both can fall on the same date; the close then came after the open.
+        """
+        if self._daily_closed_date is None:
+            return False
+        return self._daily_opened_date is None or self._daily_closed_date >= self._daily_opened_date
 
     def _is_night(self, now: datetime) -> bool:
         """Return True between today's evening close time and today's morning start.

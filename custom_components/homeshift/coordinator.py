@@ -40,6 +40,7 @@ from .const import (
     DEFAULT_EVENT_MODE_MAP,
     DEFAULT_MODE_ABSENCE,
     EVENT_NONE,
+    THERMOSTAT_KEY_TO_HVAC_MODE,
     get_localized_defaults,
     parse_key_value_map,
 )
@@ -718,8 +719,114 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
             self.thermostat_mode_key,
         )
         await self.async_refresh_schedulers()
+        await self._async_apply_thermostat_to_climates()
         self.async_set_updated_data(self._build_result())
         await self._async_save_state()
+
+    def _scheduler_climates(self, state: Any) -> set[str]:
+        """Climate entities a Scheduler switch acts on.
+
+        Read from its `entities` attribute, and from the targets of its
+        `actions` in case that attribute is missing.
+        """
+        found: set[str] = set()
+        candidates: list[Any] = list(state.attributes.get("entities") or [])
+        for action in state.attributes.get("actions") or []:
+            if not isinstance(action, dict):
+                continue
+            for holder in (action, action.get("target") or {}):
+                if isinstance(holder, dict):
+                    ids = holder.get("entity_id") or []
+                    candidates.extend([ids] if isinstance(ids, str) else ids)
+        for entity_id in candidates:
+            if isinstance(entity_id, str) and entity_id.startswith("climate."):
+                found.add(entity_id)
+        return found
+
+    async def _async_apply_thermostat_to_climates(self) -> None:
+        """Bring the climates in line with the thermostat mode just chosen.
+
+        Disabling a scheduler leaves its climate as it was — a heat pump
+        cooling when "Off" is picked would keep cooling. The climates are
+        the ones targeted by thermostat-tagged schedulers:
+          * those of a scheduler tagged with the current mode are switched to
+            its HVAC mode (heat, cool, fan_only), then the enabled schedulers
+            of that mode run their current slot so the setpoint applies now
+            rather than at the next slot;
+          * every other one is turned off.
+        """
+        schedulers_per_mode: dict[str, list[str]] = self._config.get(CONF_SCHEDULERS_PER_MODE, {})
+        if not schedulers_per_mode or not self._thermostat_mode_map:
+            return
+
+        thermostat_tags = set(self._thermostat_mode_map.values())
+        current_tag = self._thermostat_mode
+        mode_key = (self.thermostat_mode_key or "").lower()
+        target = THERMOSTAT_KEY_TO_HVAC_MODE.get(mode_key)
+        enabled = set(schedulers_per_mode.get(self.day_mode_key or "", []))
+
+        active: set[str] = set()
+        others: set[str] = set()
+        to_run: list[str] = []
+        all_switches: set[str] = set()
+        for swlist in schedulers_per_mode.values():
+            all_switches.update(swlist)
+        for entity_id in sorted(all_switches):
+            state = self.hass.states.get(entity_id)
+            if state is None:
+                continue
+            tags = set(state.attributes.get("tags", []) or []) & thermostat_tags
+            if not tags:
+                continue
+            climates = self._scheduler_climates(state)
+            if current_tag in tags and mode_key != "off":
+                active |= climates
+                if entity_id in enabled:
+                    to_run.append(entity_id)
+            else:
+                others |= climates
+        others -= active
+
+        for climate_id in sorted(others):
+            await self._async_set_climate_hvac_mode(climate_id, "off")
+        if target is not None:
+            for climate_id in sorted(active):
+                await self._async_set_climate_hvac_mode(climate_id, target)
+
+        if to_run:
+            if not self.hass.services.has_service("scheduler", "run_action"):
+                _LOGGER.debug("scheduler.run_action unavailable, current slot not applied")
+                return
+            for entity_id in to_run:
+                try:
+                    await self.hass.services.async_call(
+                        "scheduler", "run_action", {"entity_id": entity_id}, blocking=True
+                    )
+                except HomeAssistantError as err:
+                    _LOGGER.warning("scheduler.run_action failed for %s: %s", entity_id, err)
+
+    async def _async_set_climate_hvac_mode(self, climate_id: str, hvac_mode: str) -> None:
+        """Set a climate's HVAC mode, unless it is already there or cannot be."""
+        state = self.hass.states.get(climate_id)
+        if state is None or state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN):
+            _LOGGER.debug("Climate %s unavailable, HVAC mode not set", climate_id)
+            return
+        if state.state == hvac_mode:
+            return
+        supported = state.attributes.get("hvac_modes")
+        if supported is not None and hvac_mode not in supported:
+            _LOGGER.debug("Climate %s does not support HVAC mode '%s'", climate_id, hvac_mode)
+            return
+        _LOGGER.info("Thermostat '%s': %s -> %s", self._thermostat_mode, climate_id, hvac_mode)
+        try:
+            await self.hass.services.async_call(
+                "climate",
+                "set_hvac_mode",
+                {"entity_id": climate_id, "hvac_mode": hvac_mode},
+                blocking=True,
+            )
+        except HomeAssistantError as err:
+            _LOGGER.warning("climate.set_hvac_mode failed for %s: %s", climate_id, err)
 
     async def async_update_data(self) -> dict:
         """Public entry point for fetching data (delegates to _async_update_data).

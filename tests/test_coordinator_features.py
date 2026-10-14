@@ -569,6 +569,103 @@ class TestSchedulerRefresh:
 
         assert "switch.sched_presence" in turned_on
 
+    def _climate_hass(self, states: dict[str, MagicMock]) -> MagicMock:
+        """Mock hass whose states come from `states` (anything else: no tags)."""
+        hass = make_mock_hass()
+        hass.services.async_call = AsyncMock()
+        hass.services.has_service = MagicMock(return_value=True)
+        hass.states.get.side_effect = lambda entity_id: states.get(
+            entity_id, self._make_tagged_state([])
+        )
+        return hass
+
+    @staticmethod
+    def _scheduler(tags: list[str], climates: list[str]) -> MagicMock:
+        state = MagicMock()
+        state.attributes = {"tags": tags, "entities": climates}
+        return state
+
+    @staticmethod
+    def _climate(hvac: str, modes=("off", "heat", "cool", "fan_only")) -> MagicMock:
+        state = MagicMock()
+        state.state = hvac
+        state.attributes = {"hvac_modes": list(modes)}
+        return state
+
+    @staticmethod
+    def _hvac_calls(hass) -> dict[str, str]:
+        return {
+            c.args[2]["entity_id"]: c.args[2]["hvac_mode"]
+            for c in hass.services.async_call.call_args_list
+            if c.args[:2] == ("climate", "set_hvac_mode")
+        }
+
+    async def test_thermostat_off_turns_off_a_cooling_heat_pump(self):
+        """Picking Off turns off the heat pump a cooling scheduler drives."""
+        hass = self._climate_hass({
+            "switch.sched_clim": self._scheduler(["Climatisation"], ["climate.pac"]),
+            "climate.pac": self._climate("cool"),
+        })
+        coordinator = HomeShiftCoordinator(
+            hass, make_mock_entry(schedulers_per_mode={"work": ["switch.sched_clim"]})
+        )
+        set_day_mode(coordinator, "Travail")
+
+        await coordinator.async_set_thermostat_mode("Eteint")
+
+        assert self._hvac_calls(hass) == {"climate.pac": "off"}
+        assert not any(
+            c.args[0] == "scheduler" for c in hass.services.async_call.call_args_list
+        )
+
+    async def test_thermostat_heating_switches_climates_and_applies_current_slot(self):
+        """Heating sets heat on the heating climates, turns off the cooling-only
+        ones and runs the enabled heating scheduler's current slot."""
+        hass = self._climate_hass({
+            "switch.sched_chauffage": self._scheduler(["Chauffage"], ["climate.pac"]),
+            "switch.sched_clim": self._scheduler(
+                ["Climatisation"], ["climate.pac", "climate.split"]
+            ),
+            "switch.sched_chauffage_maison": self._scheduler(["Chauffage"], []),
+            "climate.pac": self._climate("cool"),
+            "climate.split": self._climate("cool"),
+        })
+        schedulers = {
+            "work": ["switch.sched_chauffage", "switch.sched_clim"],
+            "home": ["switch.sched_chauffage_maison"],
+        }
+        coordinator = HomeShiftCoordinator(hass, make_mock_entry(schedulers_per_mode=schedulers))
+        set_day_mode(coordinator, "Travail")
+
+        await coordinator.async_set_thermostat_mode("Chauffage")
+
+        assert self._hvac_calls(hass) == {"climate.pac": "heat", "climate.split": "off"}
+        run_calls = [
+            c.args[2]["entity_id"]
+            for c in hass.services.async_call.call_args_list
+            if c.args[:2] == ("scheduler", "run_action")
+        ]
+        assert run_calls == ["switch.sched_chauffage"]
+
+    async def test_thermostat_skips_climates_already_set_unsupported_or_unavailable(self):
+        """No command for a climate already in the mode, lacking it, or unavailable."""
+        hass = self._climate_hass({
+            "switch.sched_ventil": self._scheduler(
+                ["Ventilation"], ["climate.done", "climate.no_fan", "climate.gone"]
+            ),
+            "climate.done": self._climate("fan_only"),
+            "climate.no_fan": self._climate("heat", modes=("off", "heat")),
+            "climate.gone": self._climate("unavailable"),
+        })
+        coordinator = HomeShiftCoordinator(
+            hass, make_mock_entry(schedulers_per_mode={"work": ["switch.sched_ventil"]})
+        )
+        set_day_mode(coordinator, "Travail")
+
+        await coordinator.async_set_thermostat_mode("Ventilation")
+
+        assert self._hvac_calls(hass) == {}
+
 
 # ---------------------------------------------------------------------------
 # State persistence (async_restore_state / _async_save_state)
@@ -3791,3 +3888,54 @@ class TestCloseWhenTheWindowShuts:
 
         manager._hass.services.async_call.assert_awaited_once()
         on_change.assert_called_once()
+
+    async def test_an_upgrade_after_a_blocked_close_keeps_the_cover_waiting(self):
+        """State saved by a version without the wait: last evening's left-open covers wait."""
+        manager = self._manager(
+            stored={
+                "daily_opened_date": "2026-07-01",
+                "daily_closed_date": "2026-07-01",
+                "covers_left_open": {self.COVER: self.SENSOR},
+                "covers_left_open_date": "2026-07-01",
+            }
+        )
+
+        await manager.async_restore_state()
+
+        assert manager.waiting_for_window == {self.COVER: self.SENSOR}
+
+    async def test_an_upgrade_after_the_morning_open_waits_for_nothing(self):
+        manager = self._manager(
+            stored={
+                "daily_opened_date": "2026-07-02",
+                "daily_closed_date": "2026-07-01",
+                "covers_left_open": {self.COVER: self.SENSOR},
+            }
+        )
+
+        await manager.async_restore_state()
+
+        assert manager.waiting_for_window == {}
+
+    async def test_a_stored_empty_wait_is_not_reseeded(self):
+        """The wait was kept, and emptied: the left-open list must not refill it."""
+        manager = self._manager(
+            stored={
+                "daily_closed_date": "2026-07-01",
+                "covers_left_open": {self.COVER: self.SENSOR},
+                "waiting_for_window": {},
+            }
+        )
+
+        await manager.async_restore_state()
+
+        assert manager.waiting_for_window == {}
+
+    async def test_the_evening_close_logs_the_wait(self, caplog):
+        import logging
+
+        manager = self._manager()
+        with caplog.at_level(logging.INFO, logger="custom_components.homeshift.cover_manager"):
+            await self._evening_close(manager)
+
+        assert "will close once window sensor 'binary_sensor.fenetre_chambre'" in caplog.text

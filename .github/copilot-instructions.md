@@ -1,26 +1,28 @@
 # HomeShift — Copilot Instructions
 
 ## Project Overview
-HomeShift is a Home Assistant custom integration (distributed via HACS) that automatically manages `select.day_mode` and `select.thermostat_mode` entities based on calendar events, weekends, and public holidays. It drives on/off state of optional [Scheduler](https://github.com/nielsfaber/scheduler-component) switches.
+HomeShift is a Home Assistant custom integration (distributed via HACS) that automatically manages `select.homeshift_day_mode` and `select.homeshift_thermostat_mode` entities based on calendar events, weekends, and public holidays. It drives on/off state of optional [Scheduler](https://github.com/nielsfaber/scheduler-component) switches.
 
 ## Architecture
 
 ```
 coordinator.py          ← All logic lives here (HomeShiftCoordinator extends DataUpdateCoordinator)
-├── __init__.py         ← HA entry setup, service registration, lifecycle management
-├── select.py           ← Thin CoordinatorEntity wrappers for day_mode and thermostat_mode
-├── number.py           ← CoordinatorEntity wrapper for override_duration
-├── config_flow.py      ← Multi-step UI: menu → calendars → mapping → schedulers → finalize
+├── cover_manager.py    ← Daily cover open/close, heat protection, manual open/close
+├── __init__.py         ← HA entry setup, migrations, services, lifecycle management
+├── entity.py           ← Shared DeviceInfo, translation keys, pinned entity ids
+├── select.py / number.py / sensor.py / binary_sensor.py / button.py ← thin entity wrappers
+├── diagnostics.py      ← Config entry diagnostics
+├── config_flow.py      ← Multi-step UI: menu → calendars → mapping → schedulers → covers → finalize
 ├── const.py            ← All constants, defaults, and LOCALIZED_DEFAULTS (en/fr)
-└── services.yaml       ← homeshift.refresh_schedulers, homeshift.sync_calendar
+└── services.yaml       ← refresh_schedulers, sync_calendar, open_covers, close_covers
 ```
 
-**Data flow:** Periodic calendar poll (default 60 min) → `coordinator.async_update_data()` → sets `day_mode` → calls `async_refresh_schedulers()` to toggle scheduler switch entities.
+**Data flow:** Periodic calendar poll (fixed 5 min, plus one-shot timers) → `coordinator.async_update_data()` → sets `day_mode` → calls `async_refresh_schedulers()` to toggle scheduler switch entities.
 
 ## Critical Patterns
 
 ### Mode Map Format
-All mode maps use `"key:DisplayName, key2:DisplayName2"` strings. **Keys are stable English identifiers; display names are locale-specific.** Never hardcode display names in logic — always work with keys internally.
+All mode maps use `"key:DisplayName, key2:DisplayName2"` strings. **Keys are stable English identifiers; display names are locale-specific.** Never hardcode display names in logic — always work with keys internally (schedulers, for instance, are stored per mode key).
 
 ```python
 # In const.py
@@ -62,7 +64,8 @@ Day/thermostat mode keys are saved to HA storage (`Store`) and restored in `asyn
 - Tests use **French locale** as the default (`hass.config.language = "fr"`) — assert against French display names (`"Maison"`, `"Travail"`, not `"Home"`, `"Work"`).
 - Shared fixtures are in `tests/conftest.py`: `make_mock_hass()`, `make_mock_entry()`, `make_calendar_state()`.
 - Test files are split by concern: `test_coordinator.py` (utilities/scan interval), `test_coordinator_modes.py` (mode logic, half-day, absence), `test_coordinator_features.py` (features), `test_init.py`, `test_calendars.py`.
-- Coordinator is tested directly (no HA test harness) by mocking `hass` and `ConfigEntry` via `MagicMock`.
+- Coordinator logic is mostly tested directly by mocking `hass` and `ConfigEntry` via `MagicMock`; put a coordinator in a mode with `set_day_mode()` from `conftest.py`.
+- `tests/test_integration.py` runs the integration on a real Home Assistant (the `hass` fixture of pytest-homeassistant-custom-component): setup/unload, reloads, entity ids, config flow, buttons and services.
 - `asyncio_mode = auto` is set; no need for `@pytest.mark.asyncio`.
 
 ## Adding a New Mode or Config Option

@@ -45,6 +45,17 @@ DEFAULT_MODE_HOLIDAY: str = _fr_day_map[_FR[CONF_MODE_HOLIDAY]]  # key "home"  â
 DEFAULT_MODE_ABSENCE: str = _fr_day_map[_FR[CONF_MODE_ABSENCE]]  # key "away" â†’ "Absence"
 DEFAULT_EVENT_MODE_MAP: str = _FR[CONF_EVENT_MODE_MAP]
 
+def set_day_mode(coordinator, display: str) -> None:
+    """Put a coordinator in a day mode for a test, without any side effect.
+
+    Unlike async_set_day_mode() it starts no override, refreshes no
+    scheduler and saves nothing. Like a manual choice, it marks absence as
+    picked by hand.
+    """
+    coordinator._day_mode = display
+    coordinator._absence_is_manual = display == coordinator._mode_absence
+
+
 def make_mock_hass() -> MagicMock:
     """Return a MagicMock hass with language='fr' for get_localized_defaults."""
     hass = MagicMock()

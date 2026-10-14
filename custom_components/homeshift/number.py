@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import logging
 
-from homeassistant.components.number import NumberEntity, NumberMode
+from homeassistant.components.number import DOMAIN as NUMBER_DOMAIN, NumberEntity, NumberMode
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import UnitOfTime
 from homeassistant.core import HomeAssistant
@@ -12,6 +12,7 @@ from homeassistant.helpers.restore_state import RestoreEntity
 
 from .const import DOMAIN, NUMBER_OVERRIDE_DURATION, NUMBER_EARLY_SWITCH
 from .coordinator import HomeShiftCoordinator
+from .entity import setup_entity
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -37,9 +38,6 @@ class HomeShiftOverrideDurationNumber(NumberEntity, RestoreEntity):
     the override mechanism entirely.
     """
 
-    _attr_has_entity_name = True
-    _attr_name = "Override Duration"
-
     _attr_native_min_value = 0
     _attr_native_max_value = 1440  # 24 h maximum
     _attr_native_step = 5
@@ -51,7 +49,7 @@ class HomeShiftOverrideDurationNumber(NumberEntity, RestoreEntity):
         """Initialize the number entity."""
         self._coordinator = coordinator
         self._entry = entry
-        self._attr_unique_id = f"{entry.entry_id}_{NUMBER_OVERRIDE_DURATION}"
+        setup_entity(self, entry, NUMBER_DOMAIN, NUMBER_OVERRIDE_DURATION)
         self._attr_native_value = float(coordinator.override_duration_minutes)
 
     async def async_added_to_hass(self) -> None:
@@ -86,16 +84,6 @@ class HomeShiftOverrideDurationNumber(NumberEntity, RestoreEntity):
         self._attr_native_value = float(minutes)
         self.async_write_ha_state()
 
-    @property
-    def device_info(self):
-        """Return device information."""
-        return {
-            "identifiers": {(DOMAIN, self._entry.entry_id)},
-            "name": "HomeShift",
-            "manufacturer": "Gamso",
-            "model": "HomeShift",
-        }
-
 
 class HomeShiftEarlySwitchNumber(NumberEntity, RestoreEntity):
     """Number entity controlling the early-switch advance time in minutes.
@@ -104,9 +92,6 @@ class HomeShiftEarlySwitchNumber(NumberEntity, RestoreEntity):
     calendar event that many minutes before its scheduled start.  All-day events are
     never affected by this setting.
     """
-
-    _attr_has_entity_name = True
-    _attr_name = "Early Switch"
 
     _attr_native_min_value = 0
     _attr_native_max_value = 480  # 8 h maximum
@@ -119,7 +104,7 @@ class HomeShiftEarlySwitchNumber(NumberEntity, RestoreEntity):
         """Initialize the number entity."""
         self._coordinator = coordinator
         self._entry = entry
-        self._attr_unique_id = f"{entry.entry_id}_{NUMBER_EARLY_SWITCH}"
+        setup_entity(self, entry, NUMBER_DOMAIN, NUMBER_EARLY_SWITCH)
         self._attr_native_value = float(coordinator.early_switch_minutes)
 
     async def async_added_to_hass(self) -> None:
@@ -154,13 +139,3 @@ class HomeShiftEarlySwitchNumber(NumberEntity, RestoreEntity):
         self._attr_native_value = float(minutes)
         self.async_write_ha_state()
         await self._coordinator.async_request_refresh()
-
-    @property
-    def device_info(self):
-        """Return device information."""
-        return {
-            "identifiers": {(DOMAIN, self._entry.entry_id)},
-            "name": "HomeShift",
-            "manufacturer": "Gamso",
-            "model": "HomeShift",
-        }

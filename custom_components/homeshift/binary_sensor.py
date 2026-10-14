@@ -3,7 +3,11 @@ from __future__ import annotations
 
 import logging
 
-from homeassistant.components.binary_sensor import BinarySensorDeviceClass, BinarySensorEntity
+from homeassistant.components.binary_sensor import (
+    DOMAIN as BINARY_SENSOR_DOMAIN,
+    BinarySensorDeviceClass,
+    BinarySensorEntity,
+)
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -20,6 +24,7 @@ from .const import (
     DOMAIN,
 )
 from .coordinator import HomeShiftCoordinator
+from .entity import async_remove_stale_entities, setup_entity
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -33,21 +38,17 @@ async def async_setup_entry(
     coordinator: HomeShiftCoordinator = hass.data[DOMAIN][entry.entry_id]
     config = {**entry.data, **entry.options}
     entities = []
+    stale: list[str] = []
     if config.get(CONF_COVER_ENTITIES) and config.get(CONF_COVER_TEMP_SENSOR):
         entities.append(HomeShiftCoverHeatActiveSensor(coordinator, entry))
+    else:
+        stale.append(BINARY_SENSOR_COVER_HEAT_ACTIVE)
     if config.get(CONF_DAILY_COVER_ITEMS):
         entities.append(HomeShiftCoversLeftOpenSensor(coordinator, entry))
+    else:
+        stale.append(BINARY_SENSOR_COVERS_LEFT_OPEN)
+    async_remove_stale_entities(hass, entry, BINARY_SENSOR_DOMAIN, stale)
     async_add_entities(entities)
-
-
-def _device_info(entry: ConfigEntry) -> dict:
-    """Return shared device info dict."""
-    return {
-        "identifiers": {(DOMAIN, entry.entry_id)},
-        "name": "HomeShift",
-        "manufacturer": "Gamso",
-        "model": "HomeShift",
-    }
 
 
 class HomeShiftCoverHeatActiveSensor(CoordinatorEntity[HomeShiftCoordinator], BinarySensorEntity):
@@ -61,14 +62,12 @@ class HomeShiftCoverHeatActiveSensor(CoordinatorEntity[HomeShiftCoordinator], Bi
     """
 
     _attr_device_class = BinarySensorDeviceClass.HEAT
-    _attr_has_entity_name = True
-    _attr_name = "Cover Heat Active"
     _attr_icon = "mdi:sun-thermometer"
 
     def __init__(self, coordinator: HomeShiftCoordinator, entry: ConfigEntry) -> None:
         """Initialize the binary sensor."""
         super().__init__(coordinator)
-        self._attr_unique_id = f"{entry.entry_id}_{BINARY_SENSOR_COVER_HEAT_ACTIVE}"
+        setup_entity(self, entry, BINARY_SENSOR_DOMAIN, BINARY_SENSOR_COVER_HEAT_ACTIVE)
         self._entry = entry
 
     async def async_added_to_hass(self) -> None:
@@ -95,11 +94,6 @@ class HomeShiftCoverHeatActiveSensor(CoordinatorEntity[HomeShiftCoordinator], Bi
         """Return True when heat protection conditions are met."""
         return self.coordinator.is_heat_protection_active(dt_util.now())
 
-    @property
-    def device_info(self) -> dict:
-        """Return device information."""
-        return _device_info(self._entry)
-
 
 class HomeShiftCoversLeftOpenSensor(CoordinatorEntity[HomeShiftCoordinator], BinarySensorEntity):
     """Problem sensor: on when tonight's close had to leave covers up.
@@ -117,14 +111,12 @@ class HomeShiftCoversLeftOpenSensor(CoordinatorEntity[HomeShiftCoordinator], Bin
     """
 
     _attr_device_class = BinarySensorDeviceClass.PROBLEM
-    _attr_has_entity_name = True
-    _attr_name = "Covers Left Open"
     _attr_icon = "mdi:window-open-variant"
 
     def __init__(self, coordinator: HomeShiftCoordinator, entry: ConfigEntry) -> None:
         """Initialize the binary sensor."""
         super().__init__(coordinator)
-        self._attr_unique_id = f"{entry.entry_id}_{BINARY_SENSOR_COVERS_LEFT_OPEN}"
+        setup_entity(self, entry, BINARY_SENSOR_DOMAIN, BINARY_SENSOR_COVERS_LEFT_OPEN)
         self._entry = entry
 
     @property
@@ -143,8 +135,3 @@ class HomeShiftCoversLeftOpenSensor(CoordinatorEntity[HomeShiftCoordinator], Bin
             "window_sensors": dict(left_open),
             "checked_on": checked_on.isoformat() if checked_on else None,
         }
-
-    @property
-    def device_info(self) -> dict:
-        """Return device information."""
-        return _device_info(self._entry)

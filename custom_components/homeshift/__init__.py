@@ -2,14 +2,21 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime
+
+import voluptuous as vol
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EVENT_HOMEASSISTANT_STARTED, Platform
-from homeassistant.core import CoreState, Event, HomeAssistant, callback
-from homeassistant.helpers import entity_registry as er
+from homeassistant.core import CoreState, Event, HomeAssistant, ServiceCall, callback
+from homeassistant.exceptions import ServiceValidationError
+from homeassistant.helpers import config_validation as cv, entity_registry as er
+from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
 from .const import (
+    ATTR_DURATION,
+    ATTR_UNTIL,
     CLOSE_ELEVATION_MAX,
     CLOSE_ELEVATION_MIN,
     CONF_DAILY_COVER_CLOSE_ELEVATION,
@@ -17,23 +24,59 @@ from .const import (
     CONF_DAILY_COVER_CLOSE_OFFSET_MINUTES,
     CONF_DAILY_COVER_ENTITIES,
     CONF_DAILY_COVER_ITEMS,
+    CONF_DAY_MODE_MAP,
     CONF_ITEM_COVER,
     CONF_ITEM_MY_BUTTON,
     CONF_ITEM_WINDOW_SENSOR,
+    CONF_SCHEDULERS_PER_MODE,
     DEFAULT_DAILY_COVER_CLOSE_ELEVATION,
     DEFAULT_DAILY_COVER_CLOSE_OFFSET_MINUTES,
     DOMAIN,
     LEGACY_CLOSE_MODE_ELEVATION,
+    LOCALIZED_DEFAULTS,
     SENSOR_NEXT_SCAN,
+    SERVICE_CLOSE_COVERS,
+    SERVICE_INHIBIT_COVERS,
+    SERVICE_OPEN_COVERS,
     SERVICE_REFRESH_SCHEDULERS,
+    SERVICE_RESUME_COVERS,
     SERVICE_SYNC_CALENDAR,
+    get_localized_defaults,
+    parse_key_value_map,
 )
+from . import coordinator as coordinator_module, cover_manager as cover_manager_module
 from .coordinator import HomeShiftCoordinator
 from .cover_manager import elevation_for_sunset_offset
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS: list[Platform] = [Platform.SELECT, Platform.NUMBER, Platform.SENSOR, Platform.BINARY_SENSOR]
+PLATFORMS: list[Platform] = [
+    Platform.SELECT,
+    Platform.NUMBER,
+    Platform.SENSOR,
+    Platform.BINARY_SENSOR,
+    Platform.BUTTON,
+]
+
+SERVICES = (
+    SERVICE_REFRESH_SCHEDULERS,
+    SERVICE_SYNC_CALENDAR,
+    SERVICE_OPEN_COVERS,
+    SERVICE_CLOSE_COVERS,
+    SERVICE_INHIBIT_COVERS,
+    SERVICE_RESUME_COVERS,
+)
+
+# With neither a duration nor an end date, an inhibition lasts until resumed.
+INHIBIT_COVERS_SCHEMA = vol.Schema(
+    {
+        vol.Required("entity_id"): cv.entity_ids,
+        vol.Exclusive(ATTR_DURATION, "end"): cv.positive_time_period,
+        vol.Exclusive(ATTR_UNTIL, "end"): cv.datetime,
+    }
+)
+# Without entity_id, every inhibited cover is resumed.
+RESUME_COVERS_SCHEMA = vol.Schema({vol.Optional("entity_id"): cv.entity_ids})
 
 # Settings the v3 -> v4 migration folds into CONF_DAILY_COVER_CLOSE_ELEVATION.
 _RETIRED_CLOSE_KEYS = frozenset({CONF_DAILY_COVER_CLOSE_MODE, CONF_DAILY_COVER_CLOSE_OFFSET_MINUTES})
@@ -110,7 +153,76 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             elevation,
         )
 
+    if entry.version < 5:
+        # v4 -> v5: schedulers were stored per day mode display label
+        # ("Maison", "Work", ...). The label depends on the instance language
+        # and on renames, and a form built without the localized defaults
+        # stored the English labels while the coordinator ran on the French
+        # ones — no scheduler ever matched. They are now stored per mode key.
+        merged = {**entry.data, **entry.options}
+        day_mode_map = parse_key_value_map(
+            merged.get(CONF_DAY_MODE_MAP) or get_localized_defaults(hass)[CONF_DAY_MODE_MAP]
+        )
+        data = dict(entry.data)
+        options = dict(entry.options)
+        for store in (data, options):
+            if store.get(CONF_SCHEDULERS_PER_MODE):
+                store[CONF_SCHEDULERS_PER_MODE] = schedulers_by_mode_key(
+                    store[CONF_SCHEDULERS_PER_MODE], day_mode_map
+                )
+
+        hass.config_entries.async_update_entry(entry, data=data, options=options, version=5)
+        _LOGGER.info("HomeShift config entry migrated to version 5 (schedulers keyed by day mode key)")
+
     return True
+
+
+def _mode_key_for_label(label: str, day_mode_map: dict[str, str]) -> str | None:
+    """Return the day mode key a stored scheduler label stands for, or None.
+
+    Tried in order: the label already is a key, it is the current display
+    name of a key, it is a key spelled with another case, or it is one of the
+    default display names of any supported language (what the form stored
+    when it was built without the localized defaults).
+    """
+    if label in day_mode_map:
+        return label
+    for key, display in day_mode_map.items():
+        if display == label:
+            return key
+    lowered = label.lower()
+    for key in day_mode_map:
+        if key.lower() == lowered:
+            return key
+    for defaults in LOCALIZED_DEFAULTS.values():
+        for key, display in parse_key_value_map(defaults[CONF_DAY_MODE_MAP]).items():
+            if display == label and key in day_mode_map:
+                return key
+    return None
+
+
+def schedulers_by_mode_key(schedulers: dict, day_mode_map: dict[str, str]) -> dict[str, list]:
+    """Re-key a {label: [switch, ...]} scheduler map by day mode key.
+
+    Two labels resolving to the same key have their switches merged, in
+    order and without duplicates. A label that matches no mode is kept as is
+    (and logged): dropping it would silently lose the user's assignment.
+    """
+    result: dict[str, list] = {}
+    for label, switches in schedulers.items():
+        key = _mode_key_for_label(str(label), day_mode_map)
+        if key is None:
+            _LOGGER.warning(
+                "HomeShift migration: schedulers stored under '%s' match no day mode (%s) — kept as is",
+                label,
+                day_mode_map,
+            )
+            key = str(label)
+        merged = result.setdefault(key, [])
+        for switch in switches or []:
+            if switch not in merged:
+                merged.append(switch)
+    return result
 
 
 def _migrated_close_elevation(hass: HomeAssistant, merged: dict) -> float | None:
@@ -166,6 +278,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     # Create coordinator
     coordinator = HomeShiftCoordinator(hass, entry)
+
+    # The first refresh arms the next-mode and cover timers. Register their
+    # cancellation first: if that refresh fails (ConfigEntryNotReady), HA
+    # runs the unload callbacks registered so far and retries with a new
+    # coordinator; registered afterwards, the orphan's timers would still
+    # fire and drive real switches and covers.
+    entry.async_on_unload(coordinator.async_cancel_next_mode_timer)
+    entry.async_on_unload(coordinator.async_cancel_cover_timers)
+
     await coordinator.async_restore_state()
     await coordinator.cover_manager.async_restore_state()
     await coordinator.async_config_entry_first_refresh()
@@ -178,14 +299,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Register services
     async_setup_services(hass)
 
-    # Cancel the next-mode timer when the entry is unloaded
-    entry.async_on_unload(coordinator.async_cancel_next_mode_timer)
-
-    # Cancel the cover open/close timers when the entry is unloaded
-    entry.async_on_unload(coordinator.async_cancel_cover_timers)
-
-    # React immediately when the temperature sensor changes (no need to wait for the poll)
-    entry.async_on_unload(coordinator.cover_manager.async_setup_listeners())
+    # React immediately when the temperature sensor or a window sensor changes
+    # (no need to wait for the poll)
+    entry.async_on_unload(
+        coordinator.cover_manager.async_setup_listeners(on_change=coordinator.async_update_listeners)
+    )
 
     # Reload the integration when options are saved so the coordinator picks up changes
     entry.async_on_unload(entry.add_update_listener(_async_reload_on_options_update))
@@ -226,6 +344,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     return True
 
 
+async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Delete the entry's persisted state when the integration is removed.
+
+    The coordinator and the cover manager each keep a store named after the
+    entry id; nothing else would ever delete them.
+    """
+    for module in (coordinator_module, cover_manager_module):
+        await Store(hass, module.STORAGE_VERSION, f"{module.STORAGE_KEY}.{entry.entry_id}").async_remove()
+
+
 async def _async_reload_on_options_update(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Reload the config entry when options are updated."""
     await hass.config_entries.async_reload(entry.entry_id)
@@ -241,7 +369,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             # would still appear in the UI and act on an unloaded coordinator
             # (writing to its store, calling cover/switch services).
             hass.data.pop(DOMAIN)
-            for service in (SERVICE_REFRESH_SCHEDULERS, SERVICE_SYNC_CALENDAR):
+            for service in SERVICES:
                 hass.services.async_remove(DOMAIN, service)
 
     return unload_ok
@@ -277,3 +405,86 @@ def async_setup_services(hass: HomeAssistant) -> None:
     hass.services.async_register(
         DOMAIN, SERVICE_SYNC_CALENDAR, handle_sync_calendar
     )
+
+    async def handle_open_covers(_call) -> None:
+        """Open the daily-schedule covers now, whatever the time or the mode."""
+        _LOGGER.info("Service call: open_covers")
+        for coordinator in _coordinators():
+            await coordinator.async_open_covers()
+
+    async def handle_close_covers(_call) -> None:
+        """Close the daily-schedule covers now, like the evening close."""
+        _LOGGER.info("Service call: close_covers")
+        for coordinator in _coordinators():
+            await coordinator.async_close_covers()
+
+    hass.services.async_register(DOMAIN, SERVICE_OPEN_COVERS, handle_open_covers)
+    hass.services.async_register(DOMAIN, SERVICE_CLOSE_COVERS, handle_close_covers)
+
+    async def handle_inhibit_covers(call: ServiceCall) -> None:
+        """Take the given covers out of the automation for a while."""
+        covers: list[str] = call.data["entity_id"]
+        until = _inhibition_end(call.data)
+        targets = _coordinators_for(covers)
+        _LOGGER.info("Service call: inhibit_covers %s until %s", covers, until or "resumed")
+        for coordinator, managed in targets:
+            await coordinator.async_inhibit_covers(managed, until)
+
+    async def handle_resume_covers(call: ServiceCall) -> None:
+        """Hand the given covers (or all of them) back to the automation."""
+        covers: list[str] | None = call.data.get("entity_id")
+        _LOGGER.info("Service call: resume_covers %s", covers or "(all)")
+        for coordinator in _coordinators():
+            await coordinator.async_resume_covers(covers)
+
+    def _coordinators_for(covers: list[str]) -> list[tuple[HomeShiftCoordinator, list[str]]]:
+        """Pair each coordinator with the given covers it manages; refuse unknown ones."""
+        targets: list[tuple[HomeShiftCoordinator, list[str]]] = []
+        claimed: set[str] = set()
+        for coordinator in _coordinators():
+            managed = [cover for cover in covers if cover in coordinator.managed_covers]
+            if managed:
+                targets.append((coordinator, managed))
+                claimed.update(managed)
+        unknown = [cover for cover in covers if cover not in claimed]
+        if unknown:
+            raise ServiceValidationError(
+                f"HomeShift does not drive {', '.join(unknown)} — only the covers of the daily "
+                "schedule and of heat protection can be inhibited",
+                translation_domain=DOMAIN,
+                translation_key="cover_not_managed",
+                translation_placeholders={"covers": ", ".join(unknown)},
+            )
+        return targets
+
+    hass.services.async_register(
+        DOMAIN, SERVICE_INHIBIT_COVERS, handle_inhibit_covers, schema=INHIBIT_COVERS_SCHEMA
+    )
+    hass.services.async_register(
+        DOMAIN, SERVICE_RESUME_COVERS, handle_resume_covers, schema=RESUME_COVERS_SCHEMA
+    )
+
+
+def _inhibition_end(data: dict) -> datetime | None:
+    """Return when an inhibit_covers call ends, or None for "until resumed".
+
+    A date given without a time zone is read in Home Assistant's own zone,
+    which is what the UI date picker means. An end already past is refused:
+    it would inhibit nothing while looking like it worked.
+    """
+    now = dt_util.now()
+    if ATTR_DURATION in data:
+        until = now + data[ATTR_DURATION]
+    elif ATTR_UNTIL in data:
+        until = data[ATTR_UNTIL]
+        if until.tzinfo is None:
+            until = until.replace(tzinfo=dt_util.get_default_time_zone())
+    else:
+        return None
+    if until <= now:
+        raise ServiceValidationError(
+            "The end of the inhibition must be in the future",
+            translation_domain=DOMAIN,
+            translation_key="inhibition_end_in_past",
+        )
+    return until

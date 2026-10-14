@@ -11,7 +11,9 @@
     // "postCreateCommand": "container install",
     "postCreateCommand": "./container dev-setup",
     "mounts": [
-        "source=${localEnv:HOME}${localEnv:USERPROFILE}/.ssh,target=/home/vscode/.ssh,type=bind,consistency=cached"
+        // Read-only: the container can use the keys (git over SSH) but cannot
+        // alter them, authorized_keys or the SSH config.
+        "source=${localEnv:HOME}${localEnv:USERPROFILE}/.ssh,target=/home/vscode/.ssh,type=bind,readonly,consistency=cached"
     ],
     "customizations": {
         "vscode": {

@@ -1,7 +1,9 @@
 """Shared fixtures and helpers for HomeShift coordinator tests."""
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 from custom_components.homeshift.const import (
     CONF_CALENDAR_ENTITY,
@@ -111,3 +113,10 @@ def make_calendar_state(
         "end_time": end_time,
     }
     return mock_state
+
+
+@pytest.fixture(autouse=True)
+def _no_card_registration():
+    """The bundled card needs a real http/frontend; test_frontend.py covers it."""
+    with patch("custom_components.homeshift.async_register_card", new=AsyncMock()):
+        yield

@@ -8,7 +8,10 @@
     "@Gamso"
   ],
   "config_flow": true,
-  "dependencies": [],
+  "dependencies": [
+    "frontend",
+    "http"
+  ],
   "documentation": "https://github.com/Gamso/homeshift",
   "integration_type": "service",
   "iot_class": "local_polling",

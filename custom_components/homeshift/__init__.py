@@ -11,6 +11,7 @@ from homeassistant.const import EVENT_HOMEASSISTANT_STARTED, Platform
 from homeassistant.core import CoreState, Event, HomeAssistant, ServiceCall, callback
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import config_validation as cv, entity_registry as er
+from homeassistant.helpers.event import async_track_state_change_event
 from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
@@ -47,6 +48,7 @@ from .const import (
 from . import coordinator as coordinator_module, cover_manager as cover_manager_module
 from .coordinator import HomeShiftCoordinator
 from .cover_manager import elevation_for_sunset_offset
+from .frontend import async_register_card
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -276,6 +278,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up HomeShift from a config entry."""
     hass.data.setdefault(DOMAIN, {})
 
+    await async_register_card(hass)
+
     # Create coordinator
     coordinator = HomeShiftCoordinator(hass, entry)
 
@@ -286,6 +290,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # fire and drive real switches and covers.
     entry.async_on_unload(coordinator.async_cancel_next_mode_timer)
     entry.async_on_unload(coordinator.async_cancel_cover_timers)
+    if coordinator.auto_start_stop.climates:
+
+        @callback
+        def _on_setpoint_change(_event: Event) -> None:
+            hass.async_create_task(coordinator.auto_start_stop.async_on_setpoint_change())
+
+        entry.async_on_unload(
+            async_track_state_change_event(hass, coordinator.auto_start_stop.climates, _on_setpoint_change)
+        )
 
     await coordinator.async_restore_state()
     await coordinator.cover_manager.async_restore_state()

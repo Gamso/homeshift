@@ -118,6 +118,17 @@ WINDOW_CLOSED_STATES = frozenset({"off", "closed"})
 CONF_CLOSE_WHEN_WINDOW_SHUTS = "close_when_window_shuts"
 DEFAULT_CLOSE_WHEN_WINDOW_SHUTS = False
 
+# Auto start/stop of climates (Versatile Thermostat over_climate): one item
+# per switch (switch.<vtherm>_enable_auto_start_stop), with the
+# climate whose target temperature decides and, per thermostat mode key, a
+# threshold in degrees (a mode without one is not driven). On the comfort side
+# of the threshold the switch is turned off, so the climate keeps running; on
+# the other side it is turned on and VTherm may stop it.
+CONF_AUTO_START_STOP_ITEMS = "auto_start_stop_items"
+CONF_ITEM_SWITCH = "switch"
+CONF_ITEM_CLIMATE = "climate"
+CONF_ITEM_SETPOINT_THRESHOLDS = "setpoint_thresholds"
+
 DEFAULT_DAILY_COVER_OPEN_TIME = "08:30"
 # The offset the retired setting defaulted to, used only to convert an entry
 # that never touched it.
@@ -141,6 +152,7 @@ SENSOR_COVER_CLOSE_TIME = "cover_close_time"
 BINARY_SENSOR_COVER_HEAT_ACTIVE = "cover_heat_active"
 BINARY_SENSOR_COVERS_LEFT_OPEN = "covers_left_open"
 SENSOR_COVERS_INHIBITED = "covers_inhibited"
+SENSOR_AUTO_START_STOP = "auto_start_stop"
 BUTTON_OPEN_COVERS = "open_covers"
 BUTTON_CLOSE_COVERS = "close_covers"
 

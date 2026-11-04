@@ -3,9 +3,8 @@ from __future__ import annotations
 
 import re
 from datetime import datetime
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
-import pytest
 import voluptuous as vol
 from homeassistant.data_entry_flow import section
 
@@ -40,13 +39,6 @@ def _make_hass(language: str = "en", switch_states: list | None = None) -> Magic
     hass.states.get.return_value = MagicMock()  # any entity_id "exists"
     hass.config_entries.async_entries.return_value = []  # nothing configured yet
     return hass
-
-
-@pytest.fixture(autouse=True)
-def _no_translation_files():
-    """The menus look up their section labels; a bare MagicMock hass has none to load."""
-    with patch.object(cf, "async_get_translations", AsyncMock(return_value={})):
-        yield
 
 
 def _fields(schema: vol.Schema) -> dict:
@@ -473,7 +465,7 @@ class TestConfigFlowMenu:
         flow = cf.HomeShiftConfigFlow()
         flow.hass = _make_hass()
         result = await flow.async_step_menu()
-        assert result["menu_options"] == ["calendars", "mapping", "schedulers", "covers_menu"]
+        assert result["menu_options"] == ["calendars", "mapping", "schedulers", "covers_menu", "heat_pumps"]
 
     async def test_finalize_present_once_calendar_configured(self):
         flow = cf.HomeShiftConfigFlow()
@@ -821,19 +813,31 @@ class TestOptionsFlowShowForms:
         assert form["step_id"] == "daily_cover_schedule"
 
 
+def marked(result) -> set[str]:
+    """Return the menu entries marked as changed and not saved yet."""
+    placeholders = result["description_placeholders"]
+    return {key for key, value in placeholders.items() if key.startswith("changed_") and value}
+
+
 class TestPendingChanges:
-    """The menu says which sections were changed and not saved yet."""
+    """The menu marks the entries whose section was changed and not saved yet.
+
+    The mark is a symbol, not a section name: the flow only knows the language
+    of the instance, not that of the person's profile, so a translated name
+    could be in the wrong language.
+    """
 
     async def test_nothing_pending_when_the_options_open(self):
         flow = _make_options_flow({CONF_CALENDAR_ENTITY: "calendar.a"})
         result = await flow.async_step_init()
-        assert result["description_placeholders"]["pending"] == "—"
+        assert marked(result) == set()
 
-    async def test_a_changed_section_is_listed(self):
+    async def test_a_changed_section_is_marked(self):
         flow = _make_options_flow({CONF_CALENDAR_ENTITY: "calendar.a", CONF_DAY_MODE_MAP: "home:Home"})
         await flow.async_step_init()
         result = await flow.async_step_schedulers({"mode_home": {"schedulers_home": ["switch.a"]}})
-        assert result["description_placeholders"]["pending"] == "schedulers"
+        assert marked(result) == {"changed_schedulers"}
+        assert result["description_placeholders"]["changed_schedulers"] == cf.PENDING_MARK
 
     async def test_resubmitting_the_same_values_changes_nothing(self):
         flow = _make_options_flow(
@@ -846,24 +850,34 @@ class TestPendingChanges:
         result = await flow.async_step_calendars(
             {CONF_CALENDAR_ENTITY: "calendar.a", CONF_HOLIDAY_CALENDAR: "calendar.b"}
         )
-        assert result["description_placeholders"]["pending"] == "—"
+        assert marked(result) == set()
 
     async def test_a_cleared_field_never_set_is_not_a_change(self):
         flow = _make_options_flow({CONF_CALENDAR_ENTITY: "calendar.a"})
         await flow.async_step_init()
         result = await flow.async_step_covers({CONF_COVER_ENTITIES: []})
-        assert result["description_placeholders"]["pending"] == "—"
+        assert marked(result) == set()
 
-    async def test_sections_are_named_from_the_translations(self):
+    async def test_the_covers_entry_is_marked_with_its_section(self):
         flow = _make_options_flow({CONF_CALENDAR_ENTITY: "calendar.a"})
         await flow.async_step_init()
         await flow.async_step_cover_item_add({CONF_ITEM_COVER: "cover.a"})
-        translations = {
-            "component.homeshift.options.step.covers_menu.menu_options.cover_items": "Volets gérés",
-        }
-        with patch.object(cf, "async_get_translations", AsyncMock(return_value=translations)):
-            result = await flow.async_step_menu()
-        assert result["description_placeholders"]["pending"] == "Volets gérés"
+        result = await flow.async_step_menu()
+        assert marked(result) == {"changed_cover_items", "changed_covers_menu"}
+
+    async def test_every_marker_is_filled_and_used_by_the_translations(self):
+        flow = _make_options_flow({CONF_CALENDAR_ENTITY: "calendar.a"})
+        await flow.async_step_init()
+        menu = await flow.async_step_menu()
+        covers_menu = await flow.async_step_covers_menu()
+        for category in ("config", "options"):
+            for lang in ("en", "fr"):
+                steps = _translations(lang)[category]["step"]
+                for step, result in (("menu", menu), ("covers_menu", covers_menu)):
+                    texts = json_dumps(steps[step])
+                    used = set(re.findall(r"\{(changed_\w+)\}", texts))
+                    assert used, (category, lang, step)
+                    assert used <= set(result["description_placeholders"]), (category, lang, step)
 
 
 # ---------------------------------------------------------------------------
@@ -1383,3 +1397,153 @@ class TestDailyCoverScheduleStepRejectsAnUnreachableElevation:
         result = await flow.async_step_daily_cover_schedule(self._input())
 
         assert result["errors"] == {"base": "elevation_unreachable"}
+
+
+# ---------------------------------------------------------------------------
+# Heat pump auto start/stop
+# ---------------------------------------------------------------------------
+
+SALON_SWITCH = "switch.salon_enable_auto_start_stop"
+
+
+def _heat_pump_input(**overrides) -> dict:
+    values = {
+        "switch": SALON_SWITCH,
+        "threshold_heating": 19,
+    }
+    values.update(overrides)
+    return values
+
+
+class TestHeatPumpSteps:
+    """heat_pumps menu, add, pick/edit and remove."""
+
+    def _flow(self) -> cf.HomeShiftConfigFlow:
+        flow = cf.HomeShiftConfigFlow()
+        flow.hass = _make_hass()
+        return flow
+
+    async def test_the_menu_only_offers_add_until_there_is_one(self):
+        flow = self._flow()
+        result = await flow.async_step_heat_pumps()
+        assert result["menu_options"] == ["heat_pump_add", "menu"]
+
+    async def test_the_add_form_has_one_threshold_per_thermostat_mode(self):
+        flow = self._flow()
+        form = await flow.async_step_heat_pump_add()
+        markers = _markers(form["data_schema"])
+        assert set(markers) == {
+            "switch",
+            "climate",
+            "threshold_heating",
+            "threshold_cooling",
+            "threshold_ventilation",
+        }
+        assert isinstance(markers["switch"], vol.Required)
+        assert isinstance(markers["threshold_heating"], vol.Optional)
+
+    async def test_adding_stores_the_item_and_lists_it(self):
+        flow = self._flow()
+        result = await flow.async_step_heat_pump_add(_heat_pump_input(threshold_cooling=24.5))
+        assert result["step_id"] == "heat_pumps"
+        assert flow._data["auto_start_stop_items"] == [
+            {
+                "switch": SALON_SWITCH,
+                "climate": "climate.salon",
+                "setpoint_thresholds": {"heating": 19.0, "cooling": 24.5},
+            }
+        ]
+        assert result["menu_options"] == ["heat_pump_add", "heat_pump_pick", "heat_pump_remove", "menu"]
+        assert "Heating ≥ 19 °C, Cooling ≤ 24.5 °C" in result["description_placeholders"]["heat_pumps"]
+
+    async def test_an_explicit_climate_wins(self):
+        flow = self._flow()
+        await flow.async_step_heat_pump_add(_heat_pump_input(climate="climate.other"))
+        (item,) = flow._data["auto_start_stop_items"]
+        assert item["climate"] == "climate.other"
+
+    async def test_an_empty_mode_is_not_stored(self):
+        flow = self._flow()
+        await flow.async_step_heat_pump_add(_heat_pump_input(threshold_cooling=None))
+        (item,) = flow._data["auto_start_stop_items"]
+        assert item["setpoint_thresholds"] == {"heating": 19.0}
+
+    def test_the_summary_lists_each_climate_with_its_thresholds(self):
+        data = {
+            "auto_start_stop_items": [
+                {"switch": SALON_SWITCH, "setpoint_thresholds": {"heating": 19.0, "cooling": 24.0}},
+                {"switch": "switch.cave", "setpoint_thresholds": {"heating": 17.5}},
+            ]
+        }
+        names = {SALON_SWITCH: "Salon Enable auto start/stop", "switch.cave": "Cave"}
+        assert cf._heat_pumps_summary(data, names.get) == (
+            "- **Salon** · Heating ≥ 19 °C, Cooling ≤ 24 °C\n- **Cave** · Heating ≥ 17.5 °C"
+        )
+
+    async def test_at_least_one_threshold_is_needed(self):
+        flow = self._flow()
+        result = await flow.async_step_heat_pump_add(_heat_pump_input(threshold_heating=None))
+        assert result["type"] == "form"
+        assert result["errors"] == {"threshold_heating": "no_threshold"}
+        assert "auto_start_stop_items" not in flow._data
+
+    async def test_a_climate_is_needed_to_read_the_setpoint(self):
+        flow = self._flow()
+        result = await flow.async_step_heat_pump_add(_heat_pump_input(switch="switch.custom"))
+        assert result["type"] == "form"
+        assert result["errors"] == {"climate": "no_climate"}
+        assert "auto_start_stop_items" not in flow._data
+        markers = _markers(result["data_schema"])
+        assert markers["threshold_heating"].description == {"suggested_value": 19}
+
+    async def test_editing_prefills_then_updates_in_place(self):
+        flow = self._flow()
+        await flow.async_step_heat_pump_add(_heat_pump_input())
+        form = await flow.async_step_heat_pump_pick({"switch": SALON_SWITCH})
+        assert form["step_id"] == "heat_pump_edit"
+        markers = _markers(form["data_schema"])
+        assert "switch" not in markers
+        assert markers["threshold_heating"].description == {"suggested_value": 19.0}
+
+        edit = _heat_pump_input(threshold_heating=20.5, threshold_cooling=25)
+        del edit["switch"]
+        await flow.async_step_heat_pump_edit(edit)
+        (item,) = flow._data["auto_start_stop_items"]
+        assert item["setpoint_thresholds"] == {"heating": 20.5, "cooling": 25.0}
+
+    async def test_removing_drops_the_item(self):
+        flow = self._flow()
+        await flow.async_step_heat_pump_add(_heat_pump_input())
+        result = await flow.async_step_heat_pump_remove({"remove_switches": [SALON_SWITCH]})
+        assert result["step_id"] == "heat_pumps"
+        assert flow._data["auto_start_stop_items"] == []
+
+    async def test_every_placeholder_and_field_is_translated(self):
+        flow = self._flow()
+        await flow.async_step_heat_pump_add(_heat_pump_input())
+        results = {
+            "heat_pumps": await flow.async_step_heat_pumps(),
+            "heat_pump_add": await flow.async_step_heat_pump_add(),
+            "heat_pump_edit": await flow.async_step_heat_pump_pick({"switch": SALON_SWITCH}),
+        }
+        for step, result in results.items():
+            given = set(result["description_placeholders"])
+            fields = set(_markers(result["data_schema"])) if result["type"] == "form" else set()
+            for lang in ("en", "fr"):
+                for category in ("config", "options"):
+                    texts = _translations(lang)[category]["step"][step]
+                    used = set(re.findall(r"\{(\w+)\}", json_dumps(texts)))
+                    assert used <= given, (step, lang, category, used - given)
+                    assert fields <= set(texts.get("data", {})), (step, lang, category)
+        for lang in ("en", "fr"):
+            for category in ("config", "options"):
+                errors = _translations(lang)[category]["error"]
+                assert {"no_climate", "no_threshold"} <= set(errors)
+
+    async def test_an_added_heat_pump_is_a_pending_change(self):
+        flow = _make_options_flow({CONF_CALENDAR_ENTITY: "calendar.a"})
+        await flow.async_step_init()
+        await flow.async_step_heat_pump_add(_heat_pump_input())
+        result = await flow.async_step_menu()
+        assert marked(result) == {"changed_heat_pumps"}
+        assert result["description_placeholders"]["heat_pump_count"] == "1"

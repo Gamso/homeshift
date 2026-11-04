@@ -46,6 +46,13 @@ input_boolean:
   office_cover_open:
     name: Office Cover State
     initial: true
+  # Back the two simulated Versatile Thermostat auto start/stop switches below.
+  salon_auto_start_stop:
+    name: Salon auto start/stop (simulated)
+    initial: true
+  chambre_auto_start_stop:
+    name: Chambre auto start/stop (simulated)
+    initial: true
 
 input_number:
   outdoor_temperature:
@@ -66,6 +73,31 @@ template:
         unit_of_measurement: "°C"
         icon: mdi:thermometer
         state: "{{ states('input_number.outdoor_temperature') }}"
+  # Stand-ins for switch.<vtherm>_enable_auto_start_stop, to try the heat
+  # pump auto start/stop without a Versatile Thermostat.
+  - switch:
+      - name: "Salon Enable auto start/stop"
+        unique_id: switch_salon_enable_auto_start_stop
+        state: "{{ is_state('input_boolean.salon_auto_start_stop', 'on') }}"
+        turn_on:
+          action: input_boolean.turn_on
+          target:
+            entity_id: input_boolean.salon_auto_start_stop
+        turn_off:
+          action: input_boolean.turn_off
+          target:
+            entity_id: input_boolean.salon_auto_start_stop
+      - name: "Chambre Enable auto start/stop"
+        unique_id: switch_chambre_enable_auto_start_stop
+        state: "{{ is_state('input_boolean.chambre_auto_start_stop', 'on') }}"
+        turn_on:
+          action: input_boolean.turn_on
+          target:
+            entity_id: input_boolean.chambre_auto_start_stop
+        turn_off:
+          action: input_boolean.turn_off
+          target:
+            entity_id: input_boolean.chambre_auto_start_stop
   - cover:
       - name: "Living Room Cover"
         unique_id: cover_living_room

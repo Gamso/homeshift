@@ -332,9 +332,15 @@ async def test_french_setup_without_the_mapping_step_drives_the_schedulers(hass:
     assert "switch.schedule_bureau" not in turned_off
 
 
-async def test_options_menu_names_the_unsaved_sections(hass: HomeAssistant, freezer) -> None:
-    """Sectioned input goes through the real flow manager, and the menu names
-    the changed section with its label from the loaded translations."""
+def changed_marks(flow) -> set[str]:
+    """Return the menu entries the flow marks as changed and not saved yet."""
+    placeholders = flow["description_placeholders"]
+    return {key for key, value in placeholders.items() if key.startswith("changed_") and value}
+
+
+async def test_options_menu_marks_the_unsaved_sections(hass: HomeAssistant, freezer) -> None:
+    """Sectioned input goes through the real flow manager, and the menu marks
+    the entries whose section was changed."""
     from homeassistant.data_entry_flow import FlowResultType
 
     freezer.move_to("2026-03-03 18:00:00+00:00")
@@ -345,7 +351,7 @@ async def test_options_menu_names_the_unsaved_sections(hass: HomeAssistant, free
 
     flow = await options.async_init(entry.entry_id)
     assert flow["step_id"] == "menu"
-    assert flow["description_placeholders"]["pending"] == "—"
+    assert not changed_marks(flow)
     assert flow["description_placeholders"]["cover_count"] == "1"
 
     # Pages submitted untouched, on an entry that never stored their values,
@@ -356,14 +362,14 @@ async def test_options_menu_names_the_unsaved_sections(hass: HomeAssistant, free
     ):
         flow = await options.async_configure(flow["flow_id"], {"next_step_id": step})
         flow = await options.async_configure(flow["flow_id"], untouched)
-    assert flow["description_placeholders"]["pending"] == "—"
+    assert not changed_marks(flow)
     flow = await options.async_configure(flow["flow_id"], {"next_step_id": "covers_menu"})
     flow = await options.async_configure(flow["flow_id"], {"next_step_id": "covers"})
     flow = await options.async_configure(flow["flow_id"], {"trigger_section": {}, "action_section": {}})
-    assert flow["description_placeholders"]["pending"] == "—"
+    assert not changed_marks(flow)
     flow = await options.async_configure(flow["flow_id"], {"next_step_id": "daily_cover_schedule"})
     flow = await options.async_configure(flow["flow_id"], {"close_section": {}, "open_section": {}})
-    assert flow["description_placeholders"]["pending"] == "—"
+    assert not changed_marks(flow)
 
     flow = await options.async_configure(flow["flow_id"], {"next_step_id": "daily_cover_schedule"})
     assert flow["type"] is FlowResultType.FORM
@@ -374,7 +380,7 @@ async def test_options_menu_names_the_unsaved_sections(hass: HomeAssistant, free
     assert flow["step_id"] == "covers_menu"
 
     flow = await options.async_configure(flow["flow_id"], {"next_step_id": "menu"})
-    assert flow["description_placeholders"]["pending"] == "Horaires d'ouverture et de fermeture"
+    assert changed_marks(flow) == {"changed_daily_cover_schedule", "changed_covers_menu"}
 
     flow = await options.async_configure(flow["flow_id"], {"next_step_id": "finalize"})
     assert flow["type"] is FlowResultType.CREATE_ENTRY
@@ -474,3 +480,51 @@ async def test_cover_services_are_removed_with_the_entry(hass: HomeAssistant) ->
 
     assert not hass.services.has_service(DOMAIN, "open_covers")
     assert not hass.services.has_service(DOMAIN, "close_covers")
+
+
+HEAT_PUMP_SWITCH = "switch.salon_enable_auto_start_stop"
+HEAT_PUMP_CLIMATE = "climate.salon"
+HEAT_PUMP_ITEMS = [{"switch": HEAT_PUMP_SWITCH, "setpoint_thresholds": {"heating": 19.0}}]
+
+
+async def test_heat_pump_auto_start_stop_follows_the_setpoint(hass: HomeAssistant) -> None:
+    """Heating keeps the climate running at its threshold and lets it stop below; a setpoint change is followed."""
+    from pytest_homeassistant_custom_component.common import async_mock_service
+
+    hass.states.async_set(HEAT_PUMP_SWITCH, "on", {"friendly_name": "Salon Enable auto start/stop"})
+    hass.states.async_set(HEAT_PUMP_CLIMATE, "heat", {"temperature": 21.0})
+    turn_on = async_mock_service(hass, "switch", "turn_on")
+    turn_off = async_mock_service(hass, "switch", "turn_off")
+    entry = make_entry(options={"auto_start_stop_items": HEAT_PUMP_ITEMS})
+    await setup_entry(hass, entry)
+
+    sensor = hass.states.get("sensor.homeshift_auto_start_stop")
+    assert sensor is not None
+    # Thermostat off at first: not driven, nothing written.
+    assert turn_off == [] and turn_on == []
+    assert sensor.attributes["climates"][0]["driven"] is False
+
+    await hass.services.async_call(
+        "select", "select_option", {"entity_id": "select.homeshift_thermostat_mode", "option": "Heating"}, blocking=True
+    )
+    assert [call.data["entity_id"] for call in turn_off] == [HEAT_PUMP_SWITCH]
+
+    # An eco slot lowers the setpoint under the threshold: the switch goes back on.
+    hass.states.async_set(HEAT_PUMP_SWITCH, "off", {"friendly_name": "Salon Enable auto start/stop"})
+    hass.states.async_set(HEAT_PUMP_CLIMATE, "heat", {"temperature": 17.5})
+    await hass.async_block_till_done()
+    assert [call.data["entity_id"] for call in turn_on] == [HEAT_PUMP_SWITCH]
+    status = hass.states.get("sensor.homeshift_auto_start_stop").attributes["climates"][0]
+    assert status["name"] == "Salon"
+    assert (status["driven"], status["comfort"], status["setpoint"], status["threshold"]) == (True, False, 17.5, 19.0)
+
+
+async def test_the_auto_start_stop_sensor_goes_with_its_configuration(hass: HomeAssistant) -> None:
+    hass.states.async_set(HEAT_PUMP_SWITCH, "on")
+    entry = make_entry(options={"auto_start_stop_items": HEAT_PUMP_ITEMS})
+    await setup_entry(hass, entry)
+    assert "sensor.homeshift_auto_start_stop" in homeshift_entity_ids(hass, entry)
+
+    hass.config_entries.async_update_entry(entry, options={})
+    await hass.async_block_till_done()
+    assert "sensor.homeshift_auto_start_stop" not in homeshift_entity_ids(hass, entry)

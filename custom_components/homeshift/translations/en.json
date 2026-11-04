@@ -3,19 +3,21 @@
     "step": {
       "menu": {
         "title": "HomeShift configuration",
-        "description": "Sections filled in: {pending}\n\nNothing is created before “Save configuration”: closing this dialog with ✕ drops the configuration.",
+        "description": "✎ marks a section you filled in.\n\nNothing is created before “Save configuration”: closing this dialog with ✕ drops the configuration.",
         "menu_options": {
           "calendars": "Calendars",
           "mapping": "Day modes",
           "schedulers": "Schedulers",
           "covers_menu": "Covers",
+          "heat_pumps": "Climate auto start/stop",
           "finalize": "Save configuration"
         },
         "menu_option_descriptions": {
-          "calendars": "{calendars}",
-          "mapping": "{modes}",
-          "schedulers": "{scheduler_count} schedulers assigned",
-          "covers_menu": "Managed covers: {cover_count} · closing tonight at {close_at}",
+          "calendars": "{calendars}{changed_calendars}",
+          "mapping": "{modes}{changed_mapping}",
+          "schedulers": "{scheduler_count} schedulers assigned{changed_schedulers}",
+          "covers_menu": "Managed covers: {cover_count} · closing tonight at {close_at}{changed_covers_menu}",
+          "heat_pumps": "{heat_pump_count} climate(s) · one setpoint threshold per thermostat mode{changed_heat_pumps}",
           "finalize": "Apply the changes and close this dialog."
         }
       },
@@ -29,9 +31,9 @@
           "menu": "← Back to the main menu"
         },
         "menu_option_descriptions": {
-          "cover_items": "{cover_count} cover(s) · add, edit or remove",
-          "daily_cover_schedule": "Opening by day mode · closing tonight at {close_at}",
-          "covers": "Threshold: {heat_threshold} °C · protected covers: {heat_cover_count}"
+          "cover_items": "{cover_count} cover(s) · add, edit or remove{changed_cover_items}",
+          "daily_cover_schedule": "Opening by day mode · closing tonight at {close_at}{changed_daily_cover_schedule}",
+          "covers": "Threshold: {heat_threshold} °C · protected covers: {heat_cover_count}{changed_covers}"
         }
       },
       "calendars": {
@@ -255,11 +257,80 @@
           "remove_covers": "Covers to remove"
         },
         "submit": "Save and back to the list"
+      },
+      "heat_pumps": {
+        "title": "Climate auto start/stop",
+        "description": "For each climate (a Versatile Thermostat over_climate thermostat: heat pump, air conditioner...), HomeShift reads its target temperature and compares it to a threshold set for each thermostat mode. On the comfort side of the threshold it turns the auto start/stop off, so the climate keeps running; on the other side it turns it on: the scheduler's comfort and eco slots move the setpoint. It only acts in the thermostat modes that have a threshold, and only at a change (thermostat mode, setpoint crossing the threshold, start of Home Assistant): a switch flipped by hand stays so until the next change.\n\n{heat_pumps}",
+        "menu_options": {
+          "heat_pump_add": "Add a climate",
+          "heat_pump_pick": "Edit a climate",
+          "heat_pump_remove": "Remove climates",
+          "menu": "← Back to the main menu"
+        },
+        "menu_option_descriptions": {
+          "heat_pump_add": "Its auto start/stop switch and a setpoint threshold per thermostat mode",
+          "heat_pump_pick": "Change its thresholds",
+          "heat_pump_remove": "Stop driving them, without touching the entities"
+        }
+      },
+      "heat_pump_add": {
+        "title": "Add a climate",
+        "description": "Pick the climate's auto start/stop switch and a setpoint threshold for each thermostat mode it is driven in. Leave a mode empty to not drive it.\n\nWhile the climate's target temperature is on the **comfort side** of the threshold the auto start/stop is turned **off**: the climate keeps running. On the other side it is turned **on**: Versatile Thermostat may stop it. Comfort side: **at or above** the threshold in heating, **at or below** it in cooling and ventilation.",
+        "data": {
+          "switch": "Auto start/stop switch",
+          "climate": "Climate",
+          "threshold_heating": "Setpoint threshold — {tname_heating}",
+          "threshold_cooling": "Setpoint threshold — {tname_cooling}",
+          "threshold_ventilation": "Setpoint threshold — {tname_ventilation}"
+        },
+        "data_description": {
+          "switch": "The Versatile Thermostat (over_climate) switch whose id ends with _enable_auto_start_stop. Any switch is accepted.",
+          "climate": "The climate whose target temperature is read. Left empty, it is taken from the switch id (switch.salon_enable_auto_start_stop → climate.salon).",
+          "threshold_heating": "Runs while the setpoint is at or above this value. Empty: not driven in this mode.",
+          "threshold_cooling": "Runs while the setpoint is at or below this value. Empty: not driven in this mode.",
+          "threshold_ventilation": "Runs while the setpoint is at or below this value. Empty: not driven in this mode."
+        },
+        "submit": "Save and back to the list"
+      },
+      "heat_pump_pick": {
+        "title": "Edit a climate",
+        "description": "Pick the climate to edit.",
+        "data": {
+          "switch": "Climate"
+        },
+        "submit": "Next"
+      },
+      "heat_pump_edit": {
+        "title": "Edit a climate",
+        "description": "Climate: **{switch}**.\n\nLeave a thermostat mode empty to not drive it. While the climate's target temperature is on the **comfort side** of the threshold the auto start/stop is turned **off**: the climate keeps running. On the other side it is turned **on**: Versatile Thermostat may stop it. Comfort side: **at or above** the threshold in heating, **at or below** it in cooling and ventilation.",
+        "data": {
+          "climate": "Climate",
+          "threshold_heating": "Setpoint threshold — {tname_heating}",
+          "threshold_cooling": "Setpoint threshold — {tname_cooling}",
+          "threshold_ventilation": "Setpoint threshold — {tname_ventilation}"
+        },
+        "data_description": {
+          "climate": "The climate whose target temperature is read. Left empty, it is taken from the switch id (switch.salon_enable_auto_start_stop → climate.salon).",
+          "threshold_heating": "Runs while the setpoint is at or above this value. Empty: not driven in this mode.",
+          "threshold_cooling": "Runs while the setpoint is at or below this value. Empty: not driven in this mode.",
+          "threshold_ventilation": "Runs while the setpoint is at or below this value. Empty: not driven in this mode."
+        },
+        "submit": "Save and back to the list"
+      },
+      "heat_pump_remove": {
+        "title": "Remove climates",
+        "description": "HomeShift stops driving the ticked switches; they keep their current state.",
+        "data": {
+          "remove_switches": "Climates to remove"
+        },
+        "submit": "Remove and back to the list"
       }
     },
     "error": {
       "invalid_calendar": "The specified calendar entity does not exist",
-      "elevation_unreachable": "The sun does not reach this elevation every day of the year at your location. Pick a value inside the sun's yearly range — 0° is sunset, negative values are below the horizon."
+      "elevation_unreachable": "The sun does not reach this elevation every day of the year at your location. Pick a value inside the sun's yearly range — 0° is sunset, negative values are below the horizon.",
+      "no_climate": "No climate to read the setpoint from: pick one.",
+      "no_threshold": "Set a threshold for at least one thermostat mode."
     },
     "abort": {
       "already_configured": "HomeShift is already configured",
@@ -270,19 +341,21 @@
     "step": {
       "menu": {
         "title": "HomeShift options",
-        "description": "Changed, not saved yet: {pending}\n\nNothing is saved before “Save configuration”: closing this dialog with ✕ discards the changes.",
+        "description": "✎ marks a section changed and not saved yet.\n\nNothing is saved before “Save configuration”: closing this dialog with ✕ discards the changes.",
         "menu_options": {
           "calendars": "Calendars",
           "mapping": "Day modes",
           "schedulers": "Schedulers",
           "covers_menu": "Covers",
+          "heat_pumps": "Climate auto start/stop",
           "finalize": "Save configuration"
         },
         "menu_option_descriptions": {
-          "calendars": "{calendars}",
-          "mapping": "{modes}",
-          "schedulers": "{scheduler_count} schedulers assigned",
-          "covers_menu": "Managed covers: {cover_count} · closing tonight at {close_at}",
+          "calendars": "{calendars}{changed_calendars}",
+          "mapping": "{modes}{changed_mapping}",
+          "schedulers": "{scheduler_count} schedulers assigned{changed_schedulers}",
+          "covers_menu": "Managed covers: {cover_count} · closing tonight at {close_at}{changed_covers_menu}",
+          "heat_pumps": "{heat_pump_count} climate(s) · one setpoint threshold per thermostat mode{changed_heat_pumps}",
           "finalize": "Apply the changes and close this dialog."
         }
       },
@@ -296,9 +369,9 @@
           "menu": "← Back to the main menu"
         },
         "menu_option_descriptions": {
-          "cover_items": "{cover_count} cover(s) · add, edit or remove",
-          "daily_cover_schedule": "Opening by day mode · closing tonight at {close_at}",
-          "covers": "Threshold: {heat_threshold} °C · protected covers: {heat_cover_count}"
+          "cover_items": "{cover_count} cover(s) · add, edit or remove{changed_cover_items}",
+          "daily_cover_schedule": "Opening by day mode · closing tonight at {close_at}{changed_daily_cover_schedule}",
+          "covers": "Threshold: {heat_threshold} °C · protected covers: {heat_cover_count}{changed_covers}"
         }
       },
       "calendars": {
@@ -522,11 +595,80 @@
           "remove_covers": "Covers to remove"
         },
         "submit": "Save and back to the list"
+      },
+      "heat_pumps": {
+        "title": "Climate auto start/stop",
+        "description": "For each climate (a Versatile Thermostat over_climate thermostat: heat pump, air conditioner...), HomeShift reads its target temperature and compares it to a threshold set for each thermostat mode. On the comfort side of the threshold it turns the auto start/stop off, so the climate keeps running; on the other side it turns it on: the scheduler's comfort and eco slots move the setpoint. It only acts in the thermostat modes that have a threshold, and only at a change (thermostat mode, setpoint crossing the threshold, start of Home Assistant): a switch flipped by hand stays so until the next change.\n\n{heat_pumps}",
+        "menu_options": {
+          "heat_pump_add": "Add a climate",
+          "heat_pump_pick": "Edit a climate",
+          "heat_pump_remove": "Remove climates",
+          "menu": "← Back to the main menu"
+        },
+        "menu_option_descriptions": {
+          "heat_pump_add": "Its auto start/stop switch and a setpoint threshold per thermostat mode",
+          "heat_pump_pick": "Change its thresholds",
+          "heat_pump_remove": "Stop driving them, without touching the entities"
+        }
+      },
+      "heat_pump_add": {
+        "title": "Add a climate",
+        "description": "Pick the climate's auto start/stop switch and a setpoint threshold for each thermostat mode it is driven in. Leave a mode empty to not drive it.\n\nWhile the climate's target temperature is on the **comfort side** of the threshold the auto start/stop is turned **off**: the climate keeps running. On the other side it is turned **on**: Versatile Thermostat may stop it. Comfort side: **at or above** the threshold in heating, **at or below** it in cooling and ventilation.",
+        "data": {
+          "switch": "Auto start/stop switch",
+          "climate": "Climate",
+          "threshold_heating": "Setpoint threshold — {tname_heating}",
+          "threshold_cooling": "Setpoint threshold — {tname_cooling}",
+          "threshold_ventilation": "Setpoint threshold — {tname_ventilation}"
+        },
+        "data_description": {
+          "switch": "The Versatile Thermostat (over_climate) switch whose id ends with _enable_auto_start_stop. Any switch is accepted.",
+          "climate": "The climate whose target temperature is read. Left empty, it is taken from the switch id (switch.salon_enable_auto_start_stop → climate.salon).",
+          "threshold_heating": "Runs while the setpoint is at or above this value. Empty: not driven in this mode.",
+          "threshold_cooling": "Runs while the setpoint is at or below this value. Empty: not driven in this mode.",
+          "threshold_ventilation": "Runs while the setpoint is at or below this value. Empty: not driven in this mode."
+        },
+        "submit": "Save and back to the list"
+      },
+      "heat_pump_pick": {
+        "title": "Edit a climate",
+        "description": "Pick the climate to edit.",
+        "data": {
+          "switch": "Climate"
+        },
+        "submit": "Next"
+      },
+      "heat_pump_edit": {
+        "title": "Edit a climate",
+        "description": "Climate: **{switch}**.\n\nLeave a thermostat mode empty to not drive it. While the climate's target temperature is on the **comfort side** of the threshold the auto start/stop is turned **off**: the climate keeps running. On the other side it is turned **on**: Versatile Thermostat may stop it. Comfort side: **at or above** the threshold in heating, **at or below** it in cooling and ventilation.",
+        "data": {
+          "climate": "Climate",
+          "threshold_heating": "Setpoint threshold — {tname_heating}",
+          "threshold_cooling": "Setpoint threshold — {tname_cooling}",
+          "threshold_ventilation": "Setpoint threshold — {tname_ventilation}"
+        },
+        "data_description": {
+          "climate": "The climate whose target temperature is read. Left empty, it is taken from the switch id (switch.salon_enable_auto_start_stop → climate.salon).",
+          "threshold_heating": "Runs while the setpoint is at or above this value. Empty: not driven in this mode.",
+          "threshold_cooling": "Runs while the setpoint is at or below this value. Empty: not driven in this mode.",
+          "threshold_ventilation": "Runs while the setpoint is at or below this value. Empty: not driven in this mode."
+        },
+        "submit": "Save and back to the list"
+      },
+      "heat_pump_remove": {
+        "title": "Remove climates",
+        "description": "HomeShift stops driving the ticked switches; they keep their current state.",
+        "data": {
+          "remove_switches": "Climates to remove"
+        },
+        "submit": "Remove and back to the list"
       }
     },
     "error": {
       "invalid_calendar": "The specified calendar entity does not exist",
-      "elevation_unreachable": "The sun does not reach this elevation every day of the year at your location. Pick a value inside the sun's yearly range — 0° is sunset, negative values are below the horizon."
+      "elevation_unreachable": "The sun does not reach this elevation every day of the year at your location. Pick a value inside the sun's yearly range — 0° is sunset, negative values are below the horizon.",
+      "no_climate": "No climate to read the setpoint from: pick one.",
+      "no_threshold": "Set a threshold for at least one thermostat mode."
     }
   },
   "entity": {
@@ -561,6 +703,9 @@
       },
       "covers_inhibited": {
         "name": "Covers Inhibited"
+      },
+      "auto_start_stop": {
+        "name": "Climate auto start/stop"
       }
     },
     "binary_sensor": {

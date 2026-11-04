@@ -6,7 +6,8 @@ from datetime import datetime
 
 from homeassistant.components.sensor import DOMAIN as SENSOR_DOMAIN, SensorDeviceClass, SensorEntity
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import Event, HomeAssistant, callback
+from homeassistant.helpers.event import async_track_state_change_event
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import dt as dt_util
@@ -17,6 +18,7 @@ from .const import (
     CONF_DAILY_COVER_ITEMS,
     DEFAULT_DAILY_COVER_CLOSE_ELEVATION,
     DOMAIN,
+    SENSOR_AUTO_START_STOP,
     SENSOR_COVER_CLOSE_TIME,
     SENSOR_COVER_OPEN_TIME,
     SENSOR_COVERS_INHIBITED,
@@ -50,6 +52,10 @@ async def async_setup_entry(
         entities.append(HomeShiftCoversInhibitedSensor(coordinator, entry))
     else:
         async_remove_stale_entities(hass, entry, SENSOR_DOMAIN, [SENSOR_COVERS_INHIBITED])
+    if coordinator.auto_start_stop.configured:
+        entities.append(HomeShiftAutoStartStopSensor(coordinator, entry))
+    else:
+        async_remove_stale_entities(hass, entry, SENSOR_DOMAIN, [SENSOR_AUTO_START_STOP])
     async_add_entities(entities)
 
 
@@ -183,3 +189,45 @@ class HomeShiftCoversInhibitedSensor(CoordinatorEntity[HomeShiftCoordinator], Se
             "covers": {cover: until.isoformat() if until else None for cover, until in inhibited.items()},
             "managed_covers": self.coordinator.managed_covers,
         }
+
+
+class HomeShiftAutoStartStopSensor(CoordinatorEntity[HomeShiftCoordinator], SensorEntity):
+    """Count of the climates kept running by a comfort range.
+
+    Only registered when at least one auto start/stop switch is configured.
+    The `climates` attribute describes each one for the card: whether
+    HomeShift drives it in the current thermostat mode, whether it is in a
+    comfort range (auto start/stop turned off), the switch's actual state,
+    whether that differs from what HomeShift set (flipped by hand) and when
+    the comfort state next changes.
+    """
+
+    _attr_icon = "mdi:hvac"
+
+    def __init__(self, coordinator: HomeShiftCoordinator, entry: ConfigEntry) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        setup_entity(self, entry, SENSOR_DOMAIN, SENSOR_AUTO_START_STOP)
+        self._entry = entry
+
+    async def async_added_to_hass(self) -> None:
+        """Follow the switches too, so a flip by hand shows without waiting for a poll."""
+        await super().async_added_to_hass()
+        switches = [*self.coordinator.auto_start_stop.switches, *self.coordinator.auto_start_stop.climates]
+        if switches:
+
+            @callback
+            def _on_switch_change(_event: Event) -> None:
+                self.async_write_ha_state()
+
+            self.async_on_remove(async_track_state_change_event(self.hass, switches, _on_switch_change))
+
+    @property
+    def native_value(self) -> int:
+        """Return how many climates are in a comfort range right now."""
+        return sum(1 for item in self.coordinator.auto_start_stop.status() if item["comfort"])
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        """Describe each climate."""
+        return {"climates": self.coordinator.auto_start_stop.status()}

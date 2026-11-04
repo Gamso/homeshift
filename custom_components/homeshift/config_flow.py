@@ -12,7 +12,6 @@ from homeassistant import config_entries
 from homeassistant.core import callback
 from homeassistant.data_entry_flow import section
 from homeassistant.helpers import selector
-from homeassistant.helpers.translation import async_get_translations
 from homeassistant.util import dt as dt_util
 
 from .const import (
@@ -58,13 +57,21 @@ from .const import (
     DEFAULT_SUNRISE_EARLIEST,
     CONF_CLOSE_WHEN_WINDOW_SHUTS,
     DEFAULT_CLOSE_WHEN_WINDOW_SHUTS,
+    CONF_AUTO_START_STOP_ITEMS,
+    CONF_ITEM_CLIMATE,
+    CONF_ITEM_SETPOINT_THRESHOLDS,
+    CONF_ITEM_SWITCH,
     LOCALIZED_DEFAULTS,
     get_localized_defaults,
     parse_key_value_map,
 )
+from .auto_start_stop import default_climate, heat_pump_name
 from .cover_manager import sun_time_at_elevation
 
 _LOGGER = logging.getLogger(__name__)
+
+# Shown after the summary of a menu entry whose section has unsaved changes.
+PENDING_MARK = " ✎"
 
 # Translation key of the per-mode opening time selector ('sunrise', 'skip').
 DAILY_OPEN_TIME_SELECTOR = "daily_open_time"
@@ -729,8 +736,153 @@ def _apply_cover_item_remove(user_input: dict[str, Any], data: dict[str, Any]) -
     return [item for item in _cover_items(data) if item[CONF_ITEM_COVER] not in removed]
 
 
+# ---------------------------------------------------------------------------
+# Climate auto start/stop
+# ---------------------------------------------------------------------------
+
+
+def _heat_pump_items(data: dict[str, Any]) -> list[dict[str, Any]]:
+    """Return the configured auto start/stop items (those naming a switch)."""
+    raw = data.get(CONF_AUTO_START_STOP_ITEMS, []) or []
+    return [item for item in raw if isinstance(item, dict) and item.get(CONF_ITEM_SWITCH)]
+
+
+def _threshold_field(mode_key: str) -> str:
+    """Form field holding the setpoint threshold of one thermostat mode."""
+    return f"threshold_{mode_key.lower()}"
+
+
+def _driven_thermostat_modes(data: dict[str, Any]) -> dict[str, str]:
+    """Return the thermostat modes a threshold can be set for (key to display name): all but "off"."""
+    modes = _parse_thermostat_map(data.get(CONF_THERMOSTAT_MODE_MAP, DEFAULT_THERMOSTAT_MODE_MAP))
+    return {key: display for key, display in modes.items() if key.lower() != "off"}
+
+
+def _thermostat_placeholders(data: dict[str, Any]) -> dict[str, str]:
+    """Return each thermostat mode's display name, for the threshold labels (tname_<key>)."""
+    return {f"tname_{key.lower()}": display for key, display in _driven_thermostat_modes(data).items()}
+
+
+def _heat_pumps_summary(data: dict[str, Any], name: Callable[[str], str] = str) -> str:
+    """Return one line per configured climate with the threshold of each thermostat mode
+    it is driven in, for the menu text ("—" when there is none).
+    """
+    items = _heat_pump_items(data)
+    if not items:
+        return "—"
+    modes = _driven_thermostat_modes(data)
+    lines = []
+    for item in items:
+        thresholds = item.get(CONF_ITEM_SETPOINT_THRESHOLDS) or {}
+        limits = []
+        for key, display in modes.items():
+            if thresholds.get(key) is not None:
+                sign = "≥" if key.lower() == "heating" else "≤"
+                limits.append(f"{display} {sign} {float(thresholds[key]):g} °C")
+        lines.append(f"- **{heat_pump_name(name(item[CONF_ITEM_SWITCH]))}** · {', '.join(limits) or '—'}")
+    return "\n".join(lines)
+
+
+def _heat_pumps_menu_options(data: dict[str, Any]) -> list[str]:
+    """Return the climate menu options (edit and remove once there's one)."""
+    options = ["heat_pump_add"]
+    if _heat_pump_items(data):
+        options += ["heat_pump_pick", "heat_pump_remove"]
+    options.append("menu")
+    return options
+
+
+def _heat_pump_schema(data: dict[str, Any], item: dict[str, Any] | None, *, with_switch: bool) -> vol.Schema:
+    """Build the add (with_switch) or edit form of one climate, prefilled from `item`.
+
+    One optional threshold per thermostat mode (empty: not driven in that
+    mode), named after the mode's stable key.
+    """
+    item = item or {}
+    thresholds = item.get(CONF_ITEM_SETPOINT_THRESHOLDS) or {}
+    fields: dict = {}
+    if with_switch:
+        fields[_entity_marker(CONF_ITEM_SWITCH, item.get(CONF_ITEM_SWITCH), required=True)] = (
+            selector.EntitySelector(selector.EntitySelectorConfig(domain="switch"))
+        )
+    fields[_entity_marker(CONF_ITEM_CLIMATE, item.get(CONF_ITEM_CLIMATE))] = selector.EntitySelector(
+        selector.EntitySelectorConfig(domain="climate")
+    )
+    for key in _driven_thermostat_modes(data):
+        value = thresholds.get(key)
+        fields[
+            vol.Optional(
+                _threshold_field(key),
+                description={"suggested_value": value} if value is not None else None,
+            )
+        ] = selector.NumberSelector(
+            selector.NumberSelectorConfig(
+                min=5, max=35, step=0.5, unit_of_measurement="°C", mode=selector.NumberSelectorMode.BOX
+            )
+        )
+    return vol.Schema(fields)
+
+
+def _validate_heat_pump(user_input: dict[str, Any], data: dict[str, Any], switch: str | None = None) -> dict[str, str]:
+    """Return the form errors: no threshold at all, no climate to read the setpoint from."""
+    errors: dict[str, str] = {}
+    if all(user_input.get(_threshold_field(key)) is None for key in _driven_thermostat_modes(data)):
+        errors[_threshold_field(next(iter(_driven_thermostat_modes(data)), "heating"))] = "no_threshold"
+    if not (user_input.get(CONF_ITEM_CLIMATE) or default_climate(switch or user_input.get(CONF_ITEM_SWITCH) or "")):
+        errors[CONF_ITEM_CLIMATE] = "no_climate"
+    return errors
+
+
+def _apply_heat_pump(user_input: dict[str, Any], switch: str, data: dict[str, Any]) -> list[dict[str, Any]]:
+    """Return the items with this switch's settings added, or updated in place."""
+    thresholds = {
+        key: float(user_input[_threshold_field(key)])
+        for key in _driven_thermostat_modes(data)
+        if user_input.get(_threshold_field(key)) is not None
+    }
+    new = {
+        CONF_ITEM_SWITCH: switch,
+        CONF_ITEM_CLIMATE: user_input.get(CONF_ITEM_CLIMATE) or default_climate(switch),
+        CONF_ITEM_SETPOINT_THRESHOLDS: thresholds,
+    }
+    items = [dict(item) for item in _heat_pump_items(data)]
+    for index, item in enumerate(items):
+        if item[CONF_ITEM_SWITCH] == switch:
+            items[index] = new
+            return items
+    items.append(new)
+    return items
+
+
+def _configured_heat_pump_options(hass, data: dict[str, Any]) -> list[selector.SelectOptionDict]:
+    """Return one option per configured switch, labelled with its friendly name."""
+    return [
+        selector.SelectOptionDict(value=item[CONF_ITEM_SWITCH], label=_entity_name(hass, item[CONF_ITEM_SWITCH]))
+        for item in _heat_pump_items(data)
+    ]
+
+
+def _heat_pump_pick_schema(hass, data: dict[str, Any], *, field: str, multiple: bool) -> vol.Schema:
+    """Build the form choosing configured switches (one to edit, several to remove)."""
+    config = selector.SelectSelectorConfig(
+        options=_configured_heat_pump_options(hass, data),
+        multiple=multiple,
+        mode=selector.SelectSelectorMode.LIST,
+    )
+    marker = vol.Optional(field, default=[]) if multiple else vol.Required(field)
+    return vol.Schema({marker: selector.SelectSelector(config)})
+
+
 # The sections of the flow, by step id, in menu order.
-_PARTS = ("calendars", "mapping", "schedulers", "cover_items", "daily_cover_schedule", "covers")
+_PARTS = (
+    "calendars",
+    "mapping",
+    "schedulers",
+    "cover_items",
+    "daily_cover_schedule",
+    "covers",
+    "heat_pumps",
+)
 
 # What the cover forms prefill when nothing is stored yet: submitting them
 # untouched writes these values, which is no change.
@@ -785,6 +937,8 @@ class _HomeShiftMenuSteps:
     _touched: dict[str, set[str]]
     # The cover being edited between cover_item_pick and cover_item_edit.
     _editing_cover: str
+    # The switch being edited between heat_pump_pick and heat_pump_edit.
+    _editing_switch: str
     # Translation category of the flow: "config" or "options".
     _translation_category: str
 
@@ -815,24 +969,21 @@ class _HomeShiftMenuSteps:
             )
         ]
 
-    async def _part_labels(self) -> dict[str, str]:
-        """Return each section's menu label, in the instance language."""
-        category = self._translation_category
-        translations = await async_get_translations(
-            self.hass, self.hass.config.language, category, [DOMAIN]
-        )
-        labels: dict[str, str] = {}
-        for menu in ("menu", "covers_menu"):
-            prefix = f"component.{DOMAIN}.{category}.step.{menu}.menu_options."
-            for part in _PARTS:
-                if label := translations.get(prefix + part):
-                    labels[part] = label
-        return labels
+    def _menu_placeholders(self) -> dict[str, str]:
+        """Return the summaries shown in the main menu and the covers menu.
 
-    async def _menu_placeholders(self) -> dict[str, str]:
-        """Return the summaries shown in the main menu and the covers menu."""
+        A section changed and not saved yet gets a marker after its summary
+        (changed_<section>). The marker, unlike a section name, does not
+        depend on a language: the flow cannot know the language of the
+        person's profile, only that of the instance, so a translated name
+        would not match the rest of the dialog.
+        """
         data = self._effective_data()
-        labels = await self._part_labels()
+        pending = set(self._pending_parts())
+        changed = {f"changed_{part}": PENDING_MARK if part in pending else "" for part in _PARTS}
+        changed["changed_covers_menu"] = (
+            PENDING_MARK if pending & {"cover_items", "daily_cover_schedule", "covers"} else ""
+        )
         modes = _parse_day_mode_map(data.get(CONF_DAY_MODE_MAP, DEFAULT_DAY_MODE_MAP))
         schedulers: dict[str, list] = data.get(CONF_SCHEDULERS_PER_MODE, {}) or {}
         calendars = (data.get(CONF_CALENDAR_ENTITY), data.get(CONF_HOLIDAY_CALENDAR))
@@ -840,8 +991,7 @@ class _HomeShiftMenuSteps:
             threshold = f"{float(data.get(CONF_COVER_TEMP_THRESHOLD, DEFAULT_COVER_TEMP_THRESHOLD)):g}"
         except (TypeError, ValueError):
             threshold = "—"
-        return {
-            "pending": ", ".join(labels.get(part, part) for part in self._pending_parts()) or "—",
+        return changed | {
             "calendars": " · ".join(_entity_name(self.hass, cal) for cal in calendars if cal) or "—",
             "modes": ", ".join(modes.values()),
             "scheduler_count": str(sum(len(value or []) for value in schedulers.values())),
@@ -849,6 +999,7 @@ class _HomeShiftMenuSteps:
             "close_at": _close_time_preview(self.hass, data)["close_at_elevation"],
             "heat_cover_count": str(len(data.get(CONF_COVER_ENTITIES) or [])),
             "heat_threshold": threshold,
+            "heat_pump_count": str(len(_heat_pump_items(data))),
         }
 
     # -- menus -------------------------------------------------------------
@@ -858,13 +1009,13 @@ class _HomeShiftMenuSteps:
         _user_input: dict[str, Any] | None = None,
     ) -> config_entries.ConfigFlowResult:
         """Show the configuration menu."""
-        menu_options = ["calendars", "mapping", "schedulers", "covers_menu"]
+        menu_options = ["calendars", "mapping", "schedulers", "covers_menu", "heat_pumps"]
         if self._is_config_complete():
             menu_options.append("finalize")
         return self.async_show_menu(
             step_id="menu",
             menu_options=menu_options,
-            description_placeholders=await self._menu_placeholders(),
+            description_placeholders=self._menu_placeholders(),
         )
 
     async def async_step_covers_menu(
@@ -875,7 +1026,7 @@ class _HomeShiftMenuSteps:
         return self.async_show_menu(
             step_id="covers_menu",
             menu_options=["cover_items", "daily_cover_schedule", "covers", "menu"],
-            description_placeholders=await self._menu_placeholders(),
+            description_placeholders=self._menu_placeholders(),
         )
 
     # -- calendars ---------------------------------------------------------
@@ -1075,6 +1226,111 @@ class _HomeShiftMenuSteps:
         )
 
 
+    # -- climate auto start/stop ----------------------------------------------
+
+    async def async_step_heat_pumps(
+        self,
+        _user_input: dict[str, Any] | None = None,
+    ) -> config_entries.ConfigFlowResult:
+        """Show the climate menu (add, edit, remove, or go back)."""
+        return self.async_show_menu(
+            step_id="heat_pumps",
+            menu_options=_heat_pumps_menu_options(self._data),
+            description_placeholders={
+                "heat_pumps": _heat_pumps_summary(
+                    self._effective_data(), lambda entity_id: _entity_name(self.hass, entity_id)
+                )
+            },
+        )
+
+    async def _async_heat_pump_form(
+        self, step_id: str, user_input: dict[str, Any] | None, switch: str | None
+    ) -> config_entries.ConfigFlowResult:
+        """Show, validate and store the add (switch None) or edit form of one climate."""
+        data = self._effective_data()
+        errors: dict[str, str] = {}
+        item = next((item for item in _heat_pump_items(data) if item[CONF_ITEM_SWITCH] == switch), None)
+        if user_input is not None:
+            errors = _validate_heat_pump(user_input, data, switch)
+            if not errors:
+                self._store(
+                    "heat_pumps",
+                    {
+                        CONF_AUTO_START_STOP_ITEMS: _apply_heat_pump(
+                            user_input, switch or user_input[CONF_ITEM_SWITCH], data
+                        )
+                    },
+                )
+                return await self.async_step_heat_pumps()
+            # Redisplay what was typed, so the rejected range is there to correct.
+            item = {
+                CONF_ITEM_SWITCH: switch or user_input.get(CONF_ITEM_SWITCH),
+                CONF_ITEM_CLIMATE: user_input.get(CONF_ITEM_CLIMATE),
+                CONF_ITEM_SETPOINT_THRESHOLDS: {
+                    key: user_input.get(_threshold_field(key)) for key in _driven_thermostat_modes(data)
+                },
+            }
+        placeholders = _thermostat_placeholders(data)
+        if switch:
+            placeholders["switch"] = _entity_name(self.hass, switch)
+        return self.async_show_form(
+            step_id=step_id,
+            data_schema=_heat_pump_schema(data, item, with_switch=switch is None),
+            description_placeholders=placeholders,
+            errors=errors,
+        )
+
+    async def async_step_heat_pump_add(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> config_entries.ConfigFlowResult:
+        """Add one switch — or update one already configured."""
+        return await self._async_heat_pump_form("heat_pump_add", user_input, None)
+
+    async def async_step_heat_pump_pick(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> config_entries.ConfigFlowResult:
+        """Choose the configured switch to edit."""
+        if user_input is not None:
+            self._editing_switch = user_input[CONF_ITEM_SWITCH]
+            return await self.async_step_heat_pump_edit()
+        return self.async_show_form(
+            step_id="heat_pump_pick",
+            data_schema=_heat_pump_pick_schema(self.hass, self._data, field=CONF_ITEM_SWITCH, multiple=False),
+        )
+
+    async def async_step_heat_pump_edit(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> config_entries.ConfigFlowResult:
+        """Change the thermostat modes and comfort ranges of the switch being edited."""
+        return await self._async_heat_pump_form("heat_pump_edit", user_input, self._editing_switch)
+
+    async def async_step_heat_pump_remove(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> config_entries.ConfigFlowResult:
+        """Stop driving some switches (the switches themselves are left as they are)."""
+        if user_input is not None:
+            removed = user_input.get("remove_switches", []) or []
+            if isinstance(removed, str):
+                removed = [removed]
+            self._store(
+                "heat_pumps",
+                {
+                    CONF_AUTO_START_STOP_ITEMS: [
+                        item for item in _heat_pump_items(self._data) if item[CONF_ITEM_SWITCH] not in removed
+                    ]
+                },
+            )
+            return await self.async_step_heat_pumps()
+        return self.async_show_form(
+            step_id="heat_pump_remove",
+            data_schema=_heat_pump_pick_schema(self.hass, self._data, field="remove_switches", multiple=True),
+        )
+
+
 # ---------------------------------------------------------------------------
 # Config flow (initial setup) – menu-based
 # ---------------------------------------------------------------------------
@@ -1092,6 +1348,7 @@ class HomeShiftConfigFlow(_HomeShiftMenuSteps, config_entries.ConfigFlow, domain
         self._initial: dict[str, Any] = {}
         self._touched: dict[str, set[str]] = {}
         self._editing_cover = ""
+        self._editing_switch = ""
 
     def is_matching(self, _other_flow: Self) -> bool:
         """Return True if another in-progress flow matches this one (not used)."""
@@ -1142,6 +1399,7 @@ class HomeShiftOptionsFlow(_HomeShiftMenuSteps, config_entries.OptionsFlow):
         self._initial: dict[str, Any] = {}
         self._touched: dict[str, set[str]] = {}
         self._editing_cover = ""
+        self._editing_switch = ""
 
     async def async_step_init(
         self,

@@ -54,6 +54,7 @@ class HomeShiftSelect(CoordinatorEntity[HomeShiftCoordinator], SelectEntity):
             "option_map": self.coordinator.day_mode_map,
             "option_keys": list(self.coordinator.day_mode_map.keys()),
             "current_key": self.coordinator.day_mode_key,
+            "calendar_error": self.coordinator.calendar_error,
         }
 
     def select_option(self, option: str) -> None:

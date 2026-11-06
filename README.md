@@ -2,7 +2,11 @@
 
 **English** · [Français](README.fr.md)
 
+[![Tests](https://github.com/Gamso/homeshift/actions/workflows/tests.yml/badge.svg)](https://github.com/Gamso/homeshift/actions/workflows/tests.yml)
+[![Release](https://img.shields.io/github/v/release/Gamso/homeshift)](https://github.com/Gamso/homeshift/releases/latest)
+[![Home Assistant](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2FGamso%2Fhomeshift%2Fmain%2Fhacs.json&query=%24.homeassistant&prefix=%E2%89%A5%20&label=Home%20Assistant&color=41BDF5)](https://www.home-assistant.io/)
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/hacs/integration)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
 A Home Assistant integration that runs your home from your calendar: it picks the **day mode** (Home, Work, Remote, Away) from your work and holiday calendars, switches the **schedules** of that mode on, drives the **covers** and the **climates' auto start/stop**, and ships a **dashboard card** to see and control it all.
 

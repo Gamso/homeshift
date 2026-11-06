@@ -2,7 +2,11 @@
 
 [English](README.md) · **Français**
 
+[![Tests](https://github.com/Gamso/homeshift/actions/workflows/tests.yml/badge.svg)](https://github.com/Gamso/homeshift/actions/workflows/tests.yml)
+[![Release](https://img.shields.io/github/v/release/Gamso/homeshift)](https://github.com/Gamso/homeshift/releases/latest)
+[![Home Assistant](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2FGamso%2Fhomeshift%2Fmain%2Fhacs.json&query=%24.homeassistant&prefix=%E2%89%A5%20&label=Home%20Assistant&color=41BDF5)](https://www.home-assistant.io/)
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/hacs/integration)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
 Une intégration Home Assistant qui pilote la maison depuis votre agenda : elle choisit le **mode du jour** (Maison, Travail, Télétravail, Absence) à partir de vos calendriers de travail et de jours fériés, active les **plannings** de ce mode, pilote les **volets** et l'**auto start/stop des équipements**, et fournit une **carte de tableau de bord** pour tout voir et tout commander.
 

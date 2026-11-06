@@ -19,19 +19,19 @@ HomeShift looks at the event active now in your work calendar, and at your holid
 
 | Priority | Condition | Mode |
 | --- | --- | --- |
-| 1 | The active calendar event matches the **Calendar events** map | The mapped mode (e.g. `Remote`) |
+| 1 | The active calendar event contains a **Calendar events** keyword | The mapped mode (e.g. `Remote`) |
 | 2 | A timed event that matches the map starts within the [early switch](#early-switch) | The mapped mode, ahead of time |
 | 3 | Today is Saturday or Sunday | The **Weekend** mode |
 | 4 | Today is a public holiday | The **Public holiday** mode |
 | 5 | Nothing of the above | The **Working day** mode (e.g. `Work`) |
 
-The **Calendar events** map links keywords of event titles to modes: `Vacation:home, Remote:remote` by default (`Vacances:home, Télétravail:remote` on a French instance). A keyword matches anywhere in the title, whatever the case.
+The **Calendar events** keywords link words of event titles to modes: `Vacation` gives *Home* and `Remote` gives *Remote* by default (`Vacances` and `Télétravail` on a French instance). A keyword matches anywhere in the title, whatever the case.
 
 `sensor.homeshift_next_mode` and `sensor.homeshift_next_mode_at` tell the next mode and when it starts, and a timer switches the mode at that minute rather than at the next poll.
 
 ## Settings
 
-Set under **Configure → Calendars** and **Configure → Day modes**, see [Configuration](configuration.md) for how the dialog works.
+Set when adding HomeShift, then under **Configure → Calendars**, **Configure → Day mode** and **Configure → Display names**, see [Configuration](configuration.md) for how the dialog works.
 
 ### Calendars
 
@@ -44,21 +44,21 @@ Set under **Configure → Calendars** and **Configure → Day modes**, see [Conf
 
 ### Mode rules
 
-![The Day modes page: mode rules](../images/options/en/03-day-modes.png)
+![The Day mode page: mode rules and calendar keywords](../images/options/en/03-day-modes.png)
 
 | Field | Default | What it does |
 | --- | --- | --- |
 | **Working day** | `Work` | Mode of a regular weekday with no event |
 | **Weekend** | `Home` | Mode of Saturdays and Sundays |
 | **Public holiday** | `Home` | Mode of public holidays |
-| **Mode that pauses the automation** | `Away` | When *you* pick this mode, the calendar stops changing it, see [The Away mode](#the-away-mode) |
-| **Calendar events** | `Vacation:home, Remote:remote` | Event title keywords and the mode key they give (`Vacances:home, Télétravail:remote` on a French instance) |
+| **Away mode (pauses the automation)** | `Away` | When *you* pick this mode, the calendar stops changing it, see [The Away mode](#the-away-mode) |
+| **Keywords for** each mode | `Vacation` for Home, `Remote` for Remote | Words of event titles that switch the day to that mode, separated by commas (`Vacances`, `Télétravail` on a French instance). A keyword given for two modes is refused. |
 
 ### Mode names
 
-![The Day modes page: display names](../images/options/en/04-day-modes-names.png)
+![The Display names page](../images/options/en/04-day-modes-names.png)
 
-**Day mode display names** and **Thermostat mode names**: the name of each mode. The four day modes (keys `home`, `work`, `remote`, `away`) and the four thermostat modes (`off`, `heating`, `cooling`, `ventilation`) can be renamed, not added or removed. The thermostat mode names are also the [scheduler tags](schedulers.md#thermostat-tags).
+Under **Configure → Display names**: the name of each **day mode** and of each **thermostat mode**. The four day modes (keys `home`, `work`, `remote`, `away`) and the four thermostat modes (`off`, `heating`, `cooling`, `ventilation`) can be renamed, not added or removed. The thermostat mode names are also the [scheduler tags](schedulers.md#thermostat-tags).
 
 The **override duration** and the **early switch** are not in this dialog: set them from their entities (`number.homeshift_override_duration`, `number.homeshift_early_switch`) or from the [card](card.md). See [Early switch](#early-switch) and [Changing the mode by hand](#changing-the-mode-by-hand).
 

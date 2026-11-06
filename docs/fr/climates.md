@@ -24,9 +24,9 @@ HomeShift pilote cet interrupteur selon la **température de consigne** du clima
 | --- | --- |
 | **Interrupteur d'auto start/stop** | L'interrupteur du thermostat, dont l'identifiant se termine par `_enable_auto_start_stop`. Tout autre interrupteur est accepté. |
 | **Climate** | Le climate dont on lit la température de consigne. Vide, il est déduit de l'interrupteur (`switch.salon_enable_auto_start_stop` donne `climate.salon`). |
-| **Seuil de consigne**, un champ par mode thermostat | En °C. Laissez un mode vide et HomeShift ne pilote pas l'interrupteur dans ce mode. Il en faut au moins un. |
+| Un seuil par mode thermostat | En °C, avec sa règle dans le libellé : *Chauffage : tourne si la consigne est supérieure ou égale à*, *Climatisation* et *Ventilation : tourne si la consigne est inférieure ou égale à*. Laissez un mode vide et HomeShift ne pilote pas l'interrupteur dans ce mode. Il en faut au moins un. |
 
-Chaque équipement a ses propres seuils. **Modifier un équipement** les change, **Retirer des équipements** arrête de piloter les interrupteurs (ils gardent leur état).
+Chaque équipement a ses propres seuils. **Modifier un équipement** les change et affiche la consigne actuelle du climate, **Retirer des équipements** arrête de piloter les interrupteurs (ils gardent leur état).
 
 ### Exemple
 

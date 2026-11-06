@@ -47,10 +47,10 @@ Once installed and Home Assistant restarted:
 Or by hand:
 
 1. **Settings → Devices & Services → Add Integration → HomeShift**
-2. Pick your work calendar and your holiday calendar, then **Save configuration**
+2. Two steps: pick your work and holiday calendars, then check which mode each kind of day gets, and **Finish**
 3. Add the **HomeShift** card to a dashboard (or `type: custom:homeshift-card`)
 
-HomeShift starts at once: it reads the calendar every 5 minutes (and on time for the changes it can predict) and sets `select.homeshift_day_mode`. Everything else (mode names, schedules, covers, climates) is set later from **Configure**, see [Configuration](docs/en/configuration.md).
+HomeShift starts at once: it reads the calendar every 5 minutes (and on time for the changes it can predict) and sets `select.homeshift_day_mode`. Everything else (schedules, covers, climates, display names) is set later from **Configure**, see [Configuration](docs/en/configuration.md).
 
 ## Documentation
 

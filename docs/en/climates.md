@@ -24,9 +24,9 @@ HomeShift drives that switch from the climate's **target temperature**. For each
 | --- | --- |
 | **Auto start/stop switch** | The thermostat's switch, whose id ends with `_enable_auto_start_stop`. Any switch is accepted. |
 | **Climate** | The climate whose target temperature is read. Left empty, it is deduced from the switch (`switch.salon_enable_auto_start_stop` is `climate.salon`). |
-| **Setpoint threshold**, one field per thermostat mode | In °C. Leave a mode empty and HomeShift does not drive the switch in it. At least one is needed. |
+| One threshold per thermostat mode | In °C, labelled with its rule: *Heating: runs while the setpoint is at or above*, *Cooling* and *Ventilation: runs while the setpoint is at or below*. Leave a mode empty and HomeShift does not drive the switch in it. At least one is needed. |
 
-Each climate has its own thresholds. **Edit a climate** changes them, **Remove climates** stops driving the switches (they keep their state).
+Each climate has its own thresholds. **Edit a climate** changes them and shows the climate's current setpoint, **Remove climates** stops driving the switches (they keep their state).
 
 ### Example
 

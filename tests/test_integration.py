@@ -283,11 +283,11 @@ async def test_an_unavailable_calendar_keeps_the_mode(hass: HomeAssistant, freez
 # ---------------------------------------------------------------------------
 
 
-async def test_french_setup_without_the_mapping_step_drives_the_schedulers(hass: HomeAssistant, freezer) -> None:
-    """Calendars, then Schedulers, then Save — the Mapping step never opened.
+async def test_french_setup_then_schedules_drive_the_schedulers(hass: HomeAssistant, freezer) -> None:
+    """The two-step setup (calendars, day mode), then the schedules from Configure.
 
-    The form used to offer Home/Work/... while the coordinator ran on
-    Maison/Travail, so the work-day scheduler was never turned on.
+    The schedules are stored by mode key, so a French instance running on
+    Maison/Travail turns the work-day schedule on.
     """
     from homeassistant.data_entry_flow import FlowResultType
     from pytest_homeassistant_custom_component.common import async_mock_service
@@ -302,15 +302,23 @@ async def test_french_setup_without_the_mapping_step_drives_the_schedulers(hass:
     turn_off = async_mock_service(hass, "switch", "turn_off")
 
     flow = await hass.config_entries.flow.async_init(DOMAIN, context={"source": "user"})
-    flow = await hass.config_entries.flow.async_configure(flow["flow_id"], {"next_step_id": "calendars"})
+    assert flow["step_id"] == "calendars"
     flow = await hass.config_entries.flow.async_configure(
         flow["flow_id"], {CONF_CALENDAR_ENTITY: WORK_CALENDAR, CONF_HOLIDAY_CALENDAR: HOLIDAY_CALENDAR}
     )
-    flow = await hass.config_entries.flow.async_configure(flow["flow_id"], {"next_step_id": "schedulers"})
+    assert flow["step_id"] == "mapping"
+    flow = await hass.config_entries.flow.async_configure(flow["flow_id"], {"defaults_section": {}, "keywords_section": {}})
+    assert flow["type"] is FlowResultType.CREATE_ENTRY
+    await hass.async_block_till_done()
+    entry = hass.config_entries.async_entries(DOMAIN)[0]
+
+    options = hass.config_entries.options
+    flow = await options.async_init(entry.entry_id)
+    flow = await options.async_configure(flow["flow_id"], {"next_step_id": "schedulers"})
     sections = [str(marker) for marker in flow["data_schema"].schema]
     assert sections == ["mode_home", "mode_work", "mode_remote", "mode_away"]
     assert flow["description_placeholders"]["name_work"] == "Travail"
-    flow = await hass.config_entries.flow.async_configure(
+    flow = await options.async_configure(
         flow["flow_id"],
         {
             "mode_home": {"schedulers_home": ["switch.schedule_maison"]},
@@ -319,9 +327,12 @@ async def test_french_setup_without_the_mapping_step_drives_the_schedulers(hass:
             "mode_away": {},
         },
     )
-    flow = await hass.config_entries.flow.async_configure(flow["flow_id"], {"next_step_id": "finalize"})
+    assert flow["menu_options"][0] == "finalize"
+    flow = await options.async_configure(flow["flow_id"], {"next_step_id": "finalize"})
     assert flow["type"] is FlowResultType.CREATE_ENTRY
     assert flow["data"]["schedulers_per_mode"]["work"] == ["switch.schedule_bureau"]
+    await hass.async_block_till_done()
+    await hass.services.async_call(DOMAIN, "refresh_schedulers", blocking=True)
     await hass.async_block_till_done()
 
     assert hass.states.get("select.homeshift_day_mode").state == "Travail"
@@ -357,7 +368,14 @@ async def test_options_menu_marks_the_unsaved_sections(hass: HomeAssistant, free
     # Pages submitted untouched, on an entry that never stored their values,
     # write the form defaults: no change to report.
     for step, untouched in (
-        ("mapping", {"defaults_section": {}, "day_modes_section": {}, "thermostat_section": {}}),
+        (
+            "mapping",
+            {
+                "defaults_section": {},
+                "keywords_section": {"event_keywords_home": "Vacances", "event_keywords_remote": "Télétravail"},
+            },
+        ),
+        ("names", {"day_modes_section": {}, "thermostat_section": {}}),
         ("schedulers", {"mode_home": {}, "mode_work": {}, "mode_remote": {}, "mode_away": {}}),
     ):
         flow = await options.async_configure(flow["flow_id"], {"next_step_id": step})

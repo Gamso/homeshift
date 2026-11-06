@@ -47,10 +47,10 @@ Une fois installée et Home Assistant redémarré :
 Ou à la main :
 
 1. **Paramètres → Appareils et services → Ajouter une intégration → HomeShift**
-2. Choisissez votre calendrier de travail et votre calendrier des jours fériés, puis **Enregistrer la configuration**
+2. Deux étapes : choisissez vos calendriers de travail et des jours fériés, puis vérifiez le mode donné à chaque type de jour, et **Terminer**
 3. Ajoutez la carte **HomeShift** à un tableau de bord (ou `type: custom:homeshift-card`)
 
-HomeShift démarre aussitôt : il lit le calendrier toutes les 5 minutes (et à l'heure pile pour les changements qu'il peut prévoir) et règle `select.homeshift_day_mode`. Tout le reste (noms des modes, plannings, volets, équipements) se règle ensuite depuis **Configurer**, voir [Configuration](docs/fr/configuration.md).
+HomeShift démarre aussitôt : il lit le calendrier toutes les 5 minutes (et à l'heure pile pour les changements qu'il peut prévoir) et règle `select.homeshift_day_mode`. Tout le reste (plannings, volets, équipements, noms affichés) se règle ensuite depuis **Configurer**, voir [Configuration](docs/fr/configuration.md).
 
 ## Documentation
 

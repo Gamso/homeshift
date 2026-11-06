@@ -107,6 +107,10 @@ CONF_ITEM_WINDOW_SENSOR = "window_sensor"
 # evening close presses this button instead of sending close_cover, so a
 # cover that must not close fully stops at its recorded favourite position.
 CONF_ITEM_MY_BUTTON = "my_button"
+# Form-only toggles of a cover: opened and closed every day (it is then in
+# CONF_DAILY_COVER_ITEMS), protected from heat (it is then in CONF_COVER_ENTITIES).
+CONF_ITEM_DAILY = "daily"
+CONF_ITEM_HEAT = "heat_protection"
 # Window-sensor states that mean "the window is open" — a binary_sensor uses
 # 'on'; 'open' covers a field pointed at a door/window entity instead.
 WINDOW_OPEN_STATES = frozenset({"on", "open"})

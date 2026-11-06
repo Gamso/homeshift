@@ -6,9 +6,9 @@ HomeShift opens and closes covers every day without any Scheduler entity, keeps 
 
 | Menu | What it sets |
 | --- | --- |
-| **Managed covers** | The covers opened and closed every day, one at a time, each with an optional window sensor and My button. See [The covers](#the-covers) |
+| **Cover list** | The covers, one at a time: opened and closed every day, protected from heat, or both, each with an optional window sensor and My button. See [The covers](#the-covers) |
 | **Opening and closing times** | When they open (per day mode) and close (sun elevation). See [Daily schedule](#daily-schedule) |
-| **Heat protection** | The covers closed against the heat, and when. See [Heat protection](#heat-protection) |
+| **Heat protection** | When the covers protected from heat close. See [Heat protection](#heat-protection) |
 
 ![The Covers menu](../images/options/en/06-covers-menu.png)
 
@@ -30,7 +30,7 @@ A timer fires each action at its minute, and the 5-minute poll catches up if the
 
 ### Settings
 
-Under **Covers → Opening and closing times**:
+Under **Covers → Opening and closing times**. The page tells tonight's closing time and tomorrow's opening of a mode set to `sunrise`, so you see what an elevation or a "not before" time gives:
 
 ![Opening and closing times: evening close](../images/options/en/09-times-evening.png)
 
@@ -61,14 +61,19 @@ The form refuses an elevation the sun never reaches at your location (a positive
 
 ## The covers
 
-Add the covers one at a time under **Covers → Managed covers**. A cover group is a cover like any other, so a whole house can be a single entry. Each cover can have:
+Add the covers one at a time under **Covers → Cover list**. A cover group is a cover like any other, so a whole house can be a single entry. Each cover says what HomeShift does with it, and the list shows it with a symbol:
+
+- 🕒 **Open and close it every day**, at the [daily times](#daily-schedule) (on by default),
+- 🌡️ **Protect it from heat**, see [Heat protection](#heat-protection),
+
+at least one of the two, and can have:
 
 - a **Window opening sensor** (a `binary_sensor` that is `on` while the window is open),
 - a **My favourite position button**, for a cover that should not close fully.
 
-**Edit a cover** changes its sensor or its button (clear a field to remove it).
+**Edit a cover** changes what it does, its sensor or its button (clear a field to remove it).
 
-![The Managed covers list](../images/options/en/07-managed-covers.png)
+![The cover list](../images/options/en/07-managed-covers.png)
 
 ![Adding a cover](../images/options/en/08-add-cover.png)
 
@@ -115,7 +120,7 @@ Pausing or resuming never moves a cover. When a pause ends, the cover takes part
 
 ## Heat protection
 
-HomeShift can close covers against the heat, without any automation and without a time window of its own. Its covers (**Protected covers**) are a separate list from the daily covers, so a south-facing cover can stay under heat protection while the others follow the daily schedule.
+HomeShift can close covers against the heat, without any automation and without a time window of its own. It acts on the covers marked 🌡️ **Protect it from heat** in the [cover list](#the-covers), daily or not, so a south-facing cover can stay under heat protection while the others only follow the daily schedule.
 
 **It needs the daily schedule to be set up**: it runs from today's opening time to today's closing time. On a `skip` day (typically *Away*), it starts at the sunrise-based time instead: `skip` stops the opening, never the protection, since nobody is home to close the cover by hand. If it is already hot when the covers would open, the protected position applies at once instead of opening first.
 
@@ -125,13 +130,12 @@ Once closed by heat protection, a cover stays so for the rest of the day; it is 
 
 Under **Covers → Heat protection**:
 
-![Heat protection: protected covers and trigger](../images/options/en/11-heat-protection-trigger.png)
+![Heat protection: the covers concerned and the trigger](../images/options/en/11-heat-protection-trigger.png)
 
 ![Heat protection: action](../images/options/en/12-heat-protection-action.png)
 
 | Field | Default | What it does |
 | --- | --- | --- |
-| **Protected covers** | — | The covers to close against the heat (needs managed covers too) |
 | **Outdoor temperature sensor** | — | The temperature watched |
 | **Temperature threshold** | `30 °C` | Above it, the covers close |
 | **Weather entity (early close)** | — | Daily forecasts, for the proactive close (optional) |

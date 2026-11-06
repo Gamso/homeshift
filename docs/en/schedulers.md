@@ -6,7 +6,7 @@ HomeShift drives the switches of the [Scheduler integration](https://github.com/
 
 ## Schedules per day mode
 
-Under **Configure → Schedulers**, assign one or more scheduler switches to each day mode. When the day mode changes:
+Under **Configure → Schedules**, assign one or more scheduler switches to each day mode. When the day mode changes:
 
 - the switches of the **current mode** are turned **on**,
 - the switches of **every other mode** are turned **off**.
@@ -15,7 +15,9 @@ For instance, a heating schedule for remote-work days and another for office day
 
 The assignments are stored by mode **key** (`home`, `work`, ...), so renaming a mode or changing the language of Home Assistant keeps them. A switch that does not respond (deleted, Scheduler integration unloaded) is reported in the log and does not stop the others.
 
-![The Schedulers page, one list per day mode](../images/options/en/05-schedulers.png)
+![The Schedules page, one list per day mode](../images/options/en/05-schedulers.png)
+
+The page names the assigned schedules that act on a climate without any thermostat tag (see below): they run whatever the thermostat mode, Off included, which is almost always a forgotten tag.
 
 `homeshift.refresh_schedulers` applies the switches again on demand.
 

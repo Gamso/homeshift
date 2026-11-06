@@ -6,7 +6,7 @@ HomeShift pilote les interrupteurs de l'[intégration Scheduler](https://github.
 
 ## Plannings par mode du jour
 
-Dans **Configurer → Schedulers**, associez un ou plusieurs interrupteurs Scheduler à chaque mode du jour. Quand le mode change :
+Dans **Configurer → Plannings**, associez un ou plusieurs interrupteurs Scheduler à chaque mode du jour. Quand le mode change :
 
 - les interrupteurs du **mode en cours** sont **activés**,
 - ceux de **tous les autres modes** sont **désactivés**.
@@ -15,7 +15,9 @@ Par exemple, un planning de chauffage pour les jours de télétravail et un autr
 
 Les associations sont enregistrées par **clé** de mode (`home`, `work`, ...) : renommer un mode ou changer la langue de Home Assistant les conserve. Un interrupteur qui ne répond pas (supprimé, intégration Scheduler déchargée) est signalé dans le journal et n'empêche pas les autres.
 
-![La page Schedulers, une liste par mode du jour](../images/options/fr/05-schedulers.png)
+![La page Plannings, une liste par mode du jour](../images/options/fr/05-schedulers.png)
+
+La page nomme les plannings assignés qui agissent sur un climate sans étiquette thermostat (voir plus bas) : ils tournent quel que soit le mode thermostat, Éteint compris, ce qui est presque toujours une étiquette oubliée.
 
 `homeshift.refresh_schedulers` réapplique les interrupteurs à la demande.
 

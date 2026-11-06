@@ -19,19 +19,19 @@ HomeShift regarde l'événement en cours dans votre calendrier de travail, et vo
 
 | Priorité | Condition | Mode |
 | --- | --- | --- |
-| 1 | L'événement en cours correspond aux **Événements du calendrier** | Le mode associé (ex. `Télétravail`) |
+| 1 | L'événement en cours contient un mot-clé des **Événements du calendrier** | Le mode associé (ex. `Télétravail`) |
 | 2 | Un événement horaire correspondant commence dans le délai de [bascule anticipée](#bascule-anticipée) | Le mode associé, en avance |
 | 3 | On est samedi ou dimanche | Le mode **Week-end** |
 | 4 | C'est un jour férié | Le mode **Jour férié** |
 | 5 | Rien de tout cela | Le mode **Jour ouvré** (ex. `Travail`) |
 
-Les **Événements du calendrier** associent des mots-clés du titre des événements à des modes : `Vacances:home, Télétravail:remote` par défaut sur une installation française (`Vacation:home, Remote:remote` en anglais). Un mot-clé est reconnu n'importe où dans le titre, sans tenir compte des majuscules.
+Les **Événements du calendrier** associent des mots du titre des événements à des modes : `Vacances` donne *Maison* et `Télétravail` donne *Télétravail* par défaut sur une installation française (`Vacation:home, Remote:remote` en anglais). Un mot-clé est reconnu n'importe où dans le titre, sans tenir compte des majuscules.
 
 `sensor.homeshift_next_mode` et `sensor.homeshift_next_mode_at` indiquent le prochain mode et son heure, et un minuteur change le mode à cette minute plutôt qu'à la synchronisation suivante.
 
 ## Réglages
 
-Dans **Configurer → Calendriers** et **Configurer → Modes de journée**, voir [Configuration](configuration.md) pour le fonctionnement de la fenêtre.
+À l'ajout de HomeShift, puis dans **Configurer → Calendriers**, **Configurer → Mode du jour** et **Configurer → Noms affichés**, voir [Configuration](configuration.md) pour le fonctionnement de la fenêtre.
 
 ### Calendriers
 
@@ -44,21 +44,21 @@ Dans **Configurer → Calendriers** et **Configurer → Modes de journée**, voi
 
 ### Règles de choix du mode
 
-![La page Modes de journée : règles de choix du mode](../images/options/fr/03-day-modes.png)
+![La page Mode du jour : règles et mots-clés du calendrier](../images/options/fr/03-day-modes.png)
 
 | Champ | Défaut | Rôle |
 | --- | --- | --- |
 | **Jour ouvré** | `Travail` | Mode d'un jour de semaine sans événement |
 | **Week-end** | `Maison` | Mode du samedi et du dimanche |
 | **Jour férié** | `Maison` | Mode des jours fériés |
-| **Mode qui met en pause l'automatisation** | `Absence` | Quand *vous* choisissez ce mode, le calendrier ne le change plus, voir [Le mode Absence](#le-mode-absence) |
-| **Événements du calendrier** | `Vacances:home, Télétravail:remote` | Mots-clés du titre des événements et la clé du mode qu'ils donnent (`Vacation:home, Remote:remote` en anglais) |
+| **Mode absence (met l'automatisation en pause)** | `Absence` | Quand *vous* choisissez ce mode, le calendrier ne le change plus, voir [Le mode Absence](#le-mode-absence) |
+| **Mots-clés pour** chaque mode | `Vacances` pour Maison, `Télétravail` pour Télétravail | Les mots du titre des événements qui font passer la journée dans ce mode, séparés par des virgules (`Vacation`, `Remote` en anglais). Un mot-clé donné pour deux modes est refusé. |
 
 ### Noms des modes
 
-![La page Modes de journée : noms d'affichage](../images/options/fr/04-day-modes-names.png)
+![La page Noms affichés](../images/options/fr/04-day-modes-names.png)
 
-**Noms d'affichage des modes** et **Noms des modes thermostat** : le nom de chaque mode. Les quatre modes du jour (clés `home`, `work`, `remote`, `away`) et les quatre modes thermostat (`off`, `heating`, `cooling`, `ventilation`) se renomment mais ne s'ajoutent ni ne se suppriment. Les noms des modes thermostat servent aussi d'[étiquettes des plannings](schedulers.md#étiquettes-thermostat).
+Dans **Configurer → Noms affichés** : le nom de chaque **mode du jour** et de chaque **mode thermostat**. Les quatre modes du jour (clés `home`, `work`, `remote`, `away`) et les quatre modes thermostat (`off`, `heating`, `cooling`, `ventilation`) se renomment mais ne s'ajoutent ni ne se suppriment. Les noms des modes thermostat servent aussi d'[étiquettes des plannings](schedulers.md#étiquettes-thermostat).
 
 La **durée de surcharge** et la **bascule anticipée** ne sont pas dans cette fenêtre : réglez-les depuis leurs entités (`number.homeshift_override_duration`, `number.homeshift_early_switch`) ou depuis la [carte](card.md). Voir [Bascule anticipée](#bascule-anticipée) et [Changer le mode à la main](#changer-le-mode-à-la-main).
 

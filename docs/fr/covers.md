@@ -6,9 +6,9 @@ HomeShift ouvre et ferme les volets chaque jour sans aucune entité Scheduler, l
 
 | Menu | Ce qu'il règle |
 | --- | --- |
-| **Volets gérés** | Les volets ouverts et fermés chaque jour, un par un, chacun avec un capteur de fenêtre et un bouton My optionnels. Voir [Les volets](#les-volets) |
+| **Liste des volets** | Les volets, un par un : ouverts et fermés chaque jour, protégés de la chaleur, ou les deux, chacun avec un capteur de fenêtre et un bouton My optionnels. Voir [Les volets](#les-volets) |
 | **Horaires d'ouverture et de fermeture** | Quand ils s'ouvrent (par mode du jour) et se ferment (élévation du soleil). Voir [Horaires quotidiens](#horaires-quotidiens) |
-| **Protection contre la chaleur** | Les volets fermés contre la chaleur, et quand. Voir [Protection contre la chaleur](#protection-contre-la-chaleur) |
+| **Protection contre la chaleur** | Quand les volets protégés de la chaleur se ferment. Voir [Protection contre la chaleur](#protection-contre-la-chaleur) |
 
 ![Le menu Volets](../images/options/fr/06-covers-menu.png)
 
@@ -30,7 +30,7 @@ Un minuteur déclenche chaque action à sa minute, et la synchronisation toutes 
 
 ### Réglages
 
-Dans **Volets → Horaires d'ouverture et de fermeture** :
+Dans **Volets → Horaires d'ouverture et de fermeture**. La page indique l'heure de fermeture de ce soir et l'ouverture de demain d'un mode réglé sur `sunrise`, pour voir ce que donne une élévation ou une heure « Pas avant » :
 
 ![Horaires d'ouverture et de fermeture : fermeture du soir](../images/options/fr/09-times-evening.png)
 
@@ -61,14 +61,19 @@ Le formulaire refuse une élévation que le soleil n'atteint jamais chez vous (u
 
 ## Les volets
 
-Ajoutez les volets un par un dans **Volets → Volets gérés** (**Ajouter un volet**, **Modifier un volet**, **Retirer des volets**). Un groupe de volets est un volet comme un autre : toute la maison peut tenir en une seule entrée. Chaque volet peut avoir :
+Ajoutez les volets un par un dans **Volets → Liste des volets** (**Ajouter un volet**, **Modifier un volet**, **Retirer des volets**). Un groupe de volets est un volet comme un autre : toute la maison peut tenir en une seule entrée. Chaque volet dit ce que HomeShift en fait, et la liste le montre par un symbole :
+
+- 🕒 **L'ouvrir et le fermer chaque jour**, aux [horaires quotidiens](#horaires-quotidiens) (coché par défaut),
+- 🌡️ **Le protéger de la chaleur**, voir [Protection contre la chaleur](#protection-contre-la-chaleur),
+
+au moins l'un des deux, et peut avoir :
 
 - un **Capteur d'ouverture de la fenêtre** (un `binary_sensor` à `on` quand la fenêtre est ouverte),
 - un **Bouton position favorite My**, pour un volet qui ne doit pas se fermer entièrement.
 
-**Modifier un volet** change son capteur ou son bouton (videz un champ pour le retirer).
+**Modifier un volet** change ce qu'il fait, son capteur ou son bouton (videz un champ pour le retirer).
 
-![La liste des volets gérés](../images/options/fr/07-managed-covers.png)
+![La liste des volets](../images/options/fr/07-managed-covers.png)
 
 ![Ajout d'un volet](../images/options/fr/08-add-cover.png)
 
@@ -115,7 +120,7 @@ Mettre en pause ou reprendre ne fait jamais bouger un volet. À la fin d'une pau
 
 ## Protection contre la chaleur
 
-HomeShift peut fermer des volets contre la chaleur, sans automatisation et sans plage horaire à régler. Ses volets (**Volets protégés**) forment une liste séparée des volets quotidiens : un volet plein sud peut rester sous la protection pendant que les autres suivent les horaires quotidiens.
+HomeShift peut fermer des volets contre la chaleur, sans automatisation et sans plage horaire à régler. Elle agit sur les volets marqués 🌡️ **Le protéger de la chaleur** dans la [liste des volets](#les-volets), quotidiens ou non : un volet plein sud peut rester sous la protection pendant que les autres suivent seulement les horaires quotidiens.
 
 **Elle a besoin des horaires quotidiens** : elle fonctionne de l'heure d'ouverture à l'heure de fermeture du jour. Un jour `skip` (typiquement *Absence*), elle commence à l'heure du lever du soleil : `skip` empêche l'ouverture, jamais la protection, puisque personne n'est là pour fermer à la main. S'il fait déjà chaud à l'heure d'ouverture, la position de protection s'applique tout de suite au lieu d'ouvrir d'abord.
 
@@ -125,13 +130,12 @@ Une fois fermé par la protection, un volet le reste jusqu'à la fin de la journ
 
 Dans **Volets → Protection contre la chaleur** :
 
-![Protection contre la chaleur : volets protégés et déclenchement](../images/options/fr/11-heat-protection-trigger.png)
+![Protection contre la chaleur : les volets concernés et le déclenchement](../images/options/fr/11-heat-protection-trigger.png)
 
 ![Protection contre la chaleur : action](../images/options/fr/12-heat-protection-action.png)
 
 | Champ | Défaut | Rôle |
 | --- | --- | --- |
-| **Volets protégés** | — | Les volets à fermer contre la chaleur (nécessite aussi des volets gérés) |
 | **Capteur de température extérieure** | — | La température surveillée |
 | **Seuil de température** | `30 °C` | Au-dessus, les volets se ferment |
 | **Entité météo (fermeture anticipée)** | — | Prévisions journalières, pour la fermeture anticipée (optionnel) |

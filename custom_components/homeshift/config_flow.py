@@ -12,7 +12,6 @@ from homeassistant import config_entries
 from homeassistant.core import callback
 from homeassistant.data_entry_flow import section
 from homeassistant.helpers import selector
-from homeassistant.helpers.translation import async_get_translations
 from homeassistant.util import dt as dt_util
 
 from .const import (
@@ -48,6 +47,8 @@ from .const import (
     CONF_ITEM_COVER,
     CONF_ITEM_WINDOW_SENSOR,
     CONF_ITEM_MY_BUTTON,
+    CONF_ITEM_DAILY,
+    CONF_ITEM_HEAT,
     CONF_DAILY_COVER_OPEN_TIME_MAP,
     CONF_DAILY_COVER_CLOSE_ELEVATION,
     CLOSE_ELEVATION_MIN,
@@ -58,13 +59,21 @@ from .const import (
     DEFAULT_SUNRISE_EARLIEST,
     CONF_CLOSE_WHEN_WINDOW_SHUTS,
     DEFAULT_CLOSE_WHEN_WINDOW_SHUTS,
+    CONF_AUTO_START_STOP_ITEMS,
+    CONF_ITEM_CLIMATE,
+    CONF_ITEM_SETPOINT_THRESHOLDS,
+    CONF_ITEM_SWITCH,
     LOCALIZED_DEFAULTS,
     get_localized_defaults,
     parse_key_value_map,
 )
+from .auto_start_stop import default_climate, heat_pump_name
 from .cover_manager import sun_time_at_elevation
 
 _LOGGER = logging.getLogger(__name__)
+
+# Shown after the summary of a menu entry whose section has unsaved changes.
+PENDING_MARK = " ✎"
 
 # Translation key of the per-mode opening time selector ('sunrise', 'skip').
 DAILY_OPEN_TIME_SELECTOR = "daily_open_time"
@@ -194,21 +203,58 @@ def _rebuild_thermostat_map(user_input: dict[str, Any], data: dict[str, Any]) ->
     return ", ".join(pairs)
 
 
-def _mapping_schema(data: dict[str, Any]) -> vol.Schema:
-    """Build the mode-mapping form schema with collapsible sections.
+def _event_keyword_field(mode_key: str) -> str:
+    """Form field holding the calendar keywords that switch the day to one mode."""
+    return f"event_keywords_{mode_key.lower()}"
 
-    The rules picking the day's mode come first and stay open; the display
-    names, set once and rarely touched again, are folded away below them.
+
+def _event_keywords_by_mode(data: dict[str, Any]) -> dict[str, str]:
+    """Return the event keywords of each day mode key, comma separated.
+
+    The stored map reads "Keyword:mode_key, ..."; a value naming a mode by its
+    display name (written by hand) is matched back to its key.
     """
-    text = selector.TextSelector(selector.TextSelectorConfig(type=selector.TextSelectorType.TEXT))
+    day_mode_map = _parse_day_mode_map(data.get(CONF_DAY_MODE_MAP, DEFAULT_DAY_MODE_MAP))
+    by_display = {display.lower(): key for key, display in day_mode_map.items()}
+    keywords: dict[str, list[str]] = {key: [] for key in day_mode_map}
+    for keyword, value in _parse_day_mode_map(data.get(CONF_EVENT_MODE_MAP, DEFAULT_EVENT_MODE_MAP)).items():
+        key = value if value in keywords else by_display.get(value.lower())
+        if key is not None:
+            keywords[key].append(keyword)
+    return {key: ", ".join(words) for key, words in keywords.items()}
 
-    # Day mode display names (one field per key, like thermostat)
-    day_fields_dict: dict = {}
-    day_fields_dict.update(_day_mode_display_fields(data))
-    day_modes_schema = vol.Schema(day_fields_dict)
 
-    # Default mode assignments — the stored value is the mode key, the
-    # dropdown shows its display name.
+def _rebuild_event_mode_map(user_input: dict[str, Any], data: dict[str, Any]) -> tuple[str, dict[str, str]]:
+    """Return the stored "Keyword:mode_key, ..." map built from the per-mode fields, and the errors.
+
+    A keyword given for two modes would make the day's mode depend on the
+    order of the list, so it is refused on the second field holding it.
+    """
+    day_mode_map = _parse_day_mode_map(data.get(CONF_DAY_MODE_MAP, DEFAULT_DAY_MODE_MAP))
+    pairs: list[str] = []
+    seen: set[str] = set()
+    errors: dict[str, str] = {}
+    for key in day_mode_map:
+        field = _event_keyword_field(key)
+        for keyword in str(user_input.pop(field, "") or "").split(","):
+            keyword = keyword.strip().replace(":", "")
+            if not keyword:
+                continue
+            if keyword.lower() in seen:
+                errors[field] = "duplicate_keyword"
+                continue
+            seen.add(keyword.lower())
+            pairs.append(f"{keyword}:{key}")
+    return ", ".join(pairs), errors
+
+
+def _mapping_schema(data: dict[str, Any]) -> vol.Schema:
+    """Build the day mode form: which mode each kind of day gets, then the keywords per mode.
+
+    The stored value of each rule is the mode key; the dropdown shows its
+    display name. The keyword fields are labelled with the mode names
+    (placeholders name_<key>).
+    """
     day_mode_map = _parse_day_mode_map(data.get(CONF_DAY_MODE_MAP, DEFAULT_DAY_MODE_MAP))
     mode_selector = selector.SelectSelector(
         selector.SelectSelectorConfig(
@@ -219,7 +265,7 @@ def _mapping_schema(data: dict[str, Any]) -> vol.Schema:
             mode=selector.SelectSelectorMode.DROPDOWN,
         )
     )
-    defaults_schema = vol.Schema(
+    rules_schema = vol.Schema(
         {
             vol.Optional(
                 CONF_MODE_DEFAULT,
@@ -237,28 +283,56 @@ def _mapping_schema(data: dict[str, Any]) -> vol.Schema:
                 CONF_MODE_ABSENCE,
                 default=data.get(CONF_MODE_ABSENCE, DEFAULT_MODE_ABSENCE),
             ): mode_selector,
-            vol.Optional(
-                CONF_EVENT_MODE_MAP,
-                default=data.get(CONF_EVENT_MODE_MAP, DEFAULT_EVENT_MODE_MAP),
-            ): text,
         }
     )
-
-    # Thermostat display names
-    thermostat_fields_dict: dict = {}
-    thermostat_fields_dict.update(_thermostat_display_fields(data))
-    thermostat_schema = vol.Schema(thermostat_fields_dict)
-
+    text = selector.TextSelector(selector.TextSelectorConfig(type=selector.TextSelectorType.TEXT))
+    keywords = data.get("_keywords_draft") or _event_keywords_by_mode(data)
+    keywords_schema = vol.Schema(
+        {
+            vol.Optional(
+                _event_keyword_field(key),
+                description={"suggested_value": keywords.get(key, "")},
+            ): text
+            for key in day_mode_map
+        }
+    )
     return vol.Schema(
         {
-            vol.Required("defaults_section"): section(defaults_schema, {"collapsed": False}),
-            vol.Required("day_modes_section"): section(day_modes_schema, {"collapsed": True}),
-            vol.Required("thermostat_section"): section(thermostat_schema, {"collapsed": True}),
+            vol.Required("defaults_section"): section(rules_schema, {"collapsed": False}),
+            vol.Required("keywords_section"): section(keywords_schema, {"collapsed": False}),
         }
     )
 
 
-MAPPING_SECTIONS = ("defaults_section", "day_modes_section", "thermostat_section")
+MAPPING_SECTIONS = ("defaults_section", "keywords_section")
+
+
+def _names_schema(data: dict[str, Any]) -> vol.Schema:
+    """Build the display names form: the day modes, then the thermostat modes."""
+    return vol.Schema(
+        {
+            vol.Required("day_modes_section"): section(
+                vol.Schema(_day_mode_display_fields(data)), {"collapsed": False}
+            ),
+            vol.Required("thermostat_section"): section(
+                vol.Schema(_thermostat_display_fields(data)), {"collapsed": False}
+            ),
+        }
+    )
+
+
+NAMES_SECTIONS = ("day_modes_section", "thermostat_section")
+
+
+def _event_keywords_summary(data: dict[str, Any]) -> str:
+    """Return "Keyword → mode name" for each calendar keyword, for the menu ("—" when none)."""
+    day_mode_map = _parse_day_mode_map(data.get(CONF_DAY_MODE_MAP, DEFAULT_DAY_MODE_MAP))
+    return " · ".join(
+        f"{keyword} → {day_mode_map.get(key, key)}"
+        for key, words in _event_keywords_by_mode(data).items()
+        for keyword in words.split(", ")
+        if keyword
+    ) or "—"
 
 
 def _validate_calendars(hass, user_input: dict[str, Any]) -> dict[str, str]:
@@ -345,6 +419,39 @@ def _schedulers_schema(hass, data: dict[str, Any]) -> vol.Schema:
     return vol.Schema(schema_dict)
 
 
+def _scheduler_climates(state: Any) -> set[str]:
+    """Return the climates a Scheduler switch acts on (its entities, or its actions' targets)."""
+    candidates: list[Any] = list(state.attributes.get("entities") or [])
+    for action in state.attributes.get("actions") or []:
+        if not isinstance(action, dict):
+            continue
+        for holder in (action, action.get("target") or {}):
+            if isinstance(holder, dict):
+                ids = holder.get("entity_id") or []
+                candidates.extend([ids] if isinstance(ids, str) else ids)
+    return {entity_id for entity_id in candidates if isinstance(entity_id, str) and entity_id.startswith("climate.")}
+
+
+def _untagged_schedulers(hass, data: dict[str, Any]) -> list[str]:
+    """Return the assigned schedules acting on a climate but tagged with no thermostat mode.
+
+    Such a schedule runs whatever the thermostat mode, Off included: almost
+    always a forgotten tag in the scheduler-card.
+    """
+    thermostat_tags = set(_parse_thermostat_map(data.get(CONF_THERMOSTAT_MODE_MAP, DEFAULT_THERMOSTAT_MODE_MAP)).values())
+    assigned: set[str] = set()
+    for switches in (data.get(CONF_SCHEDULERS_PER_MODE, {}) or {}).values():
+        assigned.update(switches or [])
+    untagged = []
+    for entity_id in sorted(assigned):
+        state = hass.states.get(entity_id)
+        if state is None or not _scheduler_climates(state):
+            continue
+        if not set(state.attributes.get("tags", []) or []) & thermostat_tags:
+            untagged.append(_entity_name(hass, entity_id))
+    return untagged
+
+
 def _mode_placeholders(data: dict[str, Any]) -> dict[str, str]:
     """Return each day mode's display name and scheduler count, for the form text.
 
@@ -398,8 +505,9 @@ def _apply_covers_input(user_input: dict[str, Any]) -> dict[str, Any]:
 def _covers_schema(hass, data: dict[str, Any]) -> vol.Schema:
     """Build the cover heat-control form schema.
 
-    The covers come first, then what triggers the protection (temperature
-    and forecast), then what it does to the covers. Option labels come from
+    What triggers the protection (temperature and forecast), then what it
+    does to the covers; the covers themselves are ticked in the cover list.
+    Option labels come from
     the 'selector' section of the translations.
     """
     temperature = selector.NumberSelector(
@@ -448,10 +556,6 @@ def _covers_schema(hass, data: dict[str, Any]) -> vol.Schema:
     )
     return vol.Schema(
         {
-            vol.Optional(
-                CONF_COVER_ENTITIES,
-                default=data.get(CONF_COVER_ENTITIES, []),
-            ): selector.EntitySelector(selector.EntitySelectorConfig(domain="cover", multiple=True)),
             vol.Required("trigger_section"): section(trigger_schema, {"collapsed": False}),
             vol.Required("action_section"): section(action_schema, {"collapsed": False}),
         }
@@ -522,6 +626,21 @@ def _close_time_preview(hass, data: dict[str, Any]) -> dict[str, str]:
         "close_elevation": f"{elevation:g}",
         "close_at_elevation": at_elevation.strftime("%H:%M") if at_elevation else "--:--",
     }
+
+
+def _open_at_sunrise_preview(hass, data: dict[str, Any]) -> dict[str, str]:
+    """Return the next opening of a mode set to open at sunrise, for the form text.
+
+    That is the next sunrise, held back to the "not before" time; '--:--'
+    when the sun entity gives no sunrise.
+    """
+    state = hass.states.get("sun.sun")
+    rising = dt_util.parse_datetime(str(state.attributes.get("next_rising") or "")) if state else None
+    if rising is None:
+        return {"open_at_sunrise": "--:--"}
+    at = dt_util.as_local(rising).strftime("%H:%M")
+    earliest = str(data.get(CONF_SUNRISE_EARLIEST, DEFAULT_SUNRISE_EARLIEST))[:5]
+    return {"open_at_sunrise": max(at, earliest)}
 
 
 def _validate_close_elevation(hass, user_input: dict[str, Any]) -> dict[str, str]:
@@ -601,42 +720,67 @@ def _cover_items(data: dict[str, Any]) -> list[dict[str, str]]:
     return [item for item in raw if isinstance(item, dict) and item.get(CONF_ITEM_COVER)]
 
 
-def _cover_items_summary(data: dict[str, Any], name: Callable[[str], str] = str) -> str:
-    """Return a human-readable list of the configured covers, for the menu description.
+def _heat_covers(data: dict[str, Any]) -> list[str]:
+    """Return the covers protected from heat."""
+    return [cover for cover in data.get(CONF_COVER_ENTITIES, []) or [] if cover]
 
-    `name` turns an entity id into what the user sees; the flow passes the
-    entity's friendly name.
+
+def _all_covers(data: dict[str, Any]) -> list[str]:
+    """Return every cover HomeShift drives: the daily ones first, then those only protected from heat."""
+    covers = [item[CONF_ITEM_COVER] for item in _cover_items(data)]
+    return covers + [cover for cover in _heat_covers(data) if cover not in covers]
+
+
+def _cover_items_summary(data: dict[str, Any], name: Callable[[str], str] = str) -> str:
+    """Return one line per cover for the menu description: what it does, its sensor and button.
+
+    The roles are shown as symbols, explained by the translated text, so the
+    line reads the same whatever the language. `name` turns an entity id
+    into what the user sees; the flow passes the entity's friendly name.
     """
-    items = _cover_items(data)
-    if not items:
+    covers = _all_covers(data)
+    if not covers:
         return "—"
+    items = {item[CONF_ITEM_COVER]: item for item in _cover_items(data)}
+    heat = set(_heat_covers(data))
     lines = []
-    for item in items:
-        sensor = item.get(CONF_ITEM_WINDOW_SENSOR, "")
-        button = item.get(CONF_ITEM_MY_BUTTON, "")
-        suffix = f" ← {name(sensor)}" if sensor else ""
-        if button:
-            suffix += f" (My: {name(button)})"
-        lines.append(f"- **{name(item[CONF_ITEM_COVER])}**{suffix}")
+    for cover in covers:
+        item = items.get(cover, {})
+        roles = [symbol for symbol, on in (("🕒", cover in items), ("🌡️", cover in heat)) if on]
+        line = f"- **{name(cover)}** {' '.join(roles)}"
+        if item.get(CONF_ITEM_WINDOW_SENSOR):
+            line += f" · 🪟 {name(item[CONF_ITEM_WINDOW_SENSOR])}"
+        if item.get(CONF_ITEM_MY_BUTTON):
+            line += f" · My: {name(item[CONF_ITEM_MY_BUTTON])}"
+        lines.append(line)
     return "\n".join(lines)
 
 
 def _cover_items_menu_options(data: dict[str, Any]) -> list[str]:
     """Return the individual-cover menu options (edit and remove once there's a cover)."""
     options = ["cover_item_add"]
-    if _cover_items(data):
+    if _all_covers(data):
         options += ["cover_item_pick", "cover_item_remove"]
     options.append("covers_menu")
     return options
 
 
+def _cover_roles_fields(daily: bool, heat: bool) -> dict:
+    """Return the two role toggles of a cover: opened and closed every day, protected from heat."""
+    return {
+        vol.Optional(CONF_ITEM_DAILY, default=daily): selector.BooleanSelector(),
+        vol.Optional(CONF_ITEM_HEAT, default=heat): selector.BooleanSelector(),
+    }
+
+
 def _cover_item_add_schema() -> vol.Schema:
-    """Build the add/update-one-cover form schema."""
+    """Build the add-one-cover form schema."""
     return vol.Schema(
         {
             vol.Required(CONF_ITEM_COVER): selector.EntitySelector(
                 selector.EntitySelectorConfig(domain="cover"),
             ),
+            **_cover_roles_fields(True, False),
             vol.Optional(CONF_ITEM_WINDOW_SENSOR): selector.EntitySelector(
                 selector.EntitySelectorConfig(domain="binary_sensor"),
             ),
@@ -653,7 +797,7 @@ def _configured_cover_options(hass, data: dict[str, Any]) -> list[selector.Selec
         selector.SelectOptionDict(
             value=item[CONF_ITEM_COVER], label=_entity_name(hass, item[CONF_ITEM_COVER])
         )
-        for item in _cover_items(data)
+        for item in [{CONF_ITEM_COVER: cover} for cover in _all_covers(data)]
     ]
 
 
@@ -671,10 +815,11 @@ def _cover_item_pick_schema(hass, data: dict[str, Any]) -> vol.Schema:
     )
 
 
-def _cover_item_edit_schema(item: dict[str, str]) -> vol.Schema:
-    """Build the edit-one-cover form, prefilled with its window sensor and My button."""
+def _cover_item_edit_schema(item: dict[str, str], daily: bool, heat: bool) -> vol.Schema:
+    """Build the edit-one-cover form, prefilled with its roles, window sensor and My button."""
     return vol.Schema(
         {
+            **_cover_roles_fields(daily, heat),
             _entity_marker(
                 CONF_ITEM_WINDOW_SENSOR, item.get(CONF_ITEM_WINDOW_SENSOR)
             ): selector.EntitySelector(selector.EntitySelectorConfig(domain="binary_sensor")),
@@ -685,25 +830,34 @@ def _cover_item_edit_schema(item: dict[str, str]) -> vol.Schema:
     )
 
 
-def _apply_cover_item_add(user_input: dict[str, Any], data: dict[str, Any]) -> list[dict[str, str]]:
-    """Return the cover list with the submitted cover added, or updated in place.
+def _validate_cover_roles(user_input: dict[str, Any]) -> dict[str, str]:
+    """Refuse a cover given no role: HomeShift would do nothing with it."""
+    if not user_input.get(CONF_ITEM_DAILY, True) and not user_input.get(CONF_ITEM_HEAT, False):
+        return {"base": "no_cover_role"}
+    return {}
 
-    Re-adding an already-configured cover updates its window sensor and My
-    button rather than duplicating it, so the add form doubles as the edit form.
+
+def _apply_cover_item_add(user_input: dict[str, Any], data: dict[str, Any]) -> dict[str, Any]:
+    """Return the daily cover list and the heat-protected cover list with the submitted cover set.
+
+    Re-adding a cover already configured updates it rather than duplicating
+    it, so the add form doubles as the edit form.
     """
     cover = user_input.get(CONF_ITEM_COVER, "")
+    daily = bool(user_input.get(CONF_ITEM_DAILY, True))
+    heat = bool(user_input.get(CONF_ITEM_HEAT, False))
     sensor = user_input.get(CONF_ITEM_WINDOW_SENSOR, "") or ""
     button = user_input.get(CONF_ITEM_MY_BUTTON, "") or ""
-    items = [dict(item) for item in _cover_items(data)]
-    for item in items:
-        if item[CONF_ITEM_COVER] == cover:
-            item[CONF_ITEM_WINDOW_SENSOR] = sensor
-            item[CONF_ITEM_MY_BUTTON] = button
-            return items
-    items.append(
-        {CONF_ITEM_COVER: cover, CONF_ITEM_WINDOW_SENSOR: sensor, CONF_ITEM_MY_BUTTON: button}
-    )
-    return items
+    items = [dict(item) for item in _cover_items(data) if item[CONF_ITEM_COVER] != cover]
+    position = next((i for i, item in enumerate(_cover_items(data)) if item[CONF_ITEM_COVER] == cover), len(items))
+    if daily:
+        items.insert(
+            position, {CONF_ITEM_COVER: cover, CONF_ITEM_WINDOW_SENSOR: sensor, CONF_ITEM_MY_BUTTON: button}
+        )
+    heat_covers = [entity for entity in _heat_covers(data) if entity != cover]
+    if heat:
+        heat_covers.append(cover)
+    return {CONF_DAILY_COVER_ITEMS: items, CONF_COVER_ENTITIES: heat_covers}
 
 
 def _cover_item_remove_schema(hass, data: dict[str, Any]) -> vol.Schema:
@@ -721,16 +875,175 @@ def _cover_item_remove_schema(hass, data: dict[str, Any]) -> vol.Schema:
     )
 
 
-def _apply_cover_item_remove(user_input: dict[str, Any], data: dict[str, Any]) -> list[dict[str, str]]:
-    """Return the cover list without the covers selected for removal."""
+def _apply_cover_item_remove(user_input: dict[str, Any], data: dict[str, Any]) -> dict[str, Any]:
+    """Return both cover lists without the covers selected for removal."""
     removed = user_input.get("remove_covers", []) or []
     if isinstance(removed, str):
         removed = [removed]
-    return [item for item in _cover_items(data) if item[CONF_ITEM_COVER] not in removed]
+    return {
+        CONF_DAILY_COVER_ITEMS: [item for item in _cover_items(data) if item[CONF_ITEM_COVER] not in removed],
+        CONF_COVER_ENTITIES: [cover for cover in _heat_covers(data) if cover not in removed],
+    }
+
+
+# ---------------------------------------------------------------------------
+# Climate auto start/stop
+# ---------------------------------------------------------------------------
+
+
+def _heat_pump_items(data: dict[str, Any]) -> list[dict[str, Any]]:
+    """Return the configured auto start/stop items (those naming a switch)."""
+    raw = data.get(CONF_AUTO_START_STOP_ITEMS, []) or []
+    return [item for item in raw if isinstance(item, dict) and item.get(CONF_ITEM_SWITCH)]
+
+
+def _threshold_field(mode_key: str) -> str:
+    """Form field holding the setpoint threshold of one thermostat mode."""
+    return f"threshold_{mode_key.lower()}"
+
+
+def _driven_thermostat_modes(data: dict[str, Any]) -> dict[str, str]:
+    """Return the thermostat modes a threshold can be set for (key to display name): all but "off"."""
+    modes = _parse_thermostat_map(data.get(CONF_THERMOSTAT_MODE_MAP, DEFAULT_THERMOSTAT_MODE_MAP))
+    return {key: display for key, display in modes.items() if key.lower() != "off"}
+
+
+def _thermostat_placeholders(data: dict[str, Any]) -> dict[str, str]:
+    """Return each thermostat mode's display name, for the threshold labels (tname_<key>)."""
+    return {f"tname_{key.lower()}": display for key, display in _driven_thermostat_modes(data).items()}
+
+
+def _heat_pumps_summary(data: dict[str, Any], name: Callable[[str], str] = str) -> str:
+    """Return one line per configured climate with the threshold of each thermostat mode
+    it is driven in, for the menu text ("—" when there is none).
+    """
+    items = _heat_pump_items(data)
+    if not items:
+        return "—"
+    modes = _driven_thermostat_modes(data)
+    lines = []
+    for item in items:
+        thresholds = item.get(CONF_ITEM_SETPOINT_THRESHOLDS) or {}
+        limits = []
+        for key, display in modes.items():
+            if thresholds.get(key) is not None:
+                sign = "≥" if key.lower() == "heating" else "≤"
+                limits.append(f"{display} {sign} {float(thresholds[key]):g} °C")
+        lines.append(f"- **{heat_pump_name(name(item[CONF_ITEM_SWITCH]))}** · {', '.join(limits) or '—'}")
+    return "\n".join(lines)
+
+
+def _heat_pumps_menu_options(data: dict[str, Any]) -> list[str]:
+    """Return the climate menu options (edit and remove once there's one)."""
+    options = ["heat_pump_add"]
+    if _heat_pump_items(data):
+        options += ["heat_pump_pick", "heat_pump_remove"]
+    options.append("menu")
+    return options
+
+
+def _heat_pump_schema(data: dict[str, Any], item: dict[str, Any] | None, *, with_switch: bool) -> vol.Schema:
+    """Build the add (with_switch) or edit form of one climate, prefilled from `item`.
+
+    One optional threshold per thermostat mode (empty: not driven in that
+    mode), named after the mode's stable key.
+    """
+    item = item or {}
+    thresholds = item.get(CONF_ITEM_SETPOINT_THRESHOLDS) or {}
+    fields: dict = {}
+    if with_switch:
+        fields[_entity_marker(CONF_ITEM_SWITCH, item.get(CONF_ITEM_SWITCH), required=True)] = (
+            selector.EntitySelector(selector.EntitySelectorConfig(domain="switch"))
+        )
+    fields[_entity_marker(CONF_ITEM_CLIMATE, item.get(CONF_ITEM_CLIMATE))] = selector.EntitySelector(
+        selector.EntitySelectorConfig(domain="climate")
+    )
+    for key in _driven_thermostat_modes(data):
+        value = thresholds.get(key)
+        fields[
+            vol.Optional(
+                _threshold_field(key),
+                description={"suggested_value": value} if value is not None else None,
+            )
+        ] = selector.NumberSelector(
+            selector.NumberSelectorConfig(
+                min=5, max=35, step=0.5, unit_of_measurement="°C", mode=selector.NumberSelectorMode.BOX
+            )
+        )
+    return vol.Schema(fields)
+
+
+def _validate_heat_pump(user_input: dict[str, Any], data: dict[str, Any], switch: str | None = None) -> dict[str, str]:
+    """Return the form errors: no threshold at all, no climate to read the setpoint from."""
+    errors: dict[str, str] = {}
+    if all(user_input.get(_threshold_field(key)) is None for key in _driven_thermostat_modes(data)):
+        errors[_threshold_field(next(iter(_driven_thermostat_modes(data)), "heating"))] = "no_threshold"
+    if not (user_input.get(CONF_ITEM_CLIMATE) or default_climate(switch or user_input.get(CONF_ITEM_SWITCH) or "")):
+        errors[CONF_ITEM_CLIMATE] = "no_climate"
+    return errors
+
+
+def _apply_heat_pump(user_input: dict[str, Any], switch: str, data: dict[str, Any]) -> list[dict[str, Any]]:
+    """Return the items with this switch's settings added, or updated in place."""
+    thresholds = {
+        key: float(user_input[_threshold_field(key)])
+        for key in _driven_thermostat_modes(data)
+        if user_input.get(_threshold_field(key)) is not None
+    }
+    new = {
+        CONF_ITEM_SWITCH: switch,
+        CONF_ITEM_CLIMATE: user_input.get(CONF_ITEM_CLIMATE) or default_climate(switch),
+        CONF_ITEM_SETPOINT_THRESHOLDS: thresholds,
+    }
+    items = [dict(item) for item in _heat_pump_items(data)]
+    for index, item in enumerate(items):
+        if item[CONF_ITEM_SWITCH] == switch:
+            items[index] = new
+            return items
+    items.append(new)
+    return items
+
+
+def _configured_heat_pump_options(hass, data: dict[str, Any]) -> list[selector.SelectOptionDict]:
+    """Return one option per configured switch, labelled with its friendly name."""
+    return [
+        selector.SelectOptionDict(value=item[CONF_ITEM_SWITCH], label=_entity_name(hass, item[CONF_ITEM_SWITCH]))
+        for item in _heat_pump_items(data)
+    ]
+
+
+def _setpoint_text(hass, item: dict[str, Any] | None, switch: str) -> str:
+    """Return the climate's current target temperature ("17.5 °C"), or "—" when it has none."""
+    climate = (item or {}).get(CONF_ITEM_CLIMATE) or default_climate(switch)
+    state = hass.states.get(climate) if climate else None
+    try:
+        return f"{float(state.attributes.get('temperature')):g} °C" if state else "—"
+    except (TypeError, ValueError):
+        return "—"
+
+
+def _heat_pump_pick_schema(hass, data: dict[str, Any], *, field: str, multiple: bool) -> vol.Schema:
+    """Build the form choosing configured switches (one to edit, several to remove)."""
+    config = selector.SelectSelectorConfig(
+        options=_configured_heat_pump_options(hass, data),
+        multiple=multiple,
+        mode=selector.SelectSelectorMode.LIST,
+    )
+    marker = vol.Optional(field, default=[]) if multiple else vol.Required(field)
+    return vol.Schema({marker: selector.SelectSelector(config)})
 
 
 # The sections of the flow, by step id, in menu order.
-_PARTS = ("calendars", "mapping", "schedulers", "cover_items", "daily_cover_schedule", "covers")
+_PARTS = (
+    "calendars",
+    "mapping",
+    "names",
+    "schedulers",
+    "cover_items",
+    "daily_cover_schedule",
+    "covers",
+    "heat_pumps",
+)
 
 # What the cover forms prefill when nothing is stored yet: submitting them
 # untouched writes these values, which is no change.
@@ -785,6 +1098,8 @@ class _HomeShiftMenuSteps:
     _touched: dict[str, set[str]]
     # The cover being edited between cover_item_pick and cover_item_edit.
     _editing_cover: str
+    # The switch being edited between heat_pump_pick and heat_pump_edit.
+    _editing_switch: str
     # Translation category of the flow: "config" or "options".
     _translation_category: str
 
@@ -815,24 +1130,21 @@ class _HomeShiftMenuSteps:
             )
         ]
 
-    async def _part_labels(self) -> dict[str, str]:
-        """Return each section's menu label, in the instance language."""
-        category = self._translation_category
-        translations = await async_get_translations(
-            self.hass, self.hass.config.language, category, [DOMAIN]
-        )
-        labels: dict[str, str] = {}
-        for menu in ("menu", "covers_menu"):
-            prefix = f"component.{DOMAIN}.{category}.step.{menu}.menu_options."
-            for part in _PARTS:
-                if label := translations.get(prefix + part):
-                    labels[part] = label
-        return labels
+    def _menu_placeholders(self) -> dict[str, str]:
+        """Return the summaries shown in the main menu and the covers menu.
 
-    async def _menu_placeholders(self) -> dict[str, str]:
-        """Return the summaries shown in the main menu and the covers menu."""
+        A section changed and not saved yet gets a marker after its summary
+        (changed_<section>). The marker, unlike a section name, does not
+        depend on a language: the flow cannot know the language of the
+        person's profile, only that of the instance, so a translated name
+        would not match the rest of the dialog.
+        """
         data = self._effective_data()
-        labels = await self._part_labels()
+        pending = set(self._pending_parts())
+        changed = {f"changed_{part}": PENDING_MARK if part in pending else "" for part in _PARTS}
+        changed["changed_covers_menu"] = (
+            PENDING_MARK if pending & {"cover_items", "daily_cover_schedule", "covers"} else ""
+        )
         modes = _parse_day_mode_map(data.get(CONF_DAY_MODE_MAP, DEFAULT_DAY_MODE_MAP))
         schedulers: dict[str, list] = data.get(CONF_SCHEDULERS_PER_MODE, {}) or {}
         calendars = (data.get(CONF_CALENDAR_ENTITY), data.get(CONF_HOLIDAY_CALENDAR))
@@ -840,15 +1152,19 @@ class _HomeShiftMenuSteps:
             threshold = f"{float(data.get(CONF_COVER_TEMP_THRESHOLD, DEFAULT_COVER_TEMP_THRESHOLD)):g}"
         except (TypeError, ValueError):
             threshold = "—"
-        return {
-            "pending": ", ".join(labels.get(part, part) for part in self._pending_parts()) or "—",
+        thermostat_modes = _parse_thermostat_map(data.get(CONF_THERMOSTAT_MODE_MAP, DEFAULT_THERMOSTAT_MODE_MAP))
+        return changed | {
             "calendars": " · ".join(_entity_name(self.hass, cal) for cal in calendars if cal) or "—",
+            "keywords": _event_keywords_summary(data),
             "modes": ", ".join(modes.values()),
+            "thermostat_modes": ", ".join(thermostat_modes.values()),
+            "pending_count": str(len(pending)),
             "scheduler_count": str(sum(len(value or []) for value in schedulers.values())),
-            "cover_count": str(len(_cover_items(data))),
+            "cover_count": str(len(_all_covers(data))),
             "close_at": _close_time_preview(self.hass, data)["close_at_elevation"],
             "heat_cover_count": str(len(data.get(CONF_COVER_ENTITIES) or [])),
             "heat_threshold": threshold,
+            "heat_pump_count": str(len(_heat_pump_items(data))),
         }
 
     # -- menus -------------------------------------------------------------
@@ -857,14 +1173,21 @@ class _HomeShiftMenuSteps:
         self,
         _user_input: dict[str, Any] | None = None,
     ) -> config_entries.ConfigFlowResult:
-        """Show the configuration menu."""
-        menu_options = ["calendars", "mapping", "schedulers", "covers_menu"]
+        """Show the configuration menu.
+
+        Save comes first as soon as a section was changed, so it is not
+        missed at the bottom of a long menu.
+        """
+        menu_options = ["calendars", "mapping", "schedulers", "covers_menu", "heat_pumps", "names"]
         if self._is_config_complete():
-            menu_options.append("finalize")
+            if self._pending_parts():
+                menu_options.insert(0, "finalize")
+            else:
+                menu_options.append("finalize")
         return self.async_show_menu(
             step_id="menu",
             menu_options=menu_options,
-            description_placeholders=await self._menu_placeholders(),
+            description_placeholders=self._menu_placeholders(),
         )
 
     async def async_step_covers_menu(
@@ -875,7 +1198,7 @@ class _HomeShiftMenuSteps:
         return self.async_show_menu(
             step_id="covers_menu",
             menu_options=["cover_items", "daily_cover_schedule", "covers", "menu"],
-            description_placeholders=await self._menu_placeholders(),
+            description_placeholders=self._menu_placeholders(),
         )
 
     # -- calendars ---------------------------------------------------------
@@ -905,17 +1228,45 @@ class _HomeShiftMenuSteps:
         self,
         user_input: dict[str, Any] | None = None,
     ) -> config_entries.ConfigFlowResult:
-        """Configure day-mode & thermostat-mode mapping."""
+        """Configure which mode each kind of day gets, and the calendar keywords of each mode."""
+        data = self._effective_data()
+        errors: dict[str, str] = {}
         if user_input is not None:
             flat = _flatten_sections(user_input, MAPPING_SECTIONS)
-            flat[CONF_DAY_MODE_MAP] = _rebuild_day_mode_map(flat, self._effective_data())
-            flat[CONF_THERMOSTAT_MODE_MAP] = _rebuild_thermostat_map(flat, self._effective_data())
-            self._store("mapping", flat)
-            return await self.async_step_menu()
+            typed = {key: flat.get(_event_keyword_field(key), "") for key in _parse_day_mode_map(data.get(CONF_DAY_MODE_MAP, DEFAULT_DAY_MODE_MAP))}
+            flat[CONF_EVENT_MODE_MAP], errors = _rebuild_event_mode_map(flat, data)
+            if not errors:
+                self._store("mapping", flat)
+                return await self.async_step_menu()
+            # Redisplay what was typed, so the keyword refused is there to correct.
+            data = {**data, **{k: v for k, v in flat.items() if k != CONF_EVENT_MODE_MAP}, "_keywords_draft": typed}
+            errors = {"base": "duplicate_keyword"}
 
         return self.async_show_form(
             step_id="mapping",
-            data_schema=_mapping_schema(self._effective_data()),
+            data_schema=_mapping_schema(data),
+            description_placeholders=_mode_placeholders(data),
+            errors=errors,
+        )
+
+    # -- display names -------------------------------------------------------
+
+    async def async_step_names(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> config_entries.ConfigFlowResult:
+        """Rename the day modes and the thermostat modes (their keys never change)."""
+        if user_input is not None:
+            flat = _flatten_sections(user_input, NAMES_SECTIONS)
+            data = self._effective_data()
+            flat[CONF_DAY_MODE_MAP] = _rebuild_day_mode_map(flat, data)
+            flat[CONF_THERMOSTAT_MODE_MAP] = _rebuild_thermostat_map(flat, data)
+            self._store("names", flat)
+            return await self.async_step_menu()
+
+        return self.async_show_form(
+            step_id="names",
+            data_schema=_names_schema(self._effective_data()),
         )
 
     # -- schedulers --------------------------------------------------------
@@ -935,7 +1286,8 @@ class _HomeShiftMenuSteps:
         return self.async_show_form(
             step_id="schedulers",
             data_schema=_schedulers_schema(self.hass, data),
-            description_placeholders=_mode_placeholders(data),
+            description_placeholders=_mode_placeholders(data)
+            | {"untagged": ", ".join(_untagged_schedulers(self.hass, data)) or "—"},
         )
 
     # -- covers ------------------------------------------------------------
@@ -949,9 +1301,13 @@ class _HomeShiftMenuSteps:
             self._store("covers", _apply_covers_input(user_input))
             return await self.async_step_covers_menu()
 
+        data = self._effective_data()
         return self.async_show_form(
             step_id="covers",
-            data_schema=_covers_schema(self.hass, self._effective_data()),
+            data_schema=_covers_schema(self.hass, data),
+            description_placeholders={
+                "heat_covers": ", ".join(_entity_name(self.hass, cover) for cover in _heat_covers(data)) or "—"
+            },
         )
 
     # -- daily cover schedule ------------------------------------------------
@@ -979,7 +1335,9 @@ class _HomeShiftMenuSteps:
         return self.async_show_form(
             step_id="daily_cover_schedule",
             data_schema=_daily_cover_schema(self.hass, data),
-            description_placeholders=_close_time_preview(self.hass, data) | _mode_placeholders(data),
+            description_placeholders=_close_time_preview(self.hass, data)
+            | _open_at_sunrise_preview(self.hass, data)
+            | _mode_placeholders(data),
             errors=errors,
         )
 
@@ -1004,16 +1362,18 @@ class _HomeShiftMenuSteps:
         self,
         user_input: dict[str, Any] | None = None,
     ) -> config_entries.ConfigFlowResult:
-        """Add one cover — or update the window sensor of one already configured."""
+        """Add one cover — or update one already configured."""
+        errors: dict[str, str] = {}
         if user_input is not None:
-            self._store(
-                "cover_items", {CONF_DAILY_COVER_ITEMS: _apply_cover_item_add(user_input, self._data)}
-            )
-            return await self.async_step_cover_items()
+            errors = _validate_cover_roles(user_input)
+            if not errors:
+                self._store("cover_items", _apply_cover_item_add(user_input, self._data))
+                return await self.async_step_cover_items()
 
         return self.async_show_form(
             step_id="cover_item_add",
             data_schema=_cover_item_add_schema(),
+            errors=errors,
         )
 
     async def async_step_cover_item_pick(
@@ -1034,27 +1394,26 @@ class _HomeShiftMenuSteps:
         self,
         user_input: dict[str, Any] | None = None,
     ) -> config_entries.ConfigFlowResult:
-        """Change the window sensor and My button of the cover being edited."""
+        """Change the roles, window sensor and My button of the cover being edited."""
         cover = self._editing_cover
+        errors: dict[str, str] = {}
         if user_input is not None:
-            self._store(
-                "cover_items",
-                {
-                    CONF_DAILY_COVER_ITEMS: _apply_cover_item_add(
-                        {**user_input, CONF_ITEM_COVER: cover}, self._data
-                    )
-                },
-            )
-            return await self.async_step_cover_items()
+            errors = _validate_cover_roles(user_input)
+            if not errors:
+                self._store("cover_items", _apply_cover_item_add({**user_input, CONF_ITEM_COVER: cover}, self._data))
+                return await self.async_step_cover_items()
 
         item = next(
             (item for item in _cover_items(self._data) if item[CONF_ITEM_COVER] == cover),
             {CONF_ITEM_COVER: cover},
         )
+        daily = any(entry[CONF_ITEM_COVER] == cover for entry in _cover_items(self._data))
+        heat = cover in _heat_covers(self._data)
         return self.async_show_form(
             step_id="cover_item_edit",
-            data_schema=_cover_item_edit_schema(item),
+            data_schema=_cover_item_edit_schema(item, daily, heat),
             description_placeholders={"cover": _entity_name(self.hass, cover)},
+            errors=errors,
         )
 
     async def async_step_cover_item_remove(
@@ -1063,15 +1422,118 @@ class _HomeShiftMenuSteps:
     ) -> config_entries.ConfigFlowResult:
         """Remove individually-configured covers."""
         if user_input is not None:
-            self._store(
-                "cover_items",
-                {CONF_DAILY_COVER_ITEMS: _apply_cover_item_remove(user_input, self._data)},
-            )
+            self._store("cover_items", _apply_cover_item_remove(user_input, self._data))
             return await self.async_step_cover_items()
 
         return self.async_show_form(
             step_id="cover_item_remove",
             data_schema=_cover_item_remove_schema(self.hass, self._data),
+        )
+
+
+    # -- climate auto start/stop ----------------------------------------------
+
+    async def async_step_heat_pumps(
+        self,
+        _user_input: dict[str, Any] | None = None,
+    ) -> config_entries.ConfigFlowResult:
+        """Show the climate menu (add, edit, remove, or go back)."""
+        return self.async_show_menu(
+            step_id="heat_pumps",
+            menu_options=_heat_pumps_menu_options(self._data),
+            description_placeholders={
+                "heat_pumps": _heat_pumps_summary(
+                    self._effective_data(), lambda entity_id: _entity_name(self.hass, entity_id)
+                )
+            },
+        )
+
+    async def _async_heat_pump_form(
+        self, step_id: str, user_input: dict[str, Any] | None, switch: str | None
+    ) -> config_entries.ConfigFlowResult:
+        """Show, validate and store the add (switch None) or edit form of one climate."""
+        data = self._effective_data()
+        errors: dict[str, str] = {}
+        item = next((item for item in _heat_pump_items(data) if item[CONF_ITEM_SWITCH] == switch), None)
+        if user_input is not None:
+            errors = _validate_heat_pump(user_input, data, switch)
+            if not errors:
+                self._store(
+                    "heat_pumps",
+                    {
+                        CONF_AUTO_START_STOP_ITEMS: _apply_heat_pump(
+                            user_input, switch or user_input[CONF_ITEM_SWITCH], data
+                        )
+                    },
+                )
+                return await self.async_step_heat_pumps()
+            # Redisplay what was typed, so the refused value is there to correct.
+            item = {
+                CONF_ITEM_SWITCH: switch or user_input.get(CONF_ITEM_SWITCH),
+                CONF_ITEM_CLIMATE: user_input.get(CONF_ITEM_CLIMATE),
+                CONF_ITEM_SETPOINT_THRESHOLDS: {
+                    key: user_input.get(_threshold_field(key)) for key in _driven_thermostat_modes(data)
+                },
+            }
+        placeholders = _thermostat_placeholders(data)
+        if switch:
+            placeholders["switch"] = _entity_name(self.hass, switch)
+            placeholders["setpoint"] = _setpoint_text(self.hass, item, switch)
+        return self.async_show_form(
+            step_id=step_id,
+            data_schema=_heat_pump_schema(data, item, with_switch=switch is None),
+            description_placeholders=placeholders,
+            errors=errors,
+        )
+
+    async def async_step_heat_pump_add(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> config_entries.ConfigFlowResult:
+        """Add one switch — or update one already configured."""
+        return await self._async_heat_pump_form("heat_pump_add", user_input, None)
+
+    async def async_step_heat_pump_pick(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> config_entries.ConfigFlowResult:
+        """Choose the configured switch to edit."""
+        if user_input is not None:
+            self._editing_switch = user_input[CONF_ITEM_SWITCH]
+            return await self.async_step_heat_pump_edit()
+        return self.async_show_form(
+            step_id="heat_pump_pick",
+            data_schema=_heat_pump_pick_schema(self.hass, self._data, field=CONF_ITEM_SWITCH, multiple=False),
+        )
+
+    async def async_step_heat_pump_edit(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> config_entries.ConfigFlowResult:
+        """Change the climate and the thresholds of the switch being edited."""
+        return await self._async_heat_pump_form("heat_pump_edit", user_input, self._editing_switch)
+
+    async def async_step_heat_pump_remove(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> config_entries.ConfigFlowResult:
+        """Stop driving some switches (the switches themselves are left as they are)."""
+        if user_input is not None:
+            removed = user_input.get("remove_switches", []) or []
+            if isinstance(removed, str):
+                removed = [removed]
+            self._store(
+                "heat_pumps",
+                {
+                    CONF_AUTO_START_STOP_ITEMS: [
+                        item for item in _heat_pump_items(self._data) if item[CONF_ITEM_SWITCH] not in removed
+                    ]
+                },
+            )
+            return await self.async_step_heat_pumps()
+        return self.async_show_form(
+            step_id="heat_pump_remove",
+            data_schema=_heat_pump_pick_schema(self.hass, self._data, field="remove_switches", multiple=True),
         )
 
 
@@ -1092,6 +1554,7 @@ class HomeShiftConfigFlow(_HomeShiftMenuSteps, config_entries.ConfigFlow, domain
         self._initial: dict[str, Any] = {}
         self._touched: dict[str, set[str]] = {}
         self._editing_cover = ""
+        self._editing_switch = ""
 
     def is_matching(self, _other_flow: Self) -> bool:
         """Return True if another in-progress flow matches this one (not used)."""
@@ -1108,7 +1571,23 @@ class HomeShiftConfigFlow(_HomeShiftMenuSteps, config_entries.ConfigFlow, domain
         """
         if self._async_current_entries():
             return self.async_abort(reason="single_instance_allowed")
-        return await self.async_step_menu()
+        return await self.async_step_calendars()
+
+    async def async_step_menu(
+        self,
+        _user_input: dict[str, Any] | None = None,
+    ) -> config_entries.ConfigFlowResult:
+        """Walk a first setup through two steps: the calendars, then the day mode rules.
+
+        Everything else (schedules, covers, climates, names) is optional and
+        set later from Configure, so a new user is not faced with the whole
+        menu before HomeShift even runs.
+        """
+        if not self._is_config_complete():
+            return await self.async_step_calendars()
+        if "mapping" not in self._touched:
+            return await self.async_step_mapping()
+        return await self.async_step_finalize()
 
     async def async_step_finalize(
         self,
@@ -1142,6 +1621,7 @@ class HomeShiftOptionsFlow(_HomeShiftMenuSteps, config_entries.OptionsFlow):
         self._initial: dict[str, Any] = {}
         self._touched: dict[str, set[str]] = {}
         self._editing_cover = ""
+        self._editing_switch = ""
 
     async def async_step_init(
         self,

@@ -815,6 +815,26 @@ class TestUnreadableCalendarKeepsTheMode:
         warnings = [r for r in caplog.records if "Calendar unreadable" in r.getMessage() and r.levelname == "WARNING"]
         assert len(warnings) == 1
 
+    async def test_the_outage_is_exposed_with_its_first_sighting(self):
+        side = {"calendar": make_calendar_state(state="unavailable")}
+        coordinator = self._coordinator("Télétravail", lambda e: _states(**side)(e))
+        assert coordinator.calendar_error is None
+
+        await self._poll(coordinator)
+        await self._poll(coordinator, datetime(2026, 3, 3, 10, 5, 0))
+
+        assert coordinator.calendar_error == {"since": datetime(2026, 3, 3, 10, 0, 0).isoformat()}
+
+    async def test_the_outage_error_clears_once_the_calendar_answers(self):
+        side = {"calendar": make_calendar_state(state="unavailable")}
+        coordinator = self._coordinator("Télétravail", lambda e: _states(**side)(e))
+
+        await self._poll(coordinator)
+        side["calendar"] = make_calendar_state(state="off")
+        await self._poll(coordinator, datetime(2026, 3, 3, 10, 5, 0))
+
+        assert coordinator.calendar_error is None
+
 
 class TestCoversDoNotWaitForTheCalendar:
     """The cover schedule runs even when the calendar cannot be read (audit P4)."""

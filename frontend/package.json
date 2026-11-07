@@ -1,0 +1,42 @@
+{
+  "name": "homeshift-card",
+  "version": "2.1.0",
+  "private": true,
+  "description": "Lovelace card bundled with the HomeShift integration",
+  "type": "module",
+  "main": "../custom_components/homeshift/www/homeshift-card.js",
+  "scripts": {
+    "build": "rollup -c",
+    "watch": "rollup -c -w",
+    "typecheck": "tsc --noEmit -p test/tsconfig.json",
+    "lint": "eslint .",
+    "test": "vitest run"
+  },
+  "keywords": [
+    "home-assistant",
+    "custom-card",
+    "homeshift"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@rollup/plugin-commonjs": "^29.0.0",
+    "@rollup/plugin-json": "^6.0.0",
+    "@rollup/plugin-node-resolve": "^16.0.3",
+    "@rollup/plugin-terser": "^0.4.4",
+    "@rollup/plugin-typescript": "^12.3.0",
+    "@types/node": "^25.0.8",
+    "eslint": "^10.12.0",
+    "globals": "^17.13.0",
+    "happy-dom": "^20.14.5",
+    "rollup": "^4.55.1",
+    "tslib": "^2.8.1",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.71.0",
+    "vitest": "^5.0.3"
+  },
+  "dependencies": {
+    "lit": "^3.3.2"
+  }
+}

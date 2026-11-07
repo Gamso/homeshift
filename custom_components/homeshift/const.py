@@ -107,6 +107,10 @@ CONF_ITEM_WINDOW_SENSOR = "window_sensor"
 # evening close presses this button instead of sending close_cover, so a
 # cover that must not close fully stops at its recorded favourite position.
 CONF_ITEM_MY_BUTTON = "my_button"
+# Form-only toggles of a cover: opened and closed every day (it is then in
+# CONF_DAILY_COVER_ITEMS), protected from heat (it is then in CONF_COVER_ENTITIES).
+CONF_ITEM_DAILY = "daily"
+CONF_ITEM_HEAT = "heat_protection"
 # Window-sensor states that mean "the window is open" — a binary_sensor uses
 # 'on'; 'open' covers a field pointed at a door/window entity instead.
 WINDOW_OPEN_STATES = frozenset({"on", "open"})
@@ -117,6 +121,17 @@ WINDOW_CLOSED_STATES = frozenset({"off", "closed"})
 # closed as soon as that window is shut, until the next morning open.
 CONF_CLOSE_WHEN_WINDOW_SHUTS = "close_when_window_shuts"
 DEFAULT_CLOSE_WHEN_WINDOW_SHUTS = False
+
+# Auto start/stop of climates (Versatile Thermostat over_climate): one item
+# per switch (switch.<vtherm>_enable_auto_start_stop), with the
+# climate whose target temperature decides and, per thermostat mode key, a
+# threshold in degrees (a mode without one is not driven). On the comfort side
+# of the threshold the switch is turned off, so the climate keeps running; on
+# the other side it is turned on and VTherm may stop it.
+CONF_AUTO_START_STOP_ITEMS = "auto_start_stop_items"
+CONF_ITEM_SWITCH = "switch"
+CONF_ITEM_CLIMATE = "climate"
+CONF_ITEM_SETPOINT_THRESHOLDS = "setpoint_thresholds"
 
 DEFAULT_DAILY_COVER_OPEN_TIME = "08:30"
 # The offset the retired setting defaulted to, used only to convert an entry
@@ -141,6 +156,7 @@ SENSOR_COVER_CLOSE_TIME = "cover_close_time"
 BINARY_SENSOR_COVER_HEAT_ACTIVE = "cover_heat_active"
 BINARY_SENSOR_COVERS_LEFT_OPEN = "covers_left_open"
 SENSOR_COVERS_INHIBITED = "covers_inhibited"
+SENSOR_AUTO_START_STOP = "auto_start_stop"
 BUTTON_OPEN_COVERS = "open_covers"
 BUTTON_CLOSE_COVERS = "close_covers"
 

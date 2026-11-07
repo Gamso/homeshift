@@ -202,7 +202,11 @@ SCHEDULER_COMPONENT_URL="https://github.com/nielsfaber/scheduler-component/relea
 # script prints on first install once checked against the release.
 SCHEDULER_COMPONENT_SHA256=""
 
-if [ ! -d ${PWD}/config/custom_components/scheduler ]; then
+# Test the manifest, not the folder: a folder left with only __pycache__
+# (an earlier install removed by hand) would otherwise skip the install for
+# good, and Home Assistant would report "Integration 'scheduler' not found".
+if [ ! -f ${PWD}/config/custom_components/scheduler/manifest.json ]; then
+    rm -rf ${PWD}/config/custom_components/scheduler
     # Install wget and unzip if not available
     if ! command -v wget &> /dev/null || ! command -v unzip &> /dev/null; then
         echo "   Installing wget and unzip..."

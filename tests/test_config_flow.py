@@ -3,9 +3,8 @@ from __future__ import annotations
 
 import re
 from datetime import datetime
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
-import pytest
 import voluptuous as vol
 from homeassistant.data_entry_flow import section
 
@@ -23,6 +22,7 @@ from custom_components.homeshift.const import (
     CONF_ITEM_COVER,
     CONF_DAILY_COVER_OPEN_TIME_MAP,
     CONF_DAY_MODE_MAP,
+    CONF_EVENT_MODE_MAP,
     CONF_HOLIDAY_CALENDAR,
     CONF_SCHEDULERS_PER_MODE,
     CONF_SUNRISE_EARLIEST,
@@ -40,13 +40,6 @@ def _make_hass(language: str = "en", switch_states: list | None = None) -> Magic
     hass.states.get.return_value = MagicMock()  # any entity_id "exists"
     hass.config_entries.async_entries.return_value = []  # nothing configured yet
     return hass
-
-
-@pytest.fixture(autouse=True)
-def _no_translation_files():
-    """The menus look up their section labels; a bare MagicMock hass has none to load."""
-    with patch.object(cf, "async_get_translations", AsyncMock(return_value={})):
-        yield
 
 
 def _fields(schema: vol.Schema) -> dict:
@@ -212,18 +205,16 @@ class TestTranslationsMatchTheForms:
         fields = {str(marker) for marker in cf._day_mode_display_fields({CONF_DAY_MODE_MAP: DEFAULT_DAY_MODE_MAP})}
         for lang in ("en", "fr"):
             for flow in ("config", "options"):
-                section = _translations(lang)[flow]["step"]["mapping"]["sections"]["day_modes_section"]
+                section = _translations(lang)[flow]["step"]["names"]["sections"]["day_modes_section"]
                 assert fields <= set(section["data"]), (lang, flow)
-                assert fields <= set(section["data_description"]), (lang, flow)
 
 
 class TestCoversSchema:
     """_covers_schema: field set matches the close-only, native-schedule design."""
 
-    def test_top_level_is_the_covers_then_two_sections(self):
+    def test_top_level_is_two_sections_the_covers_being_ticked_in_the_cover_list(self):
         schema = cf._covers_schema(_make_hass(), {})
         assert [str(marker) for marker in schema.schema] == [
-            "cover_entities",
             "trigger_section",
             "action_section",
         ]
@@ -233,7 +224,6 @@ class TestCoversSchema:
         schema = cf._covers_schema(hass, {})
         field_names = set(_markers(schema))
         assert field_names == {
-            "cover_entities",
             "cover_temp_sensor",
             "cover_temp_threshold",
             "cover_my_button",
@@ -421,21 +411,34 @@ class TestSchedulerHelpers:
 
 
 class TestMappingSchema:
-    """_mapping_schema: three collapsible sections (day modes, defaults, thermostat)."""
+    """_mapping_schema: the rules, then the calendar keywords of each mode."""
 
-    def test_has_three_sections(self):
-        data = {CONF_DAY_MODE_MAP: DEFAULT_DAY_MODE_MAP}
-        schema = cf._mapping_schema(data)
-        section_names = {marker.schema for marker in schema.schema}
-        assert section_names == {"day_modes_section", "defaults_section", "thermostat_section"}
-
-    def test_the_rules_come_first_and_the_names_are_folded(self):
+    def test_has_the_rules_then_the_keywords(self):
         schema = cf._mapping_schema({CONF_DAY_MODE_MAP: DEFAULT_DAY_MODE_MAP})
         sections = {str(marker): value for marker, value in schema.schema.items()}
-        assert list(sections) == ["defaults_section", "day_modes_section", "thermostat_section"]
+        assert list(sections) == ["defaults_section", "keywords_section"]
         assert sections["defaults_section"].options["collapsed"] is False
-        assert sections["day_modes_section"].options["collapsed"] is True
-        assert sections["thermostat_section"].options["collapsed"] is True
+        assert sections["keywords_section"].options["collapsed"] is False
+
+    def test_one_keyword_field_per_mode_prefilled_from_the_stored_map(self):
+        schema = cf._mapping_schema(
+            {CONF_DAY_MODE_MAP: "home:Maison, remote:Télétravail", CONF_EVENT_MODE_MAP: "Vacances:home, TT:remote, Congés:home"}
+        )
+        markers = _markers(schema)
+        assert markers["event_keywords_home"].description == {"suggested_value": "Vacances, Congés"}
+        assert markers["event_keywords_remote"].description == {"suggested_value": "TT"}
+
+    def test_a_mode_written_by_its_name_is_matched_back_to_its_key(self):
+        keywords = cf._event_keywords_by_mode(
+            {CONF_DAY_MODE_MAP: "home:Maison, remote:Télétravail", CONF_EVENT_MODE_MAP: "TT:Télétravail, X:unknown"}
+        )
+        assert keywords == {"home": "", "remote": "TT"}
+
+    def test_the_names_have_their_own_form(self):
+        schema = cf._names_schema({CONF_DAY_MODE_MAP: DEFAULT_DAY_MODE_MAP})
+        assert [str(marker) for marker in schema.schema] == ["day_modes_section", "thermostat_section"]
+        assert "day_display_home" in _markers(schema)
+        assert "thermostat_display_heating" in _markers(schema)
 
     def test_mode_dropdowns_show_display_names_and_store_keys(self):
         schema = cf._mapping_schema({CONF_DAY_MODE_MAP: "home:Maison, work:Travail"})
@@ -452,13 +455,13 @@ class TestMappingSchema:
 # ---------------------------------------------------------------------------
 
 class TestConfigFlowMenu:
-    """async_step_menu: options offered, 'finalize' gated on minimum config."""
+    """The first setup is a two-step wizard; the options menu offers every section."""
 
-    async def test_user_step_redirects_to_menu(self):
+    async def test_the_first_setup_starts_with_the_calendars(self):
         flow = cf.HomeShiftConfigFlow()
         flow.hass = _make_hass()
         result = await flow.async_step_user()
-        assert result["step_id"] == "menu"
+        assert result["step_id"] == "calendars"
 
     async def test_user_step_aborts_when_already_configured(self):
         """A second entry would mean two coordinators driving the same covers."""
@@ -469,18 +472,34 @@ class TestConfigFlowMenu:
         assert result["type"] == "abort"
         assert result["reason"] == "single_instance_allowed"
 
-    async def test_finalize_absent_when_incomplete(self):
+    async def test_the_calendars_lead_to_the_day_mode_then_the_entry(self):
         flow = cf.HomeShiftConfigFlow()
         flow.hass = _make_hass()
-        result = await flow.async_step_menu()
-        assert result["menu_options"] == ["calendars", "mapping", "schedulers", "covers_menu"]
+        result = await flow.async_step_calendars(
+            {CONF_CALENDAR_ENTITY: "calendar.a", CONF_HOLIDAY_CALENDAR: "calendar.b"}
+        )
+        assert result["step_id"] == "mapping"
+        result = await flow.async_step_mapping({"defaults_section": {}, "keywords_section": {}})
+        assert result["type"] == "create_entry"
+        assert result["data"][CONF_CALENDAR_ENTITY] == "calendar.a"
 
-    async def test_finalize_present_once_calendar_configured(self):
-        flow = cf.HomeShiftConfigFlow()
-        flow.hass = _make_hass()
-        flow._data[CONF_CALENDAR_ENTITY] = "calendar.a"
-        result = await flow.async_step_menu()
+    async def test_finalize_absent_when_incomplete(self):
+        flow = _make_options_flow({})
+        result = await flow.async_step_init()
+        assert result["menu_options"] == ["calendars", "mapping", "schedulers", "covers_menu", "heat_pumps", "names"]
+
+    async def test_finalize_last_while_nothing_changed(self):
+        flow = _make_options_flow({CONF_CALENDAR_ENTITY: "calendar.a"})
+        result = await flow.async_step_init()
         assert result["menu_options"][-1] == "finalize"
+        assert result["description_placeholders"]["pending_count"] == "0"
+
+    async def test_finalize_first_once_a_section_changed(self):
+        flow = _make_options_flow({CONF_CALENDAR_ENTITY: "calendar.a", CONF_DAY_MODE_MAP: "home:Home"})
+        await flow.async_step_init()
+        result = await flow.async_step_schedulers({"mode_home": {"schedulers_home": ["switch.a"]}})
+        assert result["menu_options"][0] == "finalize"
+        assert result["description_placeholders"]["pending_count"] == "1"
 
     async def test_covers_menu_groups_the_three_cover_sections(self):
         flow = cf.HomeShiftConfigFlow()
@@ -491,8 +510,8 @@ class TestConfigFlowMenu:
 
     async def test_menus_fill_every_placeholder_their_translations_use(self):
         """A placeholder missing from the step shows as raw {braces} in the dialog."""
-        flow = cf.HomeShiftConfigFlow()
-        flow.hass = _make_hass()
+        flow = _make_options_flow({CONF_CALENDAR_ENTITY: "calendar.a"})
+        await flow.async_step_init()
         for step in ("menu", "covers_menu"):
             result = await getattr(flow, f"async_step_{step}")()
             given = set(result["description_placeholders"])
@@ -502,13 +521,25 @@ class TestConfigFlowMenu:
                     used = set(re.findall(r"\{(\w+)\}", json_dumps(texts)))
                     assert used <= given, (step, lang, category, used - given)
 
+    async def test_forms_fill_every_placeholder_their_translations_use(self):
+        flow = _make_options_flow({CONF_CALENDAR_ENTITY: "calendar.a"})
+        await flow.async_step_init()
+        for step in ("calendars", "mapping", "names", "schedulers", "covers", "daily_cover_schedule", "cover_item_add"):
+            result = await getattr(flow, f"async_step_{step}")()
+            given = set(result.get("description_placeholders") or {})
+            for lang in ("en", "fr"):
+                for category in ("config", "options"):
+                    texts = _translations(lang)[category]["step"][step]
+                    used = set(re.findall(r"\{(\w+)\}", json_dumps(texts)))
+                    assert used <= given, (step, lang, category, used - given)
+
 
 class TestConfigFlowCalendarsStep:
-    """async_step_calendars: validates, stores, and returns to the menu."""
+    """async_step_calendars: validates, stores, and moves on."""
 
-    async def test_valid_input_updates_data_and_returns_to_menu(self):
-        flow = cf.HomeShiftConfigFlow()
-        flow.hass = _make_hass()
+    async def test_valid_input_updates_data_and_returns_to_the_menu(self):
+        flow = _make_options_flow({})
+        await flow.async_step_init()
         result = await flow.async_step_calendars({CONF_CALENDAR_ENTITY: "calendar.a", CONF_HOLIDAY_CALENDAR: "calendar.b"})
         assert result["step_id"] == "menu"
         assert flow._data[CONF_CALENDAR_ENTITY] == "calendar.a"
@@ -625,31 +656,94 @@ class TestConfigFlowDailyCoverScheduleStep:
 
 
 class TestConfigFlowMappingStep:
-    """async_step_mapping: flattens the three sections and rebuilds both maps."""
+    """async_step_mapping: the rules and the keywords; async_step_names: the names."""
 
-    async def test_flattens_sections_and_rebuilds_maps(self):
-        flow = cf.HomeShiftConfigFlow()
-        flow.hass = _make_hass()
-        user_input = {
-            "day_modes_section": {"day_display_home": "Maison"},
-            "defaults_section": {},
-            "thermostat_section": {},
-        }
-        result = await flow.async_step_mapping(user_input)
+    async def _flow(self):
+        flow = _make_options_flow({CONF_CALENDAR_ENTITY: "calendar.a", CONF_DAY_MODE_MAP: DEFAULT_DAY_MODE_MAP})
+        await flow.async_step_init()
+        return flow
+
+    async def test_the_keywords_of_each_mode_are_stored_as_one_map(self):
+        flow = await self._flow()
+        result = await flow.async_step_mapping(
+            {
+                "defaults_section": {},
+                "keywords_section": {"event_keywords_home": "Vacation, Holiday ", "event_keywords_remote": "Remote:x"},
+            }
+        )
+        assert result["step_id"] == "menu"
+        assert flow._data[CONF_EVENT_MODE_MAP] == "Vacation:home, Holiday:home, Remotex:remote"
+        assert not any(key.startswith("event_keywords_") for key in flow._data)
+
+    async def test_a_keyword_given_for_two_modes_is_refused(self):
+        flow = await self._flow()
+        result = await flow.async_step_mapping(
+            {"defaults_section": {}, "keywords_section": {"event_keywords_home": "Off", "event_keywords_away": "off"}}
+        )
+        assert result["type"] == "form"
+        assert result["errors"] == {"base": "duplicate_keyword"}
+        assert _markers(result["data_schema"])["event_keywords_away"].description == {"suggested_value": "off"}
+
+    async def test_resubmitting_the_keywords_changes_nothing(self):
+        flow = _make_options_flow({CONF_CALENDAR_ENTITY: "calendar.a", CONF_EVENT_MODE_MAP: "Vacation:home, Remote:remote"})
+        await flow.async_step_init()
+        result = await flow.async_step_mapping(
+            {"defaults_section": {}, "keywords_section": {"event_keywords_home": "Vacation", "event_keywords_remote": "Remote"}}
+        )
+        assert marked(result) == set()
+
+    async def test_the_names_rebuild_both_maps(self):
+        flow = await self._flow()
+        result = await flow.async_step_names(
+            {"day_modes_section": {"day_display_home": "Maison"}, "thermostat_section": {"thermostat_display_heating": "Chauffe"}}
+        )
         assert result["step_id"] == "menu"
         assert "home:Maison" in flow._data[CONF_DAY_MODE_MAP]
+        assert "heating:Chauffe" in flow._data["thermostat_mode_map"]
+        assert marked(result) == {"changed_names"}
 
 
 class TestConfigFlowSchedulersStep:
-    """async_step_schedulers: extracts per-mode scheduler assignments."""
+    """async_step_schedulers: extracts per-mode scheduler assignments, flags untagged ones."""
 
     async def test_stores_extracted_schedulers(self):
-        flow = cf.HomeShiftConfigFlow()
-        flow.hass = _make_hass()
-        flow._data[CONF_DAY_MODE_MAP] = "home:Home"
+        flow = _make_options_flow({CONF_CALENDAR_ENTITY: "calendar.a", CONF_DAY_MODE_MAP: "home:Home"})
+        await flow.async_step_init()
         result = await flow.async_step_schedulers({"schedulers_home": "switch.a"})
         assert result["step_id"] == "menu"
         assert flow._data[CONF_SCHEDULERS_PER_MODE] == {"home": ["switch.a"]}
+
+    async def test_a_schedule_driving_a_climate_without_a_thermostat_tag_is_flagged(self):
+        flow = _make_options_flow(
+            {
+                CONF_CALENDAR_ENTITY: "calendar.a",
+                CONF_DAY_MODE_MAP: "home:Home",
+                CONF_SCHEDULERS_PER_MODE: {"home": ["switch.tagged", "switch.untagged", "switch.lights"]},
+            }
+        )
+        states = {
+            "switch.tagged": _state({"tags": ["Heating"], "entities": ["climate.salon"], "friendly_name": "Tagged"}),
+            "switch.untagged": _state({"tags": ["Home"], "entities": ["climate.salon"], "friendly_name": "Untagged"}),
+            "switch.lights": _state({"tags": [], "entities": ["light.salon"], "friendly_name": "Lights"}),
+        }
+        flow.hass.states.get.side_effect = states.get
+        await flow.async_step_init()
+        form = await flow.async_step_schedulers()
+        assert form["description_placeholders"]["untagged"] == "Untagged"
+
+    async def test_nothing_flagged_shows_a_dash(self):
+        flow = _make_options_flow({CONF_CALENDAR_ENTITY: "calendar.a"})
+        flow.hass.states.get.side_effect = lambda entity_id: None
+        await flow.async_step_init()
+        form = await flow.async_step_schedulers()
+        assert form["description_placeholders"]["untagged"] == "—"
+
+
+def _state(attributes: dict) -> MagicMock:
+    state = MagicMock()
+    state.attributes = attributes
+    state.name = attributes.get("friendly_name")
+    return state
 
 
 class TestSchedulersAreKeyedByModeKey:
@@ -687,9 +781,7 @@ class TestSchedulersAreKeyedByModeKey:
         flow = cf.HomeShiftConfigFlow()
         flow.hass = _make_hass(language="fr")
         flow._data[CONF_SCHEDULERS_PER_MODE] = {"work": ["switch.bureau"]}
-        await flow.async_step_mapping(
-            {"day_modes_section": {"day_display_work": "Bureau"}, "defaults_section": {}, "thermostat_section": {}}
-        )
+        await flow.async_step_names({"day_modes_section": {"day_display_work": "Bureau"}, "thermostat_section": {}})
         form = await flow.async_step_schedulers()
         defaults = {name: marker.default() for name, marker in _markers(form["data_schema"]).items()}
         assert defaults["schedulers_work"] == ["switch.bureau"]
@@ -791,9 +883,7 @@ class TestOptionsFlowShowForms:
         await flow.async_step_init()
         form = await flow.async_step_mapping()
         assert form["step_id"] == "mapping"
-        result = await flow.async_step_mapping(
-            {"day_modes_section": {}, "defaults_section": {}, "thermostat_section": {}}
-        )
+        result = await flow.async_step_mapping({"defaults_section": {}, "keywords_section": {}})
         assert result["step_id"] == "menu"
 
     async def test_schedulers_shows_form_and_accepts_input(self):
@@ -821,19 +911,31 @@ class TestOptionsFlowShowForms:
         assert form["step_id"] == "daily_cover_schedule"
 
 
+def marked(result) -> set[str]:
+    """Return the menu entries marked as changed and not saved yet."""
+    placeholders = result["description_placeholders"]
+    return {key for key, value in placeholders.items() if key.startswith("changed_") and value}
+
+
 class TestPendingChanges:
-    """The menu says which sections were changed and not saved yet."""
+    """The menu marks the entries whose section was changed and not saved yet.
+
+    The mark is a symbol, not a section name: the flow only knows the language
+    of the instance, not that of the person's profile, so a translated name
+    could be in the wrong language.
+    """
 
     async def test_nothing_pending_when_the_options_open(self):
         flow = _make_options_flow({CONF_CALENDAR_ENTITY: "calendar.a"})
         result = await flow.async_step_init()
-        assert result["description_placeholders"]["pending"] == "—"
+        assert marked(result) == set()
 
-    async def test_a_changed_section_is_listed(self):
+    async def test_a_changed_section_is_marked(self):
         flow = _make_options_flow({CONF_CALENDAR_ENTITY: "calendar.a", CONF_DAY_MODE_MAP: "home:Home"})
         await flow.async_step_init()
         result = await flow.async_step_schedulers({"mode_home": {"schedulers_home": ["switch.a"]}})
-        assert result["description_placeholders"]["pending"] == "schedulers"
+        assert marked(result) == {"changed_schedulers"}
+        assert result["description_placeholders"]["changed_schedulers"] == cf.PENDING_MARK
 
     async def test_resubmitting_the_same_values_changes_nothing(self):
         flow = _make_options_flow(
@@ -846,24 +948,34 @@ class TestPendingChanges:
         result = await flow.async_step_calendars(
             {CONF_CALENDAR_ENTITY: "calendar.a", CONF_HOLIDAY_CALENDAR: "calendar.b"}
         )
-        assert result["description_placeholders"]["pending"] == "—"
+        assert marked(result) == set()
 
     async def test_a_cleared_field_never_set_is_not_a_change(self):
         flow = _make_options_flow({CONF_CALENDAR_ENTITY: "calendar.a"})
         await flow.async_step_init()
         result = await flow.async_step_covers({CONF_COVER_ENTITIES: []})
-        assert result["description_placeholders"]["pending"] == "—"
+        assert marked(result) == set()
 
-    async def test_sections_are_named_from_the_translations(self):
+    async def test_the_covers_entry_is_marked_with_its_section(self):
         flow = _make_options_flow({CONF_CALENDAR_ENTITY: "calendar.a"})
         await flow.async_step_init()
         await flow.async_step_cover_item_add({CONF_ITEM_COVER: "cover.a"})
-        translations = {
-            "component.homeshift.options.step.covers_menu.menu_options.cover_items": "Volets gérés",
-        }
-        with patch.object(cf, "async_get_translations", AsyncMock(return_value=translations)):
-            result = await flow.async_step_menu()
-        assert result["description_placeholders"]["pending"] == "Volets gérés"
+        result = await flow.async_step_menu()
+        assert marked(result) == {"changed_cover_items", "changed_covers_menu"}
+
+    async def test_every_marker_is_filled_and_used_by_the_translations(self):
+        flow = _make_options_flow({CONF_CALENDAR_ENTITY: "calendar.a"})
+        await flow.async_step_init()
+        menu = await flow.async_step_menu()
+        covers_menu = await flow.async_step_covers_menu()
+        for category in ("config", "options"):
+            for lang in ("en", "fr"):
+                steps = _translations(lang)[category]["step"]
+                for step, result in (("menu", menu), ("covers_menu", covers_menu)):
+                    texts = json_dumps(steps[step])
+                    used = set(re.findall(r"\{(changed_\w+)\}", texts))
+                    assert used, (category, lang, step)
+                    assert used <= set(result["description_placeholders"]), (category, lang, step)
 
 
 # ---------------------------------------------------------------------------
@@ -877,32 +989,35 @@ class TestCoverItemHelpers:
         data = {CONF_DAILY_COVER_ITEMS: [{"cover": "cover.a"}, {"window_sensor": "binary_sensor.b"}, "junk"]}
         assert cf._cover_items(data) == [{"cover": "cover.a"}]
 
-    def test_summary_lists_each_cover_with_its_sensor(self):
+    def test_summary_lists_each_cover_with_its_roles_and_sensor(self):
         data = {
             CONF_DAILY_COVER_ITEMS: [
                 {"cover": "cover.a", "window_sensor": "binary_sensor.b"},
                 {"cover": "cover.c", "window_sensor": ""},
-            ]
+            ],
+            CONF_COVER_ENTITIES: ["cover.c", "cover.d"],
         }
-        summary = cf._cover_items_summary(data)
-        assert "cover.a" in summary and "binary_sensor.b" in summary
-        assert summary.splitlines()[-1].strip() == "- **cover.c**"
+        assert cf._cover_items_summary(data).splitlines() == [
+            "- **cover.a** 🕒 · 🪟 binary_sensor.b",
+            "- **cover.c** 🕒 🌡️",
+            "- **cover.d** 🌡️",
+        ]
 
     def test_summary_shows_the_my_button(self):
         data = {CONF_DAILY_COVER_ITEMS: [{"cover": "cover.a", "window_sensor": "", "my_button": "button.my_a"}]}
-        assert cf._cover_items_summary(data) == "- **cover.a** (My: button.my_a)"
+        assert cf._cover_items_summary(data) == "- **cover.a** 🕒 · My: button.my_a"
 
     def test_summary_uses_the_given_names(self):
         data = {CONF_DAILY_COVER_ITEMS: [{"cover": "cover.a", "window_sensor": "binary_sensor.b"}]}
         names = {"cover.a": "Volet bureau", "binary_sensor.b": "Fenêtre bureau"}
-        assert cf._cover_items_summary(data, names.get) == "- **Volet bureau** ← Fenêtre bureau"
+        assert cf._cover_items_summary(data, names.get) == "- **Volet bureau** 🕒 · 🪟 Fenêtre bureau"
 
     def test_summary_when_nothing_configured(self):
         assert cf._cover_items_summary({}) == "—"
 
     def test_menu_offers_edit_and_remove_only_when_covers_exist(self):
         assert cf._cover_items_menu_options({}) == ["cover_item_add", "covers_menu"]
-        assert cf._cover_items_menu_options({CONF_DAILY_COVER_ITEMS: [{"cover": "cover.a"}]}) == [
+        assert cf._cover_items_menu_options({CONF_COVER_ENTITIES: ["cover.a"]}) == [
             "cover_item_add",
             "cover_item_pick",
             "cover_item_remove",
@@ -912,51 +1027,72 @@ class TestCoverItemHelpers:
     def test_add_appends_a_new_cover(self):
         data = {CONF_DAILY_COVER_ITEMS: [{"cover": "cover.a", "window_sensor": ""}]}
         result = cf._apply_cover_item_add({"cover": "cover.b", "window_sensor": "binary_sensor.b"}, data)
-        assert result == [
-            {"cover": "cover.a", "window_sensor": ""},
-            {"cover": "cover.b", "window_sensor": "binary_sensor.b", "my_button": ""},
+        assert result == {
+            CONF_DAILY_COVER_ITEMS: [
+                {"cover": "cover.a", "window_sensor": ""},
+                {"cover": "cover.b", "window_sensor": "binary_sensor.b", "my_button": ""},
+            ],
+            CONF_COVER_ENTITIES: [],
+        }
+
+    def test_re_adding_a_cover_updates_it_in_place(self):
+        data = {
+            CONF_DAILY_COVER_ITEMS: [
+                {"cover": "cover.a", "window_sensor": "binary_sensor.old"},
+                {"cover": "cover.b", "window_sensor": ""},
+            ]
+        }
+        result = cf._apply_cover_item_add({"cover": "cover.a", "my_button": "button.new"}, data)
+        assert result[CONF_DAILY_COVER_ITEMS] == [
+            {"cover": "cover.a", "window_sensor": "", "my_button": "button.new"},
+            {"cover": "cover.b", "window_sensor": ""},
         ]
 
-    def test_re_adding_a_cover_updates_its_sensor_instead_of_duplicating(self):
-        data = {CONF_DAILY_COVER_ITEMS: [{"cover": "cover.a", "window_sensor": "binary_sensor.old"}]}
-        result = cf._apply_cover_item_add({"cover": "cover.a", "window_sensor": "binary_sensor.new"}, data)
-        assert result == [{"cover": "cover.a", "window_sensor": "binary_sensor.new", "my_button": ""}]
+    def test_the_roles_put_the_cover_in_each_list(self):
+        result = cf._apply_cover_item_add({"cover": "cover.a", "daily": False, "heat_protection": True}, {})
+        assert result == {CONF_DAILY_COVER_ITEMS: [], CONF_COVER_ENTITIES: ["cover.a"]}
+        both = cf._apply_cover_item_add({"cover": "cover.a", "daily": True, "heat_protection": True}, {})
+        assert both == {
+            CONF_DAILY_COVER_ITEMS: [{"cover": "cover.a", "window_sensor": "", "my_button": ""}],
+            CONF_COVER_ENTITIES: ["cover.a"],
+        }
 
-    def test_re_adding_a_cover_updates_its_my_button(self):
-        data = {CONF_DAILY_COVER_ITEMS: [{"cover": "cover.a", "window_sensor": "", "my_button": "button.old"}]}
-        result = cf._apply_cover_item_add({"cover": "cover.a", "my_button": "button.new"}, data)
-        assert result == [{"cover": "cover.a", "window_sensor": "", "my_button": "button.new"}]
+    def test_unticking_a_role_takes_the_cover_out_of_its_list(self):
+        data = {CONF_DAILY_COVER_ITEMS: [{"cover": "cover.a"}], CONF_COVER_ENTITIES: ["cover.a", "cover.b"]}
+        result = cf._apply_cover_item_add({"cover": "cover.a", "daily": True, "heat_protection": False}, data)
+        assert result[CONF_COVER_ENTITIES] == ["cover.b"]
 
-    def test_add_stores_the_my_button(self):
-        result = cf._apply_cover_item_add({"cover": "cover.a", "my_button": "button.my_a"}, {})
-        assert result == [{"cover": "cover.a", "window_sensor": "", "my_button": "button.my_a"}]
+    def test_a_cover_needs_a_role(self):
+        assert cf._validate_cover_roles({"daily": False, "heat_protection": False}) == {"base": "no_cover_role"}
+        assert cf._validate_cover_roles({"daily": True}) == {}
 
-    def test_add_without_a_sensor_stores_an_empty_string(self):
-        result = cf._apply_cover_item_add({"cover": "cover.a"}, {})
-        assert result == [{"cover": "cover.a", "window_sensor": "", "my_button": ""}]
-
-    def test_remove_drops_the_selected_covers(self):
+    def test_remove_drops_the_selected_covers_from_both_lists(self):
         data = {
             CONF_DAILY_COVER_ITEMS: [
                 {"cover": "cover.a", "window_sensor": ""},
                 {"cover": "cover.b", "window_sensor": ""},
-            ]
+            ],
+            CONF_COVER_ENTITIES: ["cover.a", "cover.c"],
         }
-        assert cf._apply_cover_item_remove({"remove_covers": ["cover.a"]}, data) == [
-            {"cover": "cover.b", "window_sensor": ""}
-        ]
+        assert cf._apply_cover_item_remove({"remove_covers": ["cover.a"]}, data) == {
+            CONF_DAILY_COVER_ITEMS: [{"cover": "cover.b", "window_sensor": ""}],
+            CONF_COVER_ENTITIES: ["cover.c"],
+        }
 
     def test_remove_with_nothing_selected_keeps_everything(self):
         data = {CONF_DAILY_COVER_ITEMS: [{"cover": "cover.a", "window_sensor": ""}]}
-        assert cf._apply_cover_item_remove({}, data) == [{"cover": "cover.a", "window_sensor": ""}]
+        assert cf._apply_cover_item_remove({}, data) == {
+            CONF_DAILY_COVER_ITEMS: [{"cover": "cover.a", "window_sensor": ""}],
+            CONF_COVER_ENTITIES: [],
+        }
 
-    def test_add_schema_has_a_required_cover_and_two_optional_fields(self):
+    def test_add_schema_has_a_required_cover_its_roles_and_two_optional_fields(self):
         schema = cf._cover_item_add_schema()
         markers = {marker.schema: marker for marker in schema.schema}
-        assert set(markers) == {"cover", "window_sensor", "my_button"}
+        assert list(markers) == ["cover", "daily", "heat_protection", "window_sensor", "my_button"]
         assert isinstance(markers["cover"], vol.Required)
-        assert isinstance(markers["window_sensor"], vol.Optional)
-        assert isinstance(markers["my_button"], vol.Optional)
+        assert markers["daily"].default() is True
+        assert markers["heat_protection"].default() is False
 
     def test_remove_schema_offers_every_configured_cover(self):
         data = {
@@ -965,11 +1101,12 @@ class TestCoverItemHelpers:
                 {"cover": "cover.c", "window_sensor": ""},
             ]
         }
+        data[CONF_COVER_ENTITIES] = ["cover.e"]
         schema = cf._cover_item_remove_schema(_make_hass(), data)
         (marker,) = schema.schema
         assert marker.schema == "remove_covers"
         options = schema.schema[marker].config["options"]
-        assert [option["value"] for option in options] == ["cover.a", "cover.c"]
+        assert [option["value"] for option in options] == ["cover.a", "cover.c", "cover.e"]
 
 
 class TestConfigFlowCoverItemSteps:
@@ -1061,9 +1198,11 @@ class TestEditingACover:
         form = await flow.async_step_cover_item_pick({CONF_ITEM_COVER: "cover.a"})
         assert form["step_id"] == "cover_item_edit"
         markers = _markers(form["data_schema"])
-        assert set(markers) == {"window_sensor", "my_button"}
+        assert set(markers) == {"daily", "heat_protection", "window_sensor", "my_button"}
         assert markers["window_sensor"].description == {"suggested_value": "binary_sensor.a"}
         assert markers["my_button"].default is vol.UNDEFINED
+        assert markers["daily"].default() is True
+        assert markers["heat_protection"].default() is False
 
     async def test_saving_updates_only_that_cover(self):
         flow = self._flow()
@@ -1383,3 +1522,200 @@ class TestDailyCoverScheduleStepRejectsAnUnreachableElevation:
         result = await flow.async_step_daily_cover_schedule(self._input())
 
         assert result["errors"] == {"base": "elevation_unreachable"}
+
+
+# ---------------------------------------------------------------------------
+# Heat pump auto start/stop
+# ---------------------------------------------------------------------------
+
+SALON_SWITCH = "switch.salon_enable_auto_start_stop"
+
+
+def _heat_pump_input(**overrides) -> dict:
+    values = {
+        "switch": SALON_SWITCH,
+        "threshold_heating": 19,
+    }
+    values.update(overrides)
+    return values
+
+
+class TestHeatPumpSteps:
+    """heat_pumps menu, add, pick/edit and remove."""
+
+    def _flow(self) -> cf.HomeShiftConfigFlow:
+        flow = cf.HomeShiftConfigFlow()
+        flow.hass = _make_hass()
+        return flow
+
+    async def test_the_menu_only_offers_add_until_there_is_one(self):
+        flow = self._flow()
+        result = await flow.async_step_heat_pumps()
+        assert result["menu_options"] == ["heat_pump_add", "menu"]
+
+    async def test_the_add_form_has_one_threshold_per_thermostat_mode(self):
+        flow = self._flow()
+        form = await flow.async_step_heat_pump_add()
+        markers = _markers(form["data_schema"])
+        assert set(markers) == {
+            "switch",
+            "climate",
+            "threshold_heating",
+            "threshold_cooling",
+            "threshold_ventilation",
+        }
+        assert isinstance(markers["switch"], vol.Required)
+        assert isinstance(markers["threshold_heating"], vol.Optional)
+
+    async def test_adding_stores_the_item_and_lists_it(self):
+        flow = self._flow()
+        result = await flow.async_step_heat_pump_add(_heat_pump_input(threshold_cooling=24.5))
+        assert result["step_id"] == "heat_pumps"
+        assert flow._data["auto_start_stop_items"] == [
+            {
+                "switch": SALON_SWITCH,
+                "climate": "climate.salon",
+                "setpoint_thresholds": {"heating": 19.0, "cooling": 24.5},
+            }
+        ]
+        assert result["menu_options"] == ["heat_pump_add", "heat_pump_pick", "heat_pump_remove", "menu"]
+        assert "Heating ≥ 19 °C, Cooling ≤ 24.5 °C" in result["description_placeholders"]["heat_pumps"]
+
+    async def test_an_explicit_climate_wins(self):
+        flow = self._flow()
+        await flow.async_step_heat_pump_add(_heat_pump_input(climate="climate.other"))
+        (item,) = flow._data["auto_start_stop_items"]
+        assert item["climate"] == "climate.other"
+
+    async def test_an_empty_mode_is_not_stored(self):
+        flow = self._flow()
+        await flow.async_step_heat_pump_add(_heat_pump_input(threshold_cooling=None))
+        (item,) = flow._data["auto_start_stop_items"]
+        assert item["setpoint_thresholds"] == {"heating": 19.0}
+
+    def test_the_summary_lists_each_climate_with_its_thresholds(self):
+        data = {
+            "auto_start_stop_items": [
+                {"switch": SALON_SWITCH, "setpoint_thresholds": {"heating": 19.0, "cooling": 24.0}},
+                {"switch": "switch.cave", "setpoint_thresholds": {"heating": 17.5}},
+            ]
+        }
+        names = {SALON_SWITCH: "Salon Enable auto start/stop", "switch.cave": "Cave"}
+        assert cf._heat_pumps_summary(data, names.get) == (
+            "- **Salon** · Heating ≥ 19 °C, Cooling ≤ 24 °C\n- **Cave** · Heating ≥ 17.5 °C"
+        )
+
+    async def test_at_least_one_threshold_is_needed(self):
+        flow = self._flow()
+        result = await flow.async_step_heat_pump_add(_heat_pump_input(threshold_heating=None))
+        assert result["type"] == "form"
+        assert result["errors"] == {"threshold_heating": "no_threshold"}
+        assert "auto_start_stop_items" not in flow._data
+
+    async def test_a_climate_is_needed_to_read_the_setpoint(self):
+        flow = self._flow()
+        result = await flow.async_step_heat_pump_add(_heat_pump_input(switch="switch.custom"))
+        assert result["type"] == "form"
+        assert result["errors"] == {"climate": "no_climate"}
+        assert "auto_start_stop_items" not in flow._data
+        markers = _markers(result["data_schema"])
+        assert markers["threshold_heating"].description == {"suggested_value": 19}
+
+    async def test_editing_prefills_then_updates_in_place(self):
+        flow = self._flow()
+        await flow.async_step_heat_pump_add(_heat_pump_input())
+        form = await flow.async_step_heat_pump_pick({"switch": SALON_SWITCH})
+        assert form["step_id"] == "heat_pump_edit"
+        markers = _markers(form["data_schema"])
+        assert "switch" not in markers
+        assert markers["threshold_heating"].description == {"suggested_value": 19.0}
+
+        edit = _heat_pump_input(threshold_heating=20.5, threshold_cooling=25)
+        del edit["switch"]
+        await flow.async_step_heat_pump_edit(edit)
+        (item,) = flow._data["auto_start_stop_items"]
+        assert item["setpoint_thresholds"] == {"heating": 20.5, "cooling": 25.0}
+
+    async def test_removing_drops_the_item(self):
+        flow = self._flow()
+        await flow.async_step_heat_pump_add(_heat_pump_input())
+        result = await flow.async_step_heat_pump_remove({"remove_switches": [SALON_SWITCH]})
+        assert result["step_id"] == "heat_pumps"
+        assert flow._data["auto_start_stop_items"] == []
+
+    async def test_every_placeholder_and_field_is_translated(self):
+        flow = self._flow()
+        await flow.async_step_heat_pump_add(_heat_pump_input())
+        results = {
+            "heat_pumps": await flow.async_step_heat_pumps(),
+            "heat_pump_add": await flow.async_step_heat_pump_add(),
+            "heat_pump_edit": await flow.async_step_heat_pump_pick({"switch": SALON_SWITCH}),
+        }
+        for step, result in results.items():
+            given = set(result["description_placeholders"])
+            fields = set(_markers(result["data_schema"])) if result["type"] == "form" else set()
+            for lang in ("en", "fr"):
+                for category in ("config", "options"):
+                    texts = _translations(lang)[category]["step"][step]
+                    used = set(re.findall(r"\{(\w+)\}", json_dumps(texts)))
+                    assert used <= given, (step, lang, category, used - given)
+                    assert fields <= set(texts.get("data", {})), (step, lang, category)
+        for lang in ("en", "fr"):
+            for category in ("config", "options"):
+                errors = _translations(lang)[category]["error"]
+                assert {"no_climate", "no_threshold"} <= set(errors)
+
+    async def test_an_added_heat_pump_is_a_pending_change(self):
+        flow = _make_options_flow({CONF_CALENDAR_ENTITY: "calendar.a"})
+        await flow.async_step_init()
+        await flow.async_step_heat_pump_add(_heat_pump_input())
+        result = await flow.async_step_menu()
+        assert marked(result) == {"changed_heat_pumps"}
+        assert result["description_placeholders"]["heat_pump_count"] == "1"
+
+
+class TestPreviewsAndCurrentValues:
+    """What the forms show beside the fields: tomorrow's sunrise opening, a climate's setpoint."""
+
+    def test_sunrise_opening_is_held_back_to_the_earliest_time(self):
+        hass = _make_hass()
+        hass.states.get.return_value = _state({"next_rising": "2026-11-07T05:42:00+00:00"})
+        with patch.object(cf.dt_util, "as_local", lambda value: value):
+            assert cf._open_at_sunrise_preview(hass, {CONF_SUNRISE_EARLIEST: "07:00:00"}) == {"open_at_sunrise": "07:00"}
+            assert cf._open_at_sunrise_preview(hass, {CONF_SUNRISE_EARLIEST: "05:00:00"}) == {"open_at_sunrise": "05:42"}
+
+    def test_sunrise_opening_without_the_sun_entity(self):
+        hass = _make_hass()
+        hass.states.get.return_value = None
+        assert cf._open_at_sunrise_preview(hass, {}) == {"open_at_sunrise": "--:--"}
+
+    def test_the_setpoint_of_the_climate_deduced_from_the_switch(self):
+        hass = _make_hass()
+        hass.states.get.side_effect = {"climate.salon": _state({"temperature": 17.5})}.get
+        assert cf._setpoint_text(hass, None, "switch.salon_enable_auto_start_stop") == "17.5 °C"
+        assert cf._setpoint_text(hass, {"climate": "climate.other"}, "switch.salon_enable_auto_start_stop") == "—"
+
+    async def test_the_edit_form_of_a_climate_shows_its_setpoint(self):
+        flow = TestHeatPumpSteps()._flow()
+        flow.hass.states.get.side_effect = lambda entity_id: _state(
+            {"temperature": 20.5, "friendly_name": "Salon"}
+        )
+        await flow.async_step_heat_pump_add(_heat_pump_input())
+        form = await flow.async_step_heat_pump_pick({"switch": SALON_SWITCH})
+        assert form["description_placeholders"]["setpoint"] == "20.5 °C"
+
+    async def test_the_heat_protection_page_names_the_protected_covers(self):
+        flow = _make_options_flow({CONF_CALENDAR_ENTITY: "calendar.a", CONF_COVER_ENTITIES: ["cover.a"]})
+        flow.hass.states.get.side_effect = lambda entity_id: _state({"friendly_name": "Volet salon"})
+        await flow.async_step_init()
+        form = await flow.async_step_covers()
+        assert form["description_placeholders"]["heat_covers"] == "Volet salon"
+
+    async def test_editing_a_heat_only_cover_keeps_it_out_of_the_daily_list(self):
+        flow = _make_options_flow({CONF_CALENDAR_ENTITY: "calendar.a", CONF_COVER_ENTITIES: ["cover.a"]})
+        await flow.async_step_init()
+        form = await flow.async_step_cover_item_pick({CONF_ITEM_COVER: "cover.a"})
+        markers = _markers(form["data_schema"])
+        assert (markers["daily"].default(), markers["heat_protection"].default()) == (False, True)
+        result = await flow.async_step_cover_item_edit({"daily": False, "heat_protection": False})
+        assert result["errors"] == {"base": "no_cover_role"}

@@ -82,4 +82,4 @@ config/secrets.yaml
 /tmp/
 
 # Local Home Assistant dev instance (database, logs, downloaded deps)
-config/
+/config/

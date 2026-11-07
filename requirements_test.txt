@@ -3,3 +3,4 @@
 # minimum version declared in hacs.json), pytest and pytest-asyncio.
 pytest-homeassistant-custom-component==0.13.363
 icalendar==7.3.0
+home-assistant-frontend==20260826.4

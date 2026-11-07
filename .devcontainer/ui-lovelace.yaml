@@ -6,6 +6,14 @@ views:
   - title: Home
     path: home
     icon: mdi:home
+    cards:
+      - type: custom:homeshift-card
+      - type: entities
+        title: Heat pump auto start/stop (simulated)
+        entities:
+          - switch.salon_enable_auto_start_stop
+          - switch.chambre_enable_auto_start_stop
+          - sensor.homeshift_auto_start_stop
 
   - title: Scheduler
     path: scheduler

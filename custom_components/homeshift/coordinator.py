@@ -45,6 +45,7 @@ from .const import (
     parse_key_value_map,
 )
 
+from .auto_start_stop import AutoStartStopManager
 from .cover_manager import CoverManager
 
 _LOGGER = logging.getLogger(__name__)
@@ -112,6 +113,8 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
         # unknown): the day mode is then kept rather than recomputed from an
         # absence of events. Tracked to warn once per outage, not every poll.
         self._calendar_unreadable: bool = False
+        # When the current outage was first seen, shown on the card.
+        self._calendar_unreadable_since: datetime | None = None
         # Day today's cover schedule was computed for, and whether it was
         # computed while the calendar was unreadable (from a day mode that may
         # still change once the calendar answers, so computed again then).
@@ -196,6 +199,15 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
         # waiting for the next periodic poll; None when no timer is pending.
         self._cancel_cover_open_timer: Callable[[], None] | None = None
         self._cancel_cover_close_timer: Callable[[], None] | None = None
+
+        # Climate auto start/stop switches, set at each mode change and at
+        # the start and end of their comfort ranges.
+        self._auto_start_stop = AutoStartStopManager(
+            hass,
+            _config,
+            lambda: self.thermostat_mode_key,
+            self.async_update_listeners,
+        )
 
     @property
     def _config(self) -> dict:
@@ -544,6 +556,11 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
         """Every cover HomeShift moves (daily schedule and heat protection)."""
         return self._cover_manager.managed_covers()
 
+    @property
+    def auto_start_stop(self) -> AutoStartStopManager:
+        """The climate auto start/stop switches HomeShift drives."""
+        return self._auto_start_stop
+
     def covers_inhibited(self, now: datetime) -> dict[str, datetime | None]:
         """The covers currently taken out of the automation, as {cover: end or None}."""
         return self._cover_manager.inhibitions(now)
@@ -720,6 +737,7 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
         )
         await self.async_refresh_schedulers()
         await self._async_apply_thermostat_to_climates()
+        await self._auto_start_stop.async_apply(force=True)
         self.async_set_updated_data(self._build_result())
         await self._async_save_state()
 
@@ -893,6 +911,11 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
             ),
         )
 
+        # Climate auto start/stop: written at the first run; otherwise only a
+        # switch whose wanted state changed is, so a flip by hand holds until
+        # the next transition.
+        await self._auto_start_stop.async_apply()
+
         # Drop the inhibitions that ran out, so the covers concerned are back
         # in the actions below and the Covers Inhibited sensor stops listing them.
         await self._cover_manager.async_prune_inhibitions(now)
@@ -944,7 +967,18 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
             )
         elif self._calendar_unreadable:
             _LOGGER.info("Calendars readable again, resuming automatic mode changes")
+        if unreadable and not self._calendar_unreadable:
+            self._calendar_unreadable_since = dt_util.now()
+        elif not unreadable:
+            self._calendar_unreadable_since = None
         self._calendar_unreadable = bool(unreadable)
+
+    @property
+    def calendar_error(self) -> dict | None:
+        """Return when the calendars became unreadable, or None while they answer."""
+        if not self._calendar_unreadable or self._calendar_unreadable_since is None:
+            return None
+        return {"since": self._calendar_unreadable_since.isoformat()}
 
     async def _async_apply_calendar(self, calendar_entity: str, calendar_state, now: datetime) -> None:
         """Read the running event and switch the day mode automatically."""

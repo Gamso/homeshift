@@ -3,124 +3,105 @@
     "step": {
       "menu": {
         "title": "Configuration HomeShift",
-        "description": "Sections renseignées : {pending}\n\nRien n'est créé avant « Enregistrer la configuration » : fermer cette fenêtre avec ✕ abandonne la configuration.",
+        "description": "✎ marque une section renseignée.\n\nRien n'est créé avant « Enregistrer la configuration » : fermer cette fenêtre avec ✕ abandonne la configuration.",
         "menu_options": {
           "calendars": "Calendriers",
-          "mapping": "Modes de journée",
-          "schedulers": "Schedulers",
+          "mapping": "Mode du jour",
+          "schedulers": "Plannings",
           "covers_menu": "Volets",
+          "heat_pumps": "Auto start/stop des équipements",
+          "names": "Noms affichés",
           "finalize": "Enregistrer la configuration"
         },
         "menu_option_descriptions": {
-          "calendars": "{calendars}",
-          "mapping": "{modes}",
-          "schedulers": "{scheduler_count} schedulers assignés",
-          "covers_menu": "Volets gérés : {cover_count} · fermeture ce soir à {close_at}",
-          "finalize": "Applique les changements et ferme cette fenêtre."
+          "calendars": "{calendars}{changed_calendars}",
+          "mapping": "Mots-clés : {keywords}{changed_mapping}",
+          "schedulers": "{scheduler_count} plannings assignés{changed_schedulers}",
+          "covers_menu": "{cover_count} volet(s) · fermeture ce soir à {close_at}{changed_covers_menu}",
+          "heat_pumps": "{heat_pump_count} équipement(s) · un seuil de consigne par mode thermostat{changed_heat_pumps}",
+          "names": "{modes} · {thermostat_modes}{changed_names}",
+          "finalize": "Applique les changements et ferme cette fenêtre · ✎ {pending_count}"
         }
       },
       "covers_menu": {
         "title": "Volets",
         "description": "Les volets ouverts et fermés chaque jour, leurs horaires, et la protection contre la chaleur.",
         "menu_options": {
-          "cover_items": "Volets gérés",
+          "cover_items": "Liste des volets",
           "daily_cover_schedule": "Horaires d'ouverture et de fermeture",
           "covers": "Protection contre la chaleur",
           "menu": "← Retour au menu principal"
         },
         "menu_option_descriptions": {
-          "cover_items": "{cover_count} volet(s) · ajouter, modifier ou retirer",
-          "daily_cover_schedule": "Ouverture selon le mode de journée · fermeture ce soir à {close_at}",
-          "covers": "Seuil : {heat_threshold} °C · volets protégés : {heat_cover_count}"
+          "cover_items": "{cover_count} volet(s) · ajouter, modifier ou retirer{changed_cover_items}",
+          "daily_cover_schedule": "Ouverture selon le mode du jour · fermeture ce soir à {close_at}{changed_daily_cover_schedule}",
+          "covers": "Seuil : {heat_threshold} °C · volets protégés : {heat_cover_count}{changed_covers}"
         }
       },
       "calendars": {
         "title": "Calendriers",
-        "description": "Le calendrier de travail décide des jours ouvrés et de leurs événements ; le calendrier des jours fériés fait passer la journée en mode jour férié.",
+        "description": "Étape 1 sur 2. Le calendrier de travail décide des jours ouvrés et de leurs événements ; le calendrier des jours fériés fait passer la journée en mode jour férié.",
         "data": {
           "calendar_entity": "Calendrier de travail",
           "holiday_calendar": "Calendrier des jours fériés"
         },
-        "submit": "Valider et revenir au menu"
+        "submit": "Suivant"
       },
       "mapping": {
-        "title": "Modes de journée",
-        "description": "Choisissez le mode appliqué selon le type de jour. Les noms d'affichage sont repliés plus bas.",
+        "title": "Mode du jour",
+        "description": "Étape 2 sur 2. Le mode donné à chaque type de jour, et les événements du calendrier qui font passer la journée dans un mode. Plannings, volets, équipements et noms se règlent ensuite depuis **Configurer**.",
         "sections": {
           "defaults_section": {
-            "name": "Règles de choix du mode",
+            "name": "Quel mode pour quel jour",
             "data": {
               "mode_default": "Jour ouvré",
               "mode_weekend": "Week-end",
               "mode_holiday": "Jour férié",
-              "mode_absence": "Mode qui met en pause l'automatisation",
-              "event_mode_map": "Événements du calendrier (MotClé:CléMode, ...)"
+              "mode_absence": "Mode absence (met l'automatisation en pause)"
             },
             "data_description": {
-              "mode_absence": "Choisir ce mode vous-même met en pause les mises à jour automatiques jusqu'à ce que vous en sortiez. Un événement de calendrier associé à ce mode ne met rien en pause.",
-              "event_mode_map": "Un événement dont le titre contient le mot-clé fait passer la journée dans ce mode. La valeur est la clé du mode : home, work, remote ou away."
+              "mode_absence": "Choisir ce mode vous-même met en pause les mises à jour automatiques jusqu'à ce que vous en sortiez. Un événement du calendrier qui y fait passer ne met rien en pause."
             }
           },
-          "day_modes_section": {
-            "name": "Noms d'affichage des modes",
-            "description": "Le nom montré pour chaque mode. La clé technique, elle, ne change jamais.",
+          "keywords_section": {
+            "name": "Événements du calendrier",
+            "description": "Un événement dont le titre contient l'un des mots-clés fait passer la journée dans ce mode. Séparez plusieurs mots-clés par des virgules.",
             "data": {
-              "day_display_home": "Mode home",
-              "day_display_work": "Mode work",
-              "day_display_remote": "Mode remote",
-              "day_display_away": "Mode away"
-            },
-            "data_description": {
-              "day_display_home": "Nom affiché pour la clé home",
-              "day_display_work": "Nom affiché pour la clé work",
-              "day_display_remote": "Nom affiché pour la clé remote",
-              "day_display_away": "Nom affiché pour la clé away"
-            }
-          },
-          "thermostat_section": {
-            "name": "Noms des modes thermostat",
-            "data": {
-              "thermostat_display_off": "Mode off",
-              "thermostat_display_heating": "Mode heating",
-              "thermostat_display_cooling": "Mode cooling",
-              "thermostat_display_ventilation": "Mode ventilation"
-            },
-            "data_description": {
-              "thermostat_display_off": "Nom affiché pour la clé off",
-              "thermostat_display_heating": "Nom affiché pour la clé heating",
-              "thermostat_display_cooling": "Nom affiché pour la clé cooling",
-              "thermostat_display_ventilation": "Nom affiché pour la clé ventilation"
+              "event_keywords_home": "Mots-clés pour {name_home}",
+              "event_keywords_work": "Mots-clés pour {name_work}",
+              "event_keywords_remote": "Mots-clés pour {name_remote}",
+              "event_keywords_away": "Mots-clés pour {name_away}"
             }
           }
         },
-        "submit": "Valider et revenir au menu"
+        "submit": "Terminer"
       },
       "schedulers": {
-        "title": "Schedulers",
-        "description": "Les schedulers du mode actif sont allumés, ceux de tous les autres modes sont éteints. Ouvrez un mode pour modifier sa liste.",
+        "title": "Plannings",
+        "description": "Les plannings du mode actif sont allumés, ceux de tous les autres modes sont éteints. Ouvrez un mode pour modifier sa liste.\n\nUn planning qui agit sur un climate doit porter le nom de son mode thermostat comme étiquette (scheduler-card, Options → Tags), sinon il tourne quel que soit le mode thermostat. Sans étiquette : **{untagged}**",
         "sections": {
           "mode_home": {
             "name": "{name_home} · {count_home}",
             "data": {
-              "schedulers_home": "Schedulers"
+              "schedulers_home": "Plannings"
             }
           },
           "mode_work": {
             "name": "{name_work} · {count_work}",
             "data": {
-              "schedulers_work": "Schedulers"
+              "schedulers_work": "Plannings"
             }
           },
           "mode_remote": {
             "name": "{name_remote} · {count_remote}",
             "data": {
-              "schedulers_remote": "Schedulers"
+              "schedulers_remote": "Plannings"
             }
           },
           "mode_away": {
             "name": "{name_away} · {count_away}",
             "data": {
-              "schedulers_away": "Schedulers"
+              "schedulers_away": "Plannings"
             }
           }
         },
@@ -128,13 +109,7 @@
       },
       "covers": {
         "title": "Protection contre la chaleur",
-        "description": "Ferme les volets choisis quand il fait trop chaud. La protection n'agit qu'entre l'ouverture et la fermeture calculées dans « Horaires d'ouverture et de fermeture » : réglez-les d'abord.",
-        "data": {
-          "cover_entities": "Volets protégés"
-        },
-        "data_description": {
-          "cover_entities": "Indépendants des volets gérés : un volet peut être protégé de la chaleur sans suivre les horaires. Une fois fermé par la chaleur, il le reste jusqu'à la prochaine ouverture normale ou la fermeture du soir."
-        },
+        "description": "Ferme les volets marqués 🌡️ dans la liste des volets quand il fait trop chaud : **{heat_covers}**. La protection n'agit qu'entre l'ouverture et la fermeture ; un volet fermé par la chaleur le reste jusqu'à la prochaine ouverture normale ou la fermeture du soir.",
         "sections": {
           "trigger_section": {
             "name": "Déclenchement",
@@ -166,7 +141,7 @@
       },
       "daily_cover_schedule": {
         "title": "Horaires d'ouverture et de fermeture",
-        "description": "S'applique aux volets de « Volets gérés ».\n\n**À {close_elevation}°, les volets fermeront à {close_at_elevation} ce soir.**",
+        "description": "S'applique aux volets marqués 🕒 dans la liste des volets.\n\n**À {close_elevation}°, les volets fermeront à {close_at_elevation} ce soir.**\n\n**Demain, un mode qui s'ouvre au lever du soleil s'ouvrira à {open_at_sunrise}.**",
         "sections": {
           "close_section": {
             "name": "Fermeture du soir",
@@ -198,8 +173,8 @@
         "submit": "Valider et revenir aux volets"
       },
       "cover_items": {
-        "title": "Volets gérés",
-        "description": "Les volets ouverts et fermés chaque jour ; un groupe de volets compte pour un. Le soir, un volet dont la fenêtre est signalée ouverte n'est pas fermé et un avertissement est journalisé.\n\n{covers}",
+        "title": "Liste des volets",
+        "description": "Les volets que pilote HomeShift ; un groupe de volets compte pour un.\n\n🕒 ouvert et fermé chaque jour · 🌡️ protégé de la chaleur · 🪟 capteur de fenêtre\n\n{covers}",
         "menu_options": {
           "cover_item_add": "Ajouter un volet",
           "cover_item_pick": "Modifier un volet",
@@ -207,21 +182,25 @@
           "covers_menu": "← Retour au menu Volets"
         },
         "menu_option_descriptions": {
-          "cover_item_add": "Avec, si besoin, un capteur d'ouverture et un bouton My",
-          "cover_item_pick": "Changer son capteur d'ouverture ou son bouton My",
+          "cover_item_add": "Avec ce qu'il fait, et si besoin un capteur de fenêtre et un bouton My",
+          "cover_item_pick": "Changer ce qu'il fait, son capteur de fenêtre ou son bouton My",
           "cover_item_remove": "Les retirer de HomeShift, sans toucher aux entités"
         }
       },
       "cover_item_add": {
         "title": "Ajouter un volet",
-        "description": "Choisissez le volet et, si besoin, le capteur de sa fenêtre et son bouton de position favorite.",
+        "description": "Choisissez le volet et ce que HomeShift en fait.",
         "data": {
           "cover": "Volet",
+          "daily": "L'ouvrir et le fermer chaque jour",
+          "heat_protection": "Le protéger de la chaleur",
           "window_sensor": "Capteur d'ouverture de la fenêtre (optionnel)",
           "my_button": "Bouton position favorite My (optionnel)"
         },
         "data_description": {
-          "cover": "Le volet à ouvrir et fermer selon les horaires.",
+          "cover": "Le volet, ou un groupe de volets.",
+          "daily": "Aux horaires d'ouverture et de fermeture. Une fenêtre signalée ouverte le garde levé le soir.",
+          "heat_protection": "Fermé quand il fait trop chaud (Protection contre la chaleur), entre l'ouverture et la fermeture.",
           "window_sensor": "Capteur binaire à « on » quand la fenêtre est ouverte. Fenêtre ouverte à la fermeture du soir : le volet n'est pas fermé et un avertissement est journalisé. Avec l'option « Fermer dès que la fenêtre se referme » (Horaires), il se ferme dès que la fenêtre est refermée.",
           "my_button": "Pour un volet qui ne doit pas se fermer entièrement : la fermeture du soir appuie sur ce bouton au lieu de fermer le volet."
         },
@@ -239,10 +218,14 @@
         "title": "Modifier un volet",
         "description": "Volet : **{cover}**. Videz un champ pour retirer le capteur ou le bouton.",
         "data": {
+          "daily": "L'ouvrir et le fermer chaque jour",
+          "heat_protection": "Le protéger de la chaleur",
           "window_sensor": "Capteur d'ouverture de la fenêtre (optionnel)",
           "my_button": "Bouton position favorite My (optionnel)"
         },
         "data_description": {
+          "daily": "Aux horaires d'ouverture et de fermeture. Une fenêtre signalée ouverte le garde levé le soir.",
+          "heat_protection": "Fermé quand il fait trop chaud (Protection contre la chaleur), entre l'ouverture et la fermeture.",
           "window_sensor": "Capteur binaire à « on » quand la fenêtre est ouverte. Fenêtre ouverte à la fermeture du soir : le volet n'est pas fermé et un avertissement est journalisé. Avec l'option « Fermer dès que la fenêtre se referme » (Horaires), il se ferme dès que la fenêtre est refermée.",
           "my_button": "Pour un volet qui ne doit pas se fermer entièrement : la fermeture du soir appuie sur ce bouton au lieu de fermer le volet."
         },
@@ -255,11 +238,107 @@
           "remove_covers": "Volets à retirer"
         },
         "submit": "Valider et revenir à la liste"
+      },
+      "heat_pumps": {
+        "title": "Auto start/stop des équipements",
+        "description": "Pour chaque équipement (un thermostat Versatile Thermostat over_climate : pompe à chaleur, climatiseur...), HomeShift lit sa température de consigne et la compare à un seuil réglé pour chaque mode thermostat. Du côté confort du seuil, il coupe l'auto start/stop pour que l'équipement tourne ; de l'autre côté, il l'active : les créneaux confort et éco du scheduler font varier la consigne. Il n'agit que dans les modes thermostat qui ont un seuil, et seulement à un changement (mode thermostat, consigne qui franchit le seuil, démarrage de Home Assistant) : un interrupteur basculé à la main le reste jusqu'au changement suivant.\n\n{heat_pumps}",
+        "menu_options": {
+          "heat_pump_add": "Ajouter un équipement",
+          "heat_pump_pick": "Modifier un équipement",
+          "heat_pump_remove": "Retirer des équipements",
+          "menu": "← Retour au menu principal"
+        },
+        "menu_option_descriptions": {
+          "heat_pump_add": "Son interrupteur d'auto start/stop et un seuil de consigne par mode thermostat",
+          "heat_pump_pick": "Changer ses seuils",
+          "heat_pump_remove": "Ne plus les piloter, sans toucher aux entités"
+        }
+      },
+      "heat_pump_add": {
+        "title": "Ajouter un équipement",
+        "description": "Choisissez l'interrupteur d'auto start/stop de l'équipement et un seuil de consigne pour chaque mode thermostat où HomeShift le pilote. Un mode vide n'est pas piloté.\n\nTant que la consigne du climate reste du côté confort du seuil, son auto start/stop est **coupé** et il tourne. De l'autre côté, il est **activé** : Versatile Thermostat peut l'arrêter.",
+        "data": {
+          "switch": "Interrupteur d'auto start/stop",
+          "climate": "Climate",
+          "threshold_heating": "{tname_heating} : tourne si la consigne est supérieure ou égale à",
+          "threshold_cooling": "{tname_cooling} : tourne si la consigne est inférieure ou égale à",
+          "threshold_ventilation": "{tname_ventilation} : tourne si la consigne est inférieure ou égale à"
+        },
+        "data_description": {
+          "switch": "L'interrupteur du Versatile Thermostat (over_climate) dont l'identifiant se termine par _enable_auto_start_stop. Tout autre interrupteur est accepté.",
+          "climate": "Le climate dont on lit la température de consigne. Vide, il est déduit de l'identifiant de l'interrupteur (switch.salon_enable_auto_start_stop → climate.salon).",
+          "threshold_heating": "En °C. Vide : non piloté dans ce mode.",
+          "threshold_cooling": "En °C. Vide : non piloté dans ce mode.",
+          "threshold_ventilation": "En °C. Vide : non piloté dans ce mode."
+        },
+        "submit": "Valider et revenir à la liste"
+      },
+      "heat_pump_pick": {
+        "title": "Modifier un équipement",
+        "description": "Choisissez l'équipement à modifier.",
+        "data": {
+          "switch": "Équipement"
+        },
+        "submit": "Suivant"
+      },
+      "heat_pump_edit": {
+        "title": "Modifier un équipement",
+        "description": "Équipement : **{switch}** · consigne actuelle : **{setpoint}**.\n\nUn mode vide n'est pas piloté. Tant que la consigne du climate reste du côté confort du seuil, son auto start/stop est **coupé** et il tourne. De l'autre côté, il est **activé** : Versatile Thermostat peut l'arrêter.",
+        "data": {
+          "climate": "Climate",
+          "threshold_heating": "{tname_heating} : tourne si la consigne est supérieure ou égale à",
+          "threshold_cooling": "{tname_cooling} : tourne si la consigne est inférieure ou égale à",
+          "threshold_ventilation": "{tname_ventilation} : tourne si la consigne est inférieure ou égale à"
+        },
+        "data_description": {
+          "climate": "Le climate dont on lit la température de consigne. Vide, il est déduit de l'identifiant de l'interrupteur (switch.salon_enable_auto_start_stop → climate.salon).",
+          "threshold_heating": "En °C. Vide : non piloté dans ce mode.",
+          "threshold_cooling": "En °C. Vide : non piloté dans ce mode.",
+          "threshold_ventilation": "En °C. Vide : non piloté dans ce mode."
+        },
+        "submit": "Valider et revenir à la liste"
+      },
+      "heat_pump_remove": {
+        "title": "Retirer des équipements",
+        "description": "HomeShift ne pilote plus les interrupteurs cochés ; ils gardent leur état actuel.",
+        "data": {
+          "remove_switches": "Équipements à retirer"
+        },
+        "submit": "Retirer et revenir à la liste"
+      },
+      "names": {
+        "title": "Noms affichés",
+        "description": "Les noms montrés dans la carte, les listes et ces formulaires. Le mode lui-même, et ce qui lui est associé, ne change pas quand vous le renommez.",
+        "sections": {
+          "day_modes_section": {
+            "name": "Modes du jour",
+            "data": {
+              "day_display_home": "Nom du mode home",
+              "day_display_work": "Nom du mode work",
+              "day_display_remote": "Nom du mode remote",
+              "day_display_away": "Nom du mode away"
+            }
+          },
+          "thermostat_section": {
+            "name": "Modes thermostat",
+            "data": {
+              "thermostat_display_off": "Nom du mode off",
+              "thermostat_display_heating": "Nom du mode heating",
+              "thermostat_display_cooling": "Nom du mode cooling",
+              "thermostat_display_ventilation": "Nom du mode ventilation"
+            }
+          }
+        },
+        "submit": "Valider et revenir au menu"
       }
     },
     "error": {
       "invalid_calendar": "L'entité calendrier spécifiée n'existe pas",
-      "elevation_unreachable": "À votre position, le soleil n'atteint pas cette élévation tous les jours de l'année. Choisissez une valeur dans l'amplitude annuelle du soleil — 0° = coucher du soleil, les valeurs négatives sont sous l'horizon."
+      "elevation_unreachable": "À votre position, le soleil n'atteint pas cette élévation tous les jours de l'année. Choisissez une valeur dans l'amplitude annuelle du soleil — 0° = coucher du soleil, les valeurs négatives sont sous l'horizon.",
+      "no_climate": "Aucun climate où lire la consigne : choisissez-en un.",
+      "no_threshold": "Réglez un seuil pour au moins un mode thermostat.",
+      "duplicate_keyword": "Un mot-clé est donné pour deux modes : gardez-le dans un seul.",
+      "no_cover_role": "Cochez au moins « L'ouvrir et le fermer chaque jour » ou « Le protéger de la chaleur »."
     },
     "abort": {
       "already_configured": "HomeShift est déjà configuré",
@@ -270,35 +349,39 @@
     "step": {
       "menu": {
         "title": "Options HomeShift",
-        "description": "Modifié, pas encore enregistré : {pending}\n\nRien n'est sauvegardé avant « Enregistrer la configuration » : fermer cette fenêtre avec ✕ annule les changements.",
+        "description": "✎ marque une section modifiée, pas encore enregistrée. Rien n'est sauvegardé avant « Enregistrer la configuration » : fermer cette fenêtre avec ✕ annule les changements.",
         "menu_options": {
           "calendars": "Calendriers",
-          "mapping": "Modes de journée",
-          "schedulers": "Schedulers",
+          "mapping": "Mode du jour",
+          "schedulers": "Plannings",
           "covers_menu": "Volets",
+          "heat_pumps": "Auto start/stop des équipements",
+          "names": "Noms affichés",
           "finalize": "Enregistrer la configuration"
         },
         "menu_option_descriptions": {
-          "calendars": "{calendars}",
-          "mapping": "{modes}",
-          "schedulers": "{scheduler_count} schedulers assignés",
-          "covers_menu": "Volets gérés : {cover_count} · fermeture ce soir à {close_at}",
-          "finalize": "Applique les changements et ferme cette fenêtre."
+          "calendars": "{calendars}{changed_calendars}",
+          "mapping": "Mots-clés : {keywords}{changed_mapping}",
+          "schedulers": "{scheduler_count} plannings assignés{changed_schedulers}",
+          "covers_menu": "{cover_count} volet(s) · fermeture ce soir à {close_at}{changed_covers_menu}",
+          "heat_pumps": "{heat_pump_count} équipement(s) · un seuil de consigne par mode thermostat{changed_heat_pumps}",
+          "names": "{modes} · {thermostat_modes}{changed_names}",
+          "finalize": "Applique les changements et ferme cette fenêtre · ✎ {pending_count}"
         }
       },
       "covers_menu": {
         "title": "Volets",
         "description": "Les volets ouverts et fermés chaque jour, leurs horaires, et la protection contre la chaleur.",
         "menu_options": {
-          "cover_items": "Volets gérés",
+          "cover_items": "Liste des volets",
           "daily_cover_schedule": "Horaires d'ouverture et de fermeture",
           "covers": "Protection contre la chaleur",
           "menu": "← Retour au menu principal"
         },
         "menu_option_descriptions": {
-          "cover_items": "{cover_count} volet(s) · ajouter, modifier ou retirer",
-          "daily_cover_schedule": "Ouverture selon le mode de journée · fermeture ce soir à {close_at}",
-          "covers": "Seuil : {heat_threshold} °C · volets protégés : {heat_cover_count}"
+          "cover_items": "{cover_count} volet(s) · ajouter, modifier ou retirer{changed_cover_items}",
+          "daily_cover_schedule": "Ouverture selon le mode du jour · fermeture ce soir à {close_at}{changed_daily_cover_schedule}",
+          "covers": "Seuil : {heat_threshold} °C · volets protégés : {heat_cover_count}{changed_covers}"
         }
       },
       "calendars": {
@@ -311,83 +394,60 @@
         "submit": "Valider et revenir au menu"
       },
       "mapping": {
-        "title": "Modes de journée",
-        "description": "Choisissez le mode appliqué selon le type de jour. Les noms d'affichage sont repliés plus bas.",
+        "title": "Mode du jour",
+        "description": "Le mode donné à chaque type de jour, et les événements du calendrier qui font passer la journée dans un mode.",
         "sections": {
           "defaults_section": {
-            "name": "Règles de choix du mode",
+            "name": "Quel mode pour quel jour",
             "data": {
               "mode_default": "Jour ouvré",
               "mode_weekend": "Week-end",
               "mode_holiday": "Jour férié",
-              "mode_absence": "Mode qui met en pause l'automatisation",
-              "event_mode_map": "Événements du calendrier (MotClé:CléMode, ...)"
+              "mode_absence": "Mode absence (met l'automatisation en pause)"
             },
             "data_description": {
-              "mode_absence": "Choisir ce mode vous-même met en pause les mises à jour automatiques jusqu'à ce que vous en sortiez. Un événement de calendrier associé à ce mode ne met rien en pause.",
-              "event_mode_map": "Un événement dont le titre contient le mot-clé fait passer la journée dans ce mode. La valeur est la clé du mode : home, work, remote ou away."
+              "mode_absence": "Choisir ce mode vous-même met en pause les mises à jour automatiques jusqu'à ce que vous en sortiez. Un événement du calendrier qui y fait passer ne met rien en pause."
             }
           },
-          "day_modes_section": {
-            "name": "Noms d'affichage des modes",
-            "description": "Le nom montré pour chaque mode. La clé technique, elle, ne change jamais.",
+          "keywords_section": {
+            "name": "Événements du calendrier",
+            "description": "Un événement dont le titre contient l'un des mots-clés fait passer la journée dans ce mode. Séparez plusieurs mots-clés par des virgules.",
             "data": {
-              "day_display_home": "Mode home",
-              "day_display_work": "Mode work",
-              "day_display_remote": "Mode remote",
-              "day_display_away": "Mode away"
-            },
-            "data_description": {
-              "day_display_home": "Nom affiché pour la clé home",
-              "day_display_work": "Nom affiché pour la clé work",
-              "day_display_remote": "Nom affiché pour la clé remote",
-              "day_display_away": "Nom affiché pour la clé away"
-            }
-          },
-          "thermostat_section": {
-            "name": "Noms des modes thermostat",
-            "data": {
-              "thermostat_display_off": "Mode off",
-              "thermostat_display_heating": "Mode heating",
-              "thermostat_display_cooling": "Mode cooling",
-              "thermostat_display_ventilation": "Mode ventilation"
-            },
-            "data_description": {
-              "thermostat_display_off": "Nom affiché pour la clé off",
-              "thermostat_display_heating": "Nom affiché pour la clé heating",
-              "thermostat_display_cooling": "Nom affiché pour la clé cooling",
-              "thermostat_display_ventilation": "Nom affiché pour la clé ventilation"
+              "event_keywords_home": "Mots-clés pour {name_home}",
+              "event_keywords_work": "Mots-clés pour {name_work}",
+              "event_keywords_remote": "Mots-clés pour {name_remote}",
+              "event_keywords_away": "Mots-clés pour {name_away}"
             }
           }
         },
         "submit": "Valider et revenir au menu"
       },
       "schedulers": {
-        "title": "Schedulers",
-        "description": "Les schedulers du mode actif sont allumés, ceux de tous les autres modes sont éteints. Ouvrez un mode pour modifier sa liste.",
+        "title": "Plannings",
+        "description": "Les plannings du mode actif sont allumés, ceux de tous les autres modes sont éteints. Ouvrez un mode pour modifier sa liste.\n\nUn planning qui agit sur un climate doit porter le nom de son mode thermostat comme étiquette (scheduler-card, Options → Tags), sinon il tourne quel que soit le mode thermostat. Sans étiquette : **{untagged}**",
         "sections": {
           "mode_home": {
             "name": "{name_home} · {count_home}",
             "data": {
-              "schedulers_home": "Schedulers"
+              "schedulers_home": "Plannings"
             }
           },
           "mode_work": {
             "name": "{name_work} · {count_work}",
             "data": {
-              "schedulers_work": "Schedulers"
+              "schedulers_work": "Plannings"
             }
           },
           "mode_remote": {
             "name": "{name_remote} · {count_remote}",
             "data": {
-              "schedulers_remote": "Schedulers"
+              "schedulers_remote": "Plannings"
             }
           },
           "mode_away": {
             "name": "{name_away} · {count_away}",
             "data": {
-              "schedulers_away": "Schedulers"
+              "schedulers_away": "Plannings"
             }
           }
         },
@@ -395,13 +455,7 @@
       },
       "covers": {
         "title": "Protection contre la chaleur",
-        "description": "Ferme les volets choisis quand il fait trop chaud. La protection n'agit qu'entre l'ouverture et la fermeture calculées dans « Horaires d'ouverture et de fermeture » : réglez-les d'abord.",
-        "data": {
-          "cover_entities": "Volets protégés"
-        },
-        "data_description": {
-          "cover_entities": "Indépendants des volets gérés : un volet peut être protégé de la chaleur sans suivre les horaires. Une fois fermé par la chaleur, il le reste jusqu'à la prochaine ouverture normale ou la fermeture du soir."
-        },
+        "description": "Ferme les volets marqués 🌡️ dans la liste des volets quand il fait trop chaud : **{heat_covers}**. La protection n'agit qu'entre l'ouverture et la fermeture ; un volet fermé par la chaleur le reste jusqu'à la prochaine ouverture normale ou la fermeture du soir.",
         "sections": {
           "trigger_section": {
             "name": "Déclenchement",
@@ -433,7 +487,7 @@
       },
       "daily_cover_schedule": {
         "title": "Horaires d'ouverture et de fermeture",
-        "description": "S'applique aux volets de « Volets gérés ».\n\n**À {close_elevation}°, les volets fermeront à {close_at_elevation} ce soir.**",
+        "description": "S'applique aux volets marqués 🕒 dans la liste des volets.\n\n**À {close_elevation}°, les volets fermeront à {close_at_elevation} ce soir.**\n\n**Demain, un mode qui s'ouvre au lever du soleil s'ouvrira à {open_at_sunrise}.**",
         "sections": {
           "close_section": {
             "name": "Fermeture du soir",
@@ -465,8 +519,8 @@
         "submit": "Valider et revenir aux volets"
       },
       "cover_items": {
-        "title": "Volets gérés",
-        "description": "Les volets ouverts et fermés chaque jour ; un groupe de volets compte pour un. Le soir, un volet dont la fenêtre est signalée ouverte n'est pas fermé et un avertissement est journalisé.\n\n{covers}",
+        "title": "Liste des volets",
+        "description": "Les volets que pilote HomeShift ; un groupe de volets compte pour un.\n\n🕒 ouvert et fermé chaque jour · 🌡️ protégé de la chaleur · 🪟 capteur de fenêtre\n\n{covers}",
         "menu_options": {
           "cover_item_add": "Ajouter un volet",
           "cover_item_pick": "Modifier un volet",
@@ -474,21 +528,25 @@
           "covers_menu": "← Retour au menu Volets"
         },
         "menu_option_descriptions": {
-          "cover_item_add": "Avec, si besoin, un capteur d'ouverture et un bouton My",
-          "cover_item_pick": "Changer son capteur d'ouverture ou son bouton My",
+          "cover_item_add": "Avec ce qu'il fait, et si besoin un capteur de fenêtre et un bouton My",
+          "cover_item_pick": "Changer ce qu'il fait, son capteur de fenêtre ou son bouton My",
           "cover_item_remove": "Les retirer de HomeShift, sans toucher aux entités"
         }
       },
       "cover_item_add": {
         "title": "Ajouter un volet",
-        "description": "Choisissez le volet et, si besoin, le capteur de sa fenêtre et son bouton de position favorite.",
+        "description": "Choisissez le volet et ce que HomeShift en fait.",
         "data": {
           "cover": "Volet",
+          "daily": "L'ouvrir et le fermer chaque jour",
+          "heat_protection": "Le protéger de la chaleur",
           "window_sensor": "Capteur d'ouverture de la fenêtre (optionnel)",
           "my_button": "Bouton position favorite My (optionnel)"
         },
         "data_description": {
-          "cover": "Le volet à ouvrir et fermer selon les horaires.",
+          "cover": "Le volet, ou un groupe de volets.",
+          "daily": "Aux horaires d'ouverture et de fermeture. Une fenêtre signalée ouverte le garde levé le soir.",
+          "heat_protection": "Fermé quand il fait trop chaud (Protection contre la chaleur), entre l'ouverture et la fermeture.",
           "window_sensor": "Capteur binaire à « on » quand la fenêtre est ouverte. Fenêtre ouverte à la fermeture du soir : le volet n'est pas fermé et un avertissement est journalisé. Avec l'option « Fermer dès que la fenêtre se referme » (Horaires), il se ferme dès que la fenêtre est refermée.",
           "my_button": "Pour un volet qui ne doit pas se fermer entièrement : la fermeture du soir appuie sur ce bouton au lieu de fermer le volet."
         },
@@ -506,10 +564,14 @@
         "title": "Modifier un volet",
         "description": "Volet : **{cover}**. Videz un champ pour retirer le capteur ou le bouton.",
         "data": {
+          "daily": "L'ouvrir et le fermer chaque jour",
+          "heat_protection": "Le protéger de la chaleur",
           "window_sensor": "Capteur d'ouverture de la fenêtre (optionnel)",
           "my_button": "Bouton position favorite My (optionnel)"
         },
         "data_description": {
+          "daily": "Aux horaires d'ouverture et de fermeture. Une fenêtre signalée ouverte le garde levé le soir.",
+          "heat_protection": "Fermé quand il fait trop chaud (Protection contre la chaleur), entre l'ouverture et la fermeture.",
           "window_sensor": "Capteur binaire à « on » quand la fenêtre est ouverte. Fenêtre ouverte à la fermeture du soir : le volet n'est pas fermé et un avertissement est journalisé. Avec l'option « Fermer dès que la fenêtre se referme » (Horaires), il se ferme dès que la fenêtre est refermée.",
           "my_button": "Pour un volet qui ne doit pas se fermer entièrement : la fermeture du soir appuie sur ce bouton au lieu de fermer le volet."
         },
@@ -522,11 +584,107 @@
           "remove_covers": "Volets à retirer"
         },
         "submit": "Valider et revenir à la liste"
+      },
+      "heat_pumps": {
+        "title": "Auto start/stop des équipements",
+        "description": "Pour chaque équipement (un thermostat Versatile Thermostat over_climate : pompe à chaleur, climatiseur...), HomeShift lit sa température de consigne et la compare à un seuil réglé pour chaque mode thermostat. Du côté confort du seuil, il coupe l'auto start/stop pour que l'équipement tourne ; de l'autre côté, il l'active : les créneaux confort et éco du scheduler font varier la consigne. Il n'agit que dans les modes thermostat qui ont un seuil, et seulement à un changement (mode thermostat, consigne qui franchit le seuil, démarrage de Home Assistant) : un interrupteur basculé à la main le reste jusqu'au changement suivant.\n\n{heat_pumps}",
+        "menu_options": {
+          "heat_pump_add": "Ajouter un équipement",
+          "heat_pump_pick": "Modifier un équipement",
+          "heat_pump_remove": "Retirer des équipements",
+          "menu": "← Retour au menu principal"
+        },
+        "menu_option_descriptions": {
+          "heat_pump_add": "Son interrupteur d'auto start/stop et un seuil de consigne par mode thermostat",
+          "heat_pump_pick": "Changer ses seuils",
+          "heat_pump_remove": "Ne plus les piloter, sans toucher aux entités"
+        }
+      },
+      "heat_pump_add": {
+        "title": "Ajouter un équipement",
+        "description": "Choisissez l'interrupteur d'auto start/stop de l'équipement et un seuil de consigne pour chaque mode thermostat où HomeShift le pilote. Un mode vide n'est pas piloté.\n\nTant que la consigne du climate reste du côté confort du seuil, son auto start/stop est **coupé** et il tourne. De l'autre côté, il est **activé** : Versatile Thermostat peut l'arrêter.",
+        "data": {
+          "switch": "Interrupteur d'auto start/stop",
+          "climate": "Climate",
+          "threshold_heating": "{tname_heating} : tourne si la consigne est supérieure ou égale à",
+          "threshold_cooling": "{tname_cooling} : tourne si la consigne est inférieure ou égale à",
+          "threshold_ventilation": "{tname_ventilation} : tourne si la consigne est inférieure ou égale à"
+        },
+        "data_description": {
+          "switch": "L'interrupteur du Versatile Thermostat (over_climate) dont l'identifiant se termine par _enable_auto_start_stop. Tout autre interrupteur est accepté.",
+          "climate": "Le climate dont on lit la température de consigne. Vide, il est déduit de l'identifiant de l'interrupteur (switch.salon_enable_auto_start_stop → climate.salon).",
+          "threshold_heating": "En °C. Vide : non piloté dans ce mode.",
+          "threshold_cooling": "En °C. Vide : non piloté dans ce mode.",
+          "threshold_ventilation": "En °C. Vide : non piloté dans ce mode."
+        },
+        "submit": "Valider et revenir à la liste"
+      },
+      "heat_pump_pick": {
+        "title": "Modifier un équipement",
+        "description": "Choisissez l'équipement à modifier.",
+        "data": {
+          "switch": "Équipement"
+        },
+        "submit": "Suivant"
+      },
+      "heat_pump_edit": {
+        "title": "Modifier un équipement",
+        "description": "Équipement : **{switch}** · consigne actuelle : **{setpoint}**.\n\nUn mode vide n'est pas piloté. Tant que la consigne du climate reste du côté confort du seuil, son auto start/stop est **coupé** et il tourne. De l'autre côté, il est **activé** : Versatile Thermostat peut l'arrêter.",
+        "data": {
+          "climate": "Climate",
+          "threshold_heating": "{tname_heating} : tourne si la consigne est supérieure ou égale à",
+          "threshold_cooling": "{tname_cooling} : tourne si la consigne est inférieure ou égale à",
+          "threshold_ventilation": "{tname_ventilation} : tourne si la consigne est inférieure ou égale à"
+        },
+        "data_description": {
+          "climate": "Le climate dont on lit la température de consigne. Vide, il est déduit de l'identifiant de l'interrupteur (switch.salon_enable_auto_start_stop → climate.salon).",
+          "threshold_heating": "En °C. Vide : non piloté dans ce mode.",
+          "threshold_cooling": "En °C. Vide : non piloté dans ce mode.",
+          "threshold_ventilation": "En °C. Vide : non piloté dans ce mode."
+        },
+        "submit": "Valider et revenir à la liste"
+      },
+      "heat_pump_remove": {
+        "title": "Retirer des équipements",
+        "description": "HomeShift ne pilote plus les interrupteurs cochés ; ils gardent leur état actuel.",
+        "data": {
+          "remove_switches": "Équipements à retirer"
+        },
+        "submit": "Retirer et revenir à la liste"
+      },
+      "names": {
+        "title": "Noms affichés",
+        "description": "Les noms montrés dans la carte, les listes et ces formulaires. Le mode lui-même, et ce qui lui est associé, ne change pas quand vous le renommez.",
+        "sections": {
+          "day_modes_section": {
+            "name": "Modes du jour",
+            "data": {
+              "day_display_home": "Nom du mode home",
+              "day_display_work": "Nom du mode work",
+              "day_display_remote": "Nom du mode remote",
+              "day_display_away": "Nom du mode away"
+            }
+          },
+          "thermostat_section": {
+            "name": "Modes thermostat",
+            "data": {
+              "thermostat_display_off": "Nom du mode off",
+              "thermostat_display_heating": "Nom du mode heating",
+              "thermostat_display_cooling": "Nom du mode cooling",
+              "thermostat_display_ventilation": "Nom du mode ventilation"
+            }
+          }
+        },
+        "submit": "Valider et revenir au menu"
       }
     },
     "error": {
       "invalid_calendar": "L'entité calendrier spécifiée n'existe pas",
-      "elevation_unreachable": "À votre position, le soleil n'atteint pas cette élévation tous les jours de l'année. Choisissez une valeur dans l'amplitude annuelle du soleil — 0° = coucher du soleil, les valeurs négatives sont sous l'horizon."
+      "elevation_unreachable": "À votre position, le soleil n'atteint pas cette élévation tous les jours de l'année. Choisissez une valeur dans l'amplitude annuelle du soleil — 0° = coucher du soleil, les valeurs négatives sont sous l'horizon.",
+      "no_climate": "Aucun climate où lire la consigne : choisissez-en un.",
+      "no_threshold": "Réglez un seuil pour au moins un mode thermostat.",
+      "duplicate_keyword": "Un mot-clé est donné pour deux modes : gardez-le dans un seul.",
+      "no_cover_role": "Cochez au moins « L'ouvrir et le fermer chaque jour » ou « Le protéger de la chaleur »."
     }
   },
   "entity": {
@@ -561,6 +719,9 @@
       },
       "covers_inhibited": {
         "name": "Volets inhibés"
+      },
+      "auto_start_stop": {
+        "name": "Auto start/stop des équipements"
       }
     },
     "binary_sensor": {
@@ -596,8 +757,8 @@
   },
   "services": {
     "refresh_schedulers": {
-      "name": "Rafraîchir les Schedulers",
-      "description": "Rafraîchir l'état des schedulers selon le mode jour et le mode thermostat courants"
+      "name": "Rafraîchir les plannings",
+      "description": "Rafraîchir l'état des plannings selon le mode du jour et le mode thermostat courants"
     },
     "sync_calendar": {
       "name": "Synchroniser le Calendrier",

@@ -3,124 +3,105 @@
     "step": {
       "menu": {
         "title": "HomeShift configuration",
-        "description": "Sections filled in: {pending}\n\nNothing is created before “Save configuration”: closing this dialog with ✕ drops the configuration.",
+        "description": "✎ marks a section you filled in.\n\nNothing is created before “Save configuration”: closing this dialog with ✕ drops the configuration.",
         "menu_options": {
           "calendars": "Calendars",
-          "mapping": "Day modes",
-          "schedulers": "Schedulers",
+          "mapping": "Day mode",
+          "schedulers": "Schedules",
           "covers_menu": "Covers",
+          "heat_pumps": "Climate auto start/stop",
+          "names": "Display names",
           "finalize": "Save configuration"
         },
         "menu_option_descriptions": {
-          "calendars": "{calendars}",
-          "mapping": "{modes}",
-          "schedulers": "{scheduler_count} schedulers assigned",
-          "covers_menu": "Managed covers: {cover_count} · closing tonight at {close_at}",
-          "finalize": "Apply the changes and close this dialog."
+          "calendars": "{calendars}{changed_calendars}",
+          "mapping": "Keywords: {keywords}{changed_mapping}",
+          "schedulers": "{scheduler_count} schedules assigned{changed_schedulers}",
+          "covers_menu": "{cover_count} cover(s) · closing tonight at {close_at}{changed_covers_menu}",
+          "heat_pumps": "{heat_pump_count} climate(s) · one setpoint threshold per thermostat mode{changed_heat_pumps}",
+          "names": "{modes} · {thermostat_modes}{changed_names}",
+          "finalize": "Apply the changes and close this dialog · ✎ {pending_count}"
         }
       },
       "covers_menu": {
         "title": "Covers",
         "description": "The covers opened and closed every day, their times, and heat protection.",
         "menu_options": {
-          "cover_items": "Managed covers",
+          "cover_items": "Cover list",
           "daily_cover_schedule": "Opening and closing times",
           "covers": "Heat protection",
           "menu": "← Back to the main menu"
         },
         "menu_option_descriptions": {
-          "cover_items": "{cover_count} cover(s) · add, edit or remove",
-          "daily_cover_schedule": "Opening by day mode · closing tonight at {close_at}",
-          "covers": "Threshold: {heat_threshold} °C · protected covers: {heat_cover_count}"
+          "cover_items": "{cover_count} cover(s) · add, edit or remove{changed_cover_items}",
+          "daily_cover_schedule": "Opening by day mode · closing tonight at {close_at}{changed_daily_cover_schedule}",
+          "covers": "Threshold: {heat_threshold} °C · protected covers: {heat_cover_count}{changed_covers}"
         }
       },
       "calendars": {
         "title": "Calendars",
-        "description": "The work calendar decides the working days and their events; the holiday calendar switches the day to the holiday mode.",
+        "description": "Step 1 of 2. The work calendar decides the working days and their events; the holiday calendar switches the day to the holiday mode.",
         "data": {
           "calendar_entity": "Work calendar",
           "holiday_calendar": "Holiday calendar"
         },
-        "submit": "Save and back to the menu"
+        "submit": "Next"
       },
       "mapping": {
-        "title": "Day modes",
-        "description": "Choose the mode applied for each kind of day. The display names are folded further down.",
+        "title": "Day mode",
+        "description": "Step 2 of 2. Which mode each kind of day gets, and the calendar events that switch the day to a mode. Schedules, covers, climates and names are set later from **Configure**.",
         "sections": {
           "defaults_section": {
-            "name": "Mode rules",
+            "name": "Which mode for which day",
             "data": {
               "mode_default": "Working day",
               "mode_weekend": "Weekend",
               "mode_holiday": "Public holiday",
-              "mode_absence": "Mode that pauses the automation",
-              "event_mode_map": "Calendar events (Keyword:ModeKey, ...)"
+              "mode_absence": "Away mode (pauses the automation)"
             },
             "data_description": {
-              "mode_absence": "Picking this mode yourself pauses the automatic updates until you leave it. A calendar event mapped to this mode pauses nothing.",
-              "event_mode_map": "An event whose title contains the keyword switches the day to that mode. The value is the mode key: home, work, remote or away."
+              "mode_absence": "Picking this mode yourself pauses the automatic updates until you leave it. A calendar event switching to it pauses nothing."
             }
           },
-          "day_modes_section": {
-            "name": "Day mode display names",
-            "description": "The name shown for each mode. The technical key never changes.",
+          "keywords_section": {
+            "name": "Calendar events",
+            "description": "An event whose title contains one of the keywords switches the day to that mode. Several keywords are separated by commas.",
             "data": {
-              "day_display_home": "Mode home",
-              "day_display_work": "Mode work",
-              "day_display_remote": "Mode remote",
-              "day_display_away": "Mode away"
-            },
-            "data_description": {
-              "day_display_home": "Display name for the home key",
-              "day_display_work": "Display name for the work key",
-              "day_display_remote": "Display name for the remote key",
-              "day_display_away": "Display name for the away key"
-            }
-          },
-          "thermostat_section": {
-            "name": "Thermostat mode names",
-            "data": {
-              "thermostat_display_off": "Mode off",
-              "thermostat_display_heating": "Mode heating",
-              "thermostat_display_cooling": "Mode cooling",
-              "thermostat_display_ventilation": "Mode ventilation"
-            },
-            "data_description": {
-              "thermostat_display_off": "Display name for the off key",
-              "thermostat_display_heating": "Display name for the heating key",
-              "thermostat_display_cooling": "Display name for the cooling key",
-              "thermostat_display_ventilation": "Display name for the ventilation key"
+              "event_keywords_home": "Keywords for {name_home}",
+              "event_keywords_work": "Keywords for {name_work}",
+              "event_keywords_remote": "Keywords for {name_remote}",
+              "event_keywords_away": "Keywords for {name_away}"
             }
           }
         },
-        "submit": "Save and back to the menu"
+        "submit": "Finish"
       },
       "schedulers": {
-        "title": "Schedulers",
-        "description": "The schedulers of the active mode are turned on, those of every other mode are turned off. Open a mode to edit its list.",
+        "title": "Schedules",
+        "description": "The schedules of the active mode are turned on, those of every other mode are turned off. Open a mode to edit its list.\n\nA schedule acting on a climate must carry the name of its thermostat mode as a tag (scheduler-card, Options → Tags), or it runs whatever the thermostat mode. Without one: **{untagged}**",
         "sections": {
           "mode_home": {
             "name": "{name_home} · {count_home}",
             "data": {
-              "schedulers_home": "Schedulers"
+              "schedulers_home": "Schedules"
             }
           },
           "mode_work": {
             "name": "{name_work} · {count_work}",
             "data": {
-              "schedulers_work": "Schedulers"
+              "schedulers_work": "Schedules"
             }
           },
           "mode_remote": {
             "name": "{name_remote} · {count_remote}",
             "data": {
-              "schedulers_remote": "Schedulers"
+              "schedulers_remote": "Schedules"
             }
           },
           "mode_away": {
             "name": "{name_away} · {count_away}",
             "data": {
-              "schedulers_away": "Schedulers"
+              "schedulers_away": "Schedules"
             }
           }
         },
@@ -128,13 +109,7 @@
       },
       "covers": {
         "title": "Heat protection",
-        "description": "Closes the chosen covers when it gets too hot. Protection only acts between the opening and closing times computed under “Opening and closing times”: set those first.",
-        "data": {
-          "cover_entities": "Protected covers"
-        },
-        "data_description": {
-          "cover_entities": "Separate from the managed covers: a cover can be protected from heat without following the daily times. Once closed by the heat, it stays closed until the next normal opening or the evening close."
-        },
+        "description": "Closes the covers marked 🌡️ in the cover list when it gets too hot: **{heat_covers}**. Protection only acts between the opening and closing times; once closed by the heat, a cover stays closed until the next normal opening or the evening close.",
         "sections": {
           "trigger_section": {
             "name": "Trigger",
@@ -166,7 +141,7 @@
       },
       "daily_cover_schedule": {
         "title": "Opening and closing times",
-        "description": "Applies to the covers listed under “Managed covers”.\n\n**At {close_elevation}°, the covers will close at {close_at_elevation} tonight.**",
+        "description": "Applies to the covers marked 🕒 in the cover list.\n\n**At {close_elevation}°, the covers will close at {close_at_elevation} tonight.**\n\n**Tomorrow, a mode opening at sunrise opens at {open_at_sunrise}.**",
         "sections": {
           "close_section": {
             "name": "Evening close",
@@ -198,8 +173,8 @@
         "submit": "Save and back to covers"
       },
       "cover_items": {
-        "title": "Managed covers",
-        "description": "The covers opened and closed every day; a cover group counts as one. In the evening, a cover whose window is reported open is not closed and a warning is logged.\n\n{covers}",
+        "title": "Cover list",
+        "description": "The covers HomeShift drives; a cover group counts as one.\n\n🕒 opened and closed every day · 🌡️ protected from heat · 🪟 window sensor\n\n{covers}",
         "menu_options": {
           "cover_item_add": "Add a cover",
           "cover_item_pick": "Edit a cover",
@@ -207,21 +182,25 @@
           "covers_menu": "← Back to the covers menu"
         },
         "menu_option_descriptions": {
-          "cover_item_add": "With, if needed, a window sensor and a My button",
-          "cover_item_pick": "Change its window sensor or My button",
+          "cover_item_add": "With what it does, and if needed a window sensor and a My button",
+          "cover_item_pick": "Change what it does, its window sensor or its My button",
           "cover_item_remove": "Remove them from HomeShift, leaving the entities alone"
         }
       },
       "cover_item_add": {
         "title": "Add a cover",
-        "description": "Choose the cover and, if needed, its window sensor and its favourite position button.",
+        "description": "Choose the cover and what HomeShift does with it.",
         "data": {
           "cover": "Cover",
+          "daily": "Open and close it every day",
+          "heat_protection": "Protect it from heat",
           "window_sensor": "Window opening sensor (optional)",
           "my_button": "My favourite position button (optional)"
         },
         "data_description": {
-          "cover": "The cover to open and close on the daily times.",
+          "cover": "The cover, or a cover group.",
+          "daily": "At the opening and closing times. A window reported open keeps it up in the evening.",
+          "heat_protection": "Closed when it gets too hot (Heat protection), between the opening and the closing.",
           "window_sensor": "Binary sensor that is 'on' while the window is open. Window open at the evening close: the cover is not closed and a warning is logged. With “Close as soon as the window is shut” (opening and closing times), it closes once the window is shut.",
           "my_button": "For a cover that must not close fully: the evening close presses this button instead of closing the cover."
         },
@@ -239,10 +218,14 @@
         "title": "Edit a cover",
         "description": "Cover: **{cover}**. Clear a field to remove the sensor or the button.",
         "data": {
+          "daily": "Open and close it every day",
+          "heat_protection": "Protect it from heat",
           "window_sensor": "Window opening sensor (optional)",
           "my_button": "My favourite position button (optional)"
         },
         "data_description": {
+          "daily": "At the opening and closing times. A window reported open keeps it up in the evening.",
+          "heat_protection": "Closed when it gets too hot (Heat protection), between the opening and the closing.",
           "window_sensor": "Binary sensor that is 'on' while the window is open. Window open at the evening close: the cover is not closed and a warning is logged. With “Close as soon as the window is shut” (opening and closing times), it closes once the window is shut.",
           "my_button": "For a cover that must not close fully: the evening close presses this button instead of closing the cover."
         },
@@ -255,11 +238,107 @@
           "remove_covers": "Covers to remove"
         },
         "submit": "Save and back to the list"
+      },
+      "heat_pumps": {
+        "title": "Climate auto start/stop",
+        "description": "For each climate (a Versatile Thermostat over_climate thermostat: heat pump, air conditioner...), HomeShift reads its target temperature and compares it to a threshold set for each thermostat mode. On the comfort side of the threshold it turns the auto start/stop off, so the climate keeps running; on the other side it turns it on: the scheduler's comfort and eco slots move the setpoint. It only acts in the thermostat modes that have a threshold, and only at a change (thermostat mode, setpoint crossing the threshold, start of Home Assistant): a switch flipped by hand stays so until the next change.\n\n{heat_pumps}",
+        "menu_options": {
+          "heat_pump_add": "Add a climate",
+          "heat_pump_pick": "Edit a climate",
+          "heat_pump_remove": "Remove climates",
+          "menu": "← Back to the main menu"
+        },
+        "menu_option_descriptions": {
+          "heat_pump_add": "Its auto start/stop switch and a setpoint threshold per thermostat mode",
+          "heat_pump_pick": "Change its thresholds",
+          "heat_pump_remove": "Stop driving them, without touching the entities"
+        }
+      },
+      "heat_pump_add": {
+        "title": "Add a climate",
+        "description": "Pick the climate's auto start/stop switch and a setpoint threshold for each thermostat mode it is driven in. An empty mode is not driven.\n\nWhile the climate keeps on the comfort side of the threshold, its auto start/stop is turned **off** and it runs. On the other side it is turned **on**: Versatile Thermostat may stop it.",
+        "data": {
+          "switch": "Auto start/stop switch",
+          "climate": "Climate",
+          "threshold_heating": "{tname_heating}: runs while the setpoint is at or above",
+          "threshold_cooling": "{tname_cooling}: runs while the setpoint is at or below",
+          "threshold_ventilation": "{tname_ventilation}: runs while the setpoint is at or below"
+        },
+        "data_description": {
+          "switch": "The Versatile Thermostat (over_climate) switch whose id ends with _enable_auto_start_stop. Any switch is accepted.",
+          "climate": "The climate whose target temperature is read. Left empty, it is taken from the switch id (switch.salon_enable_auto_start_stop → climate.salon).",
+          "threshold_heating": "In °C. Empty: not driven in this mode.",
+          "threshold_cooling": "In °C. Empty: not driven in this mode.",
+          "threshold_ventilation": "In °C. Empty: not driven in this mode."
+        },
+        "submit": "Save and back to the list"
+      },
+      "heat_pump_pick": {
+        "title": "Edit a climate",
+        "description": "Pick the climate to edit.",
+        "data": {
+          "switch": "Climate"
+        },
+        "submit": "Next"
+      },
+      "heat_pump_edit": {
+        "title": "Edit a climate",
+        "description": "Climate: **{switch}** · current setpoint: **{setpoint}**.\n\nAn empty mode is not driven. While the climate keeps on the comfort side of the threshold, its auto start/stop is turned **off** and it runs. On the other side it is turned **on**: Versatile Thermostat may stop it.",
+        "data": {
+          "climate": "Climate",
+          "threshold_heating": "{tname_heating}: runs while the setpoint is at or above",
+          "threshold_cooling": "{tname_cooling}: runs while the setpoint is at or below",
+          "threshold_ventilation": "{tname_ventilation}: runs while the setpoint is at or below"
+        },
+        "data_description": {
+          "climate": "The climate whose target temperature is read. Left empty, it is taken from the switch id (switch.salon_enable_auto_start_stop → climate.salon).",
+          "threshold_heating": "In °C. Empty: not driven in this mode.",
+          "threshold_cooling": "In °C. Empty: not driven in this mode.",
+          "threshold_ventilation": "In °C. Empty: not driven in this mode."
+        },
+        "submit": "Save and back to the list"
+      },
+      "heat_pump_remove": {
+        "title": "Remove climates",
+        "description": "HomeShift stops driving the ticked switches; they keep their current state.",
+        "data": {
+          "remove_switches": "Climates to remove"
+        },
+        "submit": "Remove and back to the list"
+      },
+      "names": {
+        "title": "Display names",
+        "description": "The names shown in the card, the lists and these forms. The mode itself, and what is attached to it, stays the same when you rename it.",
+        "sections": {
+          "day_modes_section": {
+            "name": "Day modes",
+            "data": {
+              "day_display_home": "Name of the home mode",
+              "day_display_work": "Name of the work mode",
+              "day_display_remote": "Name of the remote mode",
+              "day_display_away": "Name of the away mode"
+            }
+          },
+          "thermostat_section": {
+            "name": "Thermostat modes",
+            "data": {
+              "thermostat_display_off": "Name of the off mode",
+              "thermostat_display_heating": "Name of the heating mode",
+              "thermostat_display_cooling": "Name of the cooling mode",
+              "thermostat_display_ventilation": "Name of the ventilation mode"
+            }
+          }
+        },
+        "submit": "Save and back to the menu"
       }
     },
     "error": {
       "invalid_calendar": "The specified calendar entity does not exist",
-      "elevation_unreachable": "The sun does not reach this elevation every day of the year at your location. Pick a value inside the sun's yearly range — 0° is sunset, negative values are below the horizon."
+      "elevation_unreachable": "The sun does not reach this elevation every day of the year at your location. Pick a value inside the sun's yearly range — 0° is sunset, negative values are below the horizon.",
+      "no_climate": "No climate to read the setpoint from: pick one.",
+      "no_threshold": "Set a threshold for at least one thermostat mode.",
+      "duplicate_keyword": "A keyword is given for two modes: keep it in one.",
+      "no_cover_role": "Tick at least one of “Open and close it every day” and “Protect it from heat”."
     },
     "abort": {
       "already_configured": "HomeShift is already configured",
@@ -270,35 +349,39 @@
     "step": {
       "menu": {
         "title": "HomeShift options",
-        "description": "Changed, not saved yet: {pending}\n\nNothing is saved before “Save configuration”: closing this dialog with ✕ discards the changes.",
+        "description": "✎ marks a section changed and not saved yet. Nothing is saved before “Save configuration”: closing this dialog with ✕ discards the changes.",
         "menu_options": {
           "calendars": "Calendars",
-          "mapping": "Day modes",
-          "schedulers": "Schedulers",
+          "mapping": "Day mode",
+          "schedulers": "Schedules",
           "covers_menu": "Covers",
+          "heat_pumps": "Climate auto start/stop",
+          "names": "Display names",
           "finalize": "Save configuration"
         },
         "menu_option_descriptions": {
-          "calendars": "{calendars}",
-          "mapping": "{modes}",
-          "schedulers": "{scheduler_count} schedulers assigned",
-          "covers_menu": "Managed covers: {cover_count} · closing tonight at {close_at}",
-          "finalize": "Apply the changes and close this dialog."
+          "calendars": "{calendars}{changed_calendars}",
+          "mapping": "Keywords: {keywords}{changed_mapping}",
+          "schedulers": "{scheduler_count} schedules assigned{changed_schedulers}",
+          "covers_menu": "{cover_count} cover(s) · closing tonight at {close_at}{changed_covers_menu}",
+          "heat_pumps": "{heat_pump_count} climate(s) · one setpoint threshold per thermostat mode{changed_heat_pumps}",
+          "names": "{modes} · {thermostat_modes}{changed_names}",
+          "finalize": "Apply the changes and close this dialog · ✎ {pending_count}"
         }
       },
       "covers_menu": {
         "title": "Covers",
         "description": "The covers opened and closed every day, their times, and heat protection.",
         "menu_options": {
-          "cover_items": "Managed covers",
+          "cover_items": "Cover list",
           "daily_cover_schedule": "Opening and closing times",
           "covers": "Heat protection",
           "menu": "← Back to the main menu"
         },
         "menu_option_descriptions": {
-          "cover_items": "{cover_count} cover(s) · add, edit or remove",
-          "daily_cover_schedule": "Opening by day mode · closing tonight at {close_at}",
-          "covers": "Threshold: {heat_threshold} °C · protected covers: {heat_cover_count}"
+          "cover_items": "{cover_count} cover(s) · add, edit or remove{changed_cover_items}",
+          "daily_cover_schedule": "Opening by day mode · closing tonight at {close_at}{changed_daily_cover_schedule}",
+          "covers": "Threshold: {heat_threshold} °C · protected covers: {heat_cover_count}{changed_covers}"
         }
       },
       "calendars": {
@@ -311,83 +394,60 @@
         "submit": "Save and back to the menu"
       },
       "mapping": {
-        "title": "Day modes",
-        "description": "Choose the mode applied for each kind of day. The display names are folded further down.",
+        "title": "Day mode",
+        "description": "Which mode each kind of day gets, and the calendar events that switch the day to a mode.",
         "sections": {
           "defaults_section": {
-            "name": "Mode rules",
+            "name": "Which mode for which day",
             "data": {
               "mode_default": "Working day",
               "mode_weekend": "Weekend",
               "mode_holiday": "Public holiday",
-              "mode_absence": "Mode that pauses the automation",
-              "event_mode_map": "Calendar events (Keyword:ModeKey, ...)"
+              "mode_absence": "Away mode (pauses the automation)"
             },
             "data_description": {
-              "mode_absence": "Picking this mode yourself pauses the automatic updates until you leave it. A calendar event mapped to this mode pauses nothing.",
-              "event_mode_map": "An event whose title contains the keyword switches the day to that mode. The value is the mode key: home, work, remote or away."
+              "mode_absence": "Picking this mode yourself pauses the automatic updates until you leave it. A calendar event switching to it pauses nothing."
             }
           },
-          "day_modes_section": {
-            "name": "Day mode display names",
-            "description": "The name shown for each mode. The technical key never changes.",
+          "keywords_section": {
+            "name": "Calendar events",
+            "description": "An event whose title contains one of the keywords switches the day to that mode. Several keywords are separated by commas.",
             "data": {
-              "day_display_home": "Mode home",
-              "day_display_work": "Mode work",
-              "day_display_remote": "Mode remote",
-              "day_display_away": "Mode away"
-            },
-            "data_description": {
-              "day_display_home": "Display name for the home key",
-              "day_display_work": "Display name for the work key",
-              "day_display_remote": "Display name for the remote key",
-              "day_display_away": "Display name for the away key"
-            }
-          },
-          "thermostat_section": {
-            "name": "Thermostat mode names",
-            "data": {
-              "thermostat_display_off": "Mode off",
-              "thermostat_display_heating": "Mode heating",
-              "thermostat_display_cooling": "Mode cooling",
-              "thermostat_display_ventilation": "Mode ventilation"
-            },
-            "data_description": {
-              "thermostat_display_off": "Display name for the off key",
-              "thermostat_display_heating": "Display name for the heating key",
-              "thermostat_display_cooling": "Display name for the cooling key",
-              "thermostat_display_ventilation": "Display name for the ventilation key"
+              "event_keywords_home": "Keywords for {name_home}",
+              "event_keywords_work": "Keywords for {name_work}",
+              "event_keywords_remote": "Keywords for {name_remote}",
+              "event_keywords_away": "Keywords for {name_away}"
             }
           }
         },
         "submit": "Save and back to the menu"
       },
       "schedulers": {
-        "title": "Schedulers",
-        "description": "The schedulers of the active mode are turned on, those of every other mode are turned off. Open a mode to edit its list.",
+        "title": "Schedules",
+        "description": "The schedules of the active mode are turned on, those of every other mode are turned off. Open a mode to edit its list.\n\nA schedule acting on a climate must carry the name of its thermostat mode as a tag (scheduler-card, Options → Tags), or it runs whatever the thermostat mode. Without one: **{untagged}**",
         "sections": {
           "mode_home": {
             "name": "{name_home} · {count_home}",
             "data": {
-              "schedulers_home": "Schedulers"
+              "schedulers_home": "Schedules"
             }
           },
           "mode_work": {
             "name": "{name_work} · {count_work}",
             "data": {
-              "schedulers_work": "Schedulers"
+              "schedulers_work": "Schedules"
             }
           },
           "mode_remote": {
             "name": "{name_remote} · {count_remote}",
             "data": {
-              "schedulers_remote": "Schedulers"
+              "schedulers_remote": "Schedules"
             }
           },
           "mode_away": {
             "name": "{name_away} · {count_away}",
             "data": {
-              "schedulers_away": "Schedulers"
+              "schedulers_away": "Schedules"
             }
           }
         },
@@ -395,13 +455,7 @@
       },
       "covers": {
         "title": "Heat protection",
-        "description": "Closes the chosen covers when it gets too hot. Protection only acts between the opening and closing times computed under “Opening and closing times”: set those first.",
-        "data": {
-          "cover_entities": "Protected covers"
-        },
-        "data_description": {
-          "cover_entities": "Separate from the managed covers: a cover can be protected from heat without following the daily times. Once closed by the heat, it stays closed until the next normal opening or the evening close."
-        },
+        "description": "Closes the covers marked 🌡️ in the cover list when it gets too hot: **{heat_covers}**. Protection only acts between the opening and closing times; once closed by the heat, a cover stays closed until the next normal opening or the evening close.",
         "sections": {
           "trigger_section": {
             "name": "Trigger",
@@ -433,7 +487,7 @@
       },
       "daily_cover_schedule": {
         "title": "Opening and closing times",
-        "description": "Applies to the covers listed under “Managed covers”.\n\n**At {close_elevation}°, the covers will close at {close_at_elevation} tonight.**",
+        "description": "Applies to the covers marked 🕒 in the cover list.\n\n**At {close_elevation}°, the covers will close at {close_at_elevation} tonight.**\n\n**Tomorrow, a mode opening at sunrise opens at {open_at_sunrise}.**",
         "sections": {
           "close_section": {
             "name": "Evening close",
@@ -465,8 +519,8 @@
         "submit": "Save and back to covers"
       },
       "cover_items": {
-        "title": "Managed covers",
-        "description": "The covers opened and closed every day; a cover group counts as one. In the evening, a cover whose window is reported open is not closed and a warning is logged.\n\n{covers}",
+        "title": "Cover list",
+        "description": "The covers HomeShift drives; a cover group counts as one.\n\n🕒 opened and closed every day · 🌡️ protected from heat · 🪟 window sensor\n\n{covers}",
         "menu_options": {
           "cover_item_add": "Add a cover",
           "cover_item_pick": "Edit a cover",
@@ -474,21 +528,25 @@
           "covers_menu": "← Back to the covers menu"
         },
         "menu_option_descriptions": {
-          "cover_item_add": "With, if needed, a window sensor and a My button",
-          "cover_item_pick": "Change its window sensor or My button",
+          "cover_item_add": "With what it does, and if needed a window sensor and a My button",
+          "cover_item_pick": "Change what it does, its window sensor or its My button",
           "cover_item_remove": "Remove them from HomeShift, leaving the entities alone"
         }
       },
       "cover_item_add": {
         "title": "Add a cover",
-        "description": "Choose the cover and, if needed, its window sensor and its favourite position button.",
+        "description": "Choose the cover and what HomeShift does with it.",
         "data": {
           "cover": "Cover",
+          "daily": "Open and close it every day",
+          "heat_protection": "Protect it from heat",
           "window_sensor": "Window opening sensor (optional)",
           "my_button": "My favourite position button (optional)"
         },
         "data_description": {
-          "cover": "The cover to open and close on the daily times.",
+          "cover": "The cover, or a cover group.",
+          "daily": "At the opening and closing times. A window reported open keeps it up in the evening.",
+          "heat_protection": "Closed when it gets too hot (Heat protection), between the opening and the closing.",
           "window_sensor": "Binary sensor that is 'on' while the window is open. Window open at the evening close: the cover is not closed and a warning is logged. With “Close as soon as the window is shut” (opening and closing times), it closes once the window is shut.",
           "my_button": "For a cover that must not close fully: the evening close presses this button instead of closing the cover."
         },
@@ -506,10 +564,14 @@
         "title": "Edit a cover",
         "description": "Cover: **{cover}**. Clear a field to remove the sensor or the button.",
         "data": {
+          "daily": "Open and close it every day",
+          "heat_protection": "Protect it from heat",
           "window_sensor": "Window opening sensor (optional)",
           "my_button": "My favourite position button (optional)"
         },
         "data_description": {
+          "daily": "At the opening and closing times. A window reported open keeps it up in the evening.",
+          "heat_protection": "Closed when it gets too hot (Heat protection), between the opening and the closing.",
           "window_sensor": "Binary sensor that is 'on' while the window is open. Window open at the evening close: the cover is not closed and a warning is logged. With “Close as soon as the window is shut” (opening and closing times), it closes once the window is shut.",
           "my_button": "For a cover that must not close fully: the evening close presses this button instead of closing the cover."
         },
@@ -522,11 +584,107 @@
           "remove_covers": "Covers to remove"
         },
         "submit": "Save and back to the list"
+      },
+      "heat_pumps": {
+        "title": "Climate auto start/stop",
+        "description": "For each climate (a Versatile Thermostat over_climate thermostat: heat pump, air conditioner...), HomeShift reads its target temperature and compares it to a threshold set for each thermostat mode. On the comfort side of the threshold it turns the auto start/stop off, so the climate keeps running; on the other side it turns it on: the scheduler's comfort and eco slots move the setpoint. It only acts in the thermostat modes that have a threshold, and only at a change (thermostat mode, setpoint crossing the threshold, start of Home Assistant): a switch flipped by hand stays so until the next change.\n\n{heat_pumps}",
+        "menu_options": {
+          "heat_pump_add": "Add a climate",
+          "heat_pump_pick": "Edit a climate",
+          "heat_pump_remove": "Remove climates",
+          "menu": "← Back to the main menu"
+        },
+        "menu_option_descriptions": {
+          "heat_pump_add": "Its auto start/stop switch and a setpoint threshold per thermostat mode",
+          "heat_pump_pick": "Change its thresholds",
+          "heat_pump_remove": "Stop driving them, without touching the entities"
+        }
+      },
+      "heat_pump_add": {
+        "title": "Add a climate",
+        "description": "Pick the climate's auto start/stop switch and a setpoint threshold for each thermostat mode it is driven in. An empty mode is not driven.\n\nWhile the climate keeps on the comfort side of the threshold, its auto start/stop is turned **off** and it runs. On the other side it is turned **on**: Versatile Thermostat may stop it.",
+        "data": {
+          "switch": "Auto start/stop switch",
+          "climate": "Climate",
+          "threshold_heating": "{tname_heating}: runs while the setpoint is at or above",
+          "threshold_cooling": "{tname_cooling}: runs while the setpoint is at or below",
+          "threshold_ventilation": "{tname_ventilation}: runs while the setpoint is at or below"
+        },
+        "data_description": {
+          "switch": "The Versatile Thermostat (over_climate) switch whose id ends with _enable_auto_start_stop. Any switch is accepted.",
+          "climate": "The climate whose target temperature is read. Left empty, it is taken from the switch id (switch.salon_enable_auto_start_stop → climate.salon).",
+          "threshold_heating": "In °C. Empty: not driven in this mode.",
+          "threshold_cooling": "In °C. Empty: not driven in this mode.",
+          "threshold_ventilation": "In °C. Empty: not driven in this mode."
+        },
+        "submit": "Save and back to the list"
+      },
+      "heat_pump_pick": {
+        "title": "Edit a climate",
+        "description": "Pick the climate to edit.",
+        "data": {
+          "switch": "Climate"
+        },
+        "submit": "Next"
+      },
+      "heat_pump_edit": {
+        "title": "Edit a climate",
+        "description": "Climate: **{switch}** · current setpoint: **{setpoint}**.\n\nAn empty mode is not driven. While the climate keeps on the comfort side of the threshold, its auto start/stop is turned **off** and it runs. On the other side it is turned **on**: Versatile Thermostat may stop it.",
+        "data": {
+          "climate": "Climate",
+          "threshold_heating": "{tname_heating}: runs while the setpoint is at or above",
+          "threshold_cooling": "{tname_cooling}: runs while the setpoint is at or below",
+          "threshold_ventilation": "{tname_ventilation}: runs while the setpoint is at or below"
+        },
+        "data_description": {
+          "climate": "The climate whose target temperature is read. Left empty, it is taken from the switch id (switch.salon_enable_auto_start_stop → climate.salon).",
+          "threshold_heating": "In °C. Empty: not driven in this mode.",
+          "threshold_cooling": "In °C. Empty: not driven in this mode.",
+          "threshold_ventilation": "In °C. Empty: not driven in this mode."
+        },
+        "submit": "Save and back to the list"
+      },
+      "heat_pump_remove": {
+        "title": "Remove climates",
+        "description": "HomeShift stops driving the ticked switches; they keep their current state.",
+        "data": {
+          "remove_switches": "Climates to remove"
+        },
+        "submit": "Remove and back to the list"
+      },
+      "names": {
+        "title": "Display names",
+        "description": "The names shown in the card, the lists and these forms. The mode itself, and what is attached to it, stays the same when you rename it.",
+        "sections": {
+          "day_modes_section": {
+            "name": "Day modes",
+            "data": {
+              "day_display_home": "Name of the home mode",
+              "day_display_work": "Name of the work mode",
+              "day_display_remote": "Name of the remote mode",
+              "day_display_away": "Name of the away mode"
+            }
+          },
+          "thermostat_section": {
+            "name": "Thermostat modes",
+            "data": {
+              "thermostat_display_off": "Name of the off mode",
+              "thermostat_display_heating": "Name of the heating mode",
+              "thermostat_display_cooling": "Name of the cooling mode",
+              "thermostat_display_ventilation": "Name of the ventilation mode"
+            }
+          }
+        },
+        "submit": "Save and back to the menu"
       }
     },
     "error": {
       "invalid_calendar": "The specified calendar entity does not exist",
-      "elevation_unreachable": "The sun does not reach this elevation every day of the year at your location. Pick a value inside the sun's yearly range — 0° is sunset, negative values are below the horizon."
+      "elevation_unreachable": "The sun does not reach this elevation every day of the year at your location. Pick a value inside the sun's yearly range — 0° is sunset, negative values are below the horizon.",
+      "no_climate": "No climate to read the setpoint from: pick one.",
+      "no_threshold": "Set a threshold for at least one thermostat mode.",
+      "duplicate_keyword": "A keyword is given for two modes: keep it in one.",
+      "no_cover_role": "Tick at least one of “Open and close it every day” and “Protect it from heat”."
     }
   },
   "entity": {
@@ -561,6 +719,9 @@
       },
       "covers_inhibited": {
         "name": "Covers Inhibited"
+      },
+      "auto_start_stop": {
+        "name": "Climate auto start/stop"
       }
     },
     "binary_sensor": {
@@ -596,8 +757,8 @@
   },
   "services": {
     "refresh_schedulers": {
-      "name": "Refresh Schedulers",
-      "description": "Refresh scheduler states based on current day mode and thermostat mode"
+      "name": "Refresh schedules",
+      "description": "Refresh the schedules based on current day mode and thermostat mode"
     },
     "sync_calendar": {
       "name": "Sync Calendar",

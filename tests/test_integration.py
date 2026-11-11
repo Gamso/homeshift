@@ -1,4 +1,4 @@
-"""End-to-end tests on a real Home Assistant instance (pytest-homeassistant-custom-component).
+"""End-to-end tests on a real Home Assistant instance (pytest-homeassistant).
 
 The rest of the suite drives the coordinator against a MagicMock hass. These
 tests set the integration up the way Home Assistant does — config entry,
@@ -8,7 +8,7 @@ cannot: entity ids, translations, setup/unload and reloads.
 from __future__ import annotations
 
 import pytest
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant.common import MockConfigEntry
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
@@ -19,8 +19,6 @@ from custom_components.homeshift.const import (
     CONF_HOLIDAY_CALENDAR,
     DOMAIN,
 )
-
-pytestmark = pytest.mark.usefixtures("enable_custom_integrations")
 
 WORK_CALENDAR = "calendar.travail"
 HOLIDAY_CALENDAR = "calendar.jours_feries"
@@ -290,7 +288,7 @@ async def test_french_setup_then_schedules_drive_the_schedulers(hass: HomeAssist
     Maison/Travail turns the work-day schedule on.
     """
     from homeassistant.data_entry_flow import FlowResultType
-    from pytest_homeassistant_custom_component.common import async_mock_service
+    from pytest_homeassistant.common import async_mock_service
 
     freezer.move_to("2026-03-03 18:00:00+00:00")  # Tuesday: a work day
     hass.config.language = "fr"
@@ -458,7 +456,7 @@ async def test_cover_button_ids_and_names(hass: HomeAssistant, language: str) ->
     ],
 )
 async def test_buttons_and_services_move_the_covers(hass: HomeAssistant, freezer, press: tuple, service: str) -> None:
-    from pytest_homeassistant_custom_component.common import async_mock_service
+    from pytest_homeassistant.common import async_mock_service
 
     freezer.move_to("2026-03-03 11:00:00+00:00")  # 03:00 local: no scheduled open or close due
     entry = make_entry(options={CONF_DAILY_COVER_ITEMS: COVER_ITEMS})
@@ -507,7 +505,7 @@ HEAT_PUMP_ITEMS = [{"switch": HEAT_PUMP_SWITCH, "setpoint_thresholds": {"heating
 
 async def test_heat_pump_auto_start_stop_follows_the_setpoint(hass: HomeAssistant) -> None:
     """Heating keeps the climate running at its threshold and lets it stop below; a setpoint change is followed."""
-    from pytest_homeassistant_custom_component.common import async_mock_service
+    from pytest_homeassistant.common import async_mock_service
 
     hass.states.async_set(HEAT_PUMP_SWITCH, "on", {"friendly_name": "Salon Enable auto start/stop"})
     hass.states.async_set(HEAT_PUMP_CLIMATE, "heat", {"temperature": 21.0})

@@ -26,7 +26,7 @@ A Home Assistant integration that runs your home from your calendar: it picks th
 
 ## Requirements
 
-- **Home Assistant 2026.9** or newer
+- **Home Assistant 2026.11** or newer
 - A **calendar** with your work or schedule events, and a **calendar** of public holidays
 - Optional: the [Scheduler integration](https://github.com/nielsfaber/scheduler-component) for the schedules, [Versatile Thermostat](https://github.com/jmcollin78/versatile_thermostat) for the climate auto start/stop
 

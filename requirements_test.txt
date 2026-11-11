@@ -1,6 +1,8 @@
 # Test requirements, pinned for reproducible runs.
-# pytest-homeassistant-custom-component pins homeassistant (here 2026.9.0, the
-# minimum version declared in hacs.json), pytest and pytest-asyncio.
-pytest-homeassistant-custom-component==0.13.363
+# pytest-homeassistant (Home Assistant's own test package, which replaces the
+# deprecated pytest-homeassistant-custom-component) pins homeassistant (here
+# 2026.11.1, built on the minimum declared in hacs.json), pytest and
+# pytest-asyncio, and needs Python >= 3.14.2.
+pytest-homeassistant==2026.11.1
 icalendar==7.3.0
-home-assistant-frontend==20260826.4
+home-assistant-frontend==20261028.4

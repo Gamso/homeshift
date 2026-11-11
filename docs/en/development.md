@@ -16,7 +16,7 @@ scripts/
 
 ## Integration
 
-Python 3.14, Home Assistant 2026.9 or newer.
+Python 3.14.2 or newer, Home Assistant 2026.11 or newer.
 
 ```bash
 pip install -r requirements_test.txt
@@ -24,7 +24,7 @@ pytest
 ruff check custom_components tests scripts
 ```
 
-Tests run against a real Home Assistant (`pytest-homeassistant-custom-component`) for the setup, entities and options flow, and against mocks for the coordinator's logic.
+Tests run against a real Home Assistant (`pytest-homeassistant`) for the setup, entities and options flow, and against mocks for the coordinator's logic.
 
 ## Card
 

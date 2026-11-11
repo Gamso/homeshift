@@ -26,7 +26,7 @@ Une intégration Home Assistant qui pilote la maison depuis votre agenda : elle 
 
 ## Prérequis
 
-- **Home Assistant 2026.9** ou plus récent
+- **Home Assistant 2026.11** ou plus récent
 - Un **calendrier** avec vos événements de travail ou d'agenda, et un **calendrier** des jours fériés
 - En option : l'[intégration Scheduler](https://github.com/nielsfaber/scheduler-component) pour les plannings, [Versatile Thermostat](https://github.com/jmcollin78/versatile_thermostat) pour l'auto start/stop des équipements
 

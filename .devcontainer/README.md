@@ -89,7 +89,7 @@ Once the container is running:
 
 ```bash
 # Install test dependencies
-pip install pytest pytest-homeassistant-custom-component
+pip install pytest pytest-homeassistant
 
 # Run tests
 pytest tests/

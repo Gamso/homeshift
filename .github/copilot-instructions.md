@@ -65,7 +65,7 @@ Day/thermostat mode keys are saved to HA storage (`Store`) and restored in `asyn
 - Shared fixtures are in `tests/conftest.py`: `make_mock_hass()`, `make_mock_entry()`, `make_calendar_state()`.
 - Test files are split by concern: `test_coordinator.py` (utilities/scan interval), `test_coordinator_modes.py` (mode logic, half-day, absence), `test_coordinator_features.py` (features), `test_init.py`, `test_calendars.py`.
 - Coordinator logic is mostly tested directly by mocking `hass` and `ConfigEntry` via `MagicMock`; put a coordinator in a mode with `set_day_mode()` from `conftest.py`.
-- `tests/test_integration.py` runs the integration on a real Home Assistant (the `hass` fixture of pytest-homeassistant-custom-component): setup/unload, reloads, entity ids, config flow, buttons and services.
+- `tests/test_integration.py` runs the integration on a real Home Assistant (the `hass` fixture of pytest-homeassistant): setup/unload, reloads, entity ids, config flow, buttons and services.
 - `asyncio_mode = auto` is set; no need for `@pytest.mark.asyncio`.
 
 ## Adding a New Mode or Config Option

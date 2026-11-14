@@ -1,15 +1,56 @@
 # Changelog
 
-## Unreleased
+## 2.2.0
+
+Changes since **2.1.0**.
+
+Requires Home Assistant **2026.11.0** or later.
 
 ### ⚠️ Upgrade notes
 
 - **Requires Home Assistant 2026.11.0** or later (it was 2026.9.0).
+- **HACS installs a release archive.** Each release now carries a `homeshift.zip` (the integration with its card), which HACS downloads. Nothing to do when updating through HACS.
+- **The services stay registered.** `homeshift.*` services no longer disappear while the integration reloads or is not loaded; a call then fails with a clear "HomeShift is not loaded" error.
+
+### 🐛 Fixes
+
+**Calendars and day mode**
+- An unmapped event shown by the calendar (a birthday, all day) no longer hides a mapped one running at the same time (remote work): the mapped event sets the day mode.
+- Calendar events reported in UTC are read in local time, instead of an hour or two off.
+- The next mode and its time are recomputed as soon as the day mode is changed by hand, instead of at the next poll.
+- *Display names* refuses an empty name, a name with a comma, and two modes with the same name; such names used to be cut or to drop a mode.
+
+**Covers**
+- When the morning open was missed (Home Assistant down, the covers unreachable), it is no longer caught up after the closing time: the covers used to open and close again at night.
+- The sunrise opening time is computed from the location for the day being scheduled. It no longer depends on `sun.sun` being loaded at startup, nor turns into tomorrow's sunrise after a mid-day restart.
+- The proactive heat close uses today's forecast, picked by its date, instead of the first one in the list.
+
+**Climates and services**
+- An auto start/stop switch unavailable at startup, or whose command failed, is set at the next run instead of waiting for the next transition.
+- A service refusing its data (`vol.Invalid`) is logged like any other failure instead of making every HomeShift entity unavailable until the next poll.
+- Timers and listeners are tied to the integration and stop with it, so nothing runs against an unloaded instance.
+
+**Card**
+- Scheduler timeslots set at sunrise or sunset (with an offset) are drawn where the sun is, instead of breaking the timeline.
+- Times follow Home Assistant's time zone (or the browser's, as the profile says), and the "now" marker the server's clock.
+- Times follow the profile's 12 h or 24 h format and language; the remaining English-only labels are translated.
+- A refused action (mode, setting, schedule switch) shows Home Assistant's error toast instead of failing silently. Turning on a schedule no longer turns it on when the other side (heating or cooling) could not be turned off.
+- A schedule whose switch is unavailable is shown off, and its switch disabled.
+- Two quick clicks on a setting step twice instead of sending the same value twice.
+- A name containing `$` is shown as is in the card's texts.
+
+### 🛠️ Improvements
+
+- **Accessibility:** each schedule timeline is described to screen readers, and the day mode tabs work with the keyboard (Home / End).
+- The card no longer scans every entity on each Home Assistant update, and retries reading the schedules after a failure.
+- Without its card (a development checkout not built), HomeShift runs and logs how to build it, instead of loading a missing script in every dashboard.
 
 ### 🔧 Development
 
 - The card bundle is no longer committed. Each GitHub release gets a `homeshift.zip`, built by CI, which HACS installs (`zip_release`).
 - Tests run on `pytest-homeassistant` (Home Assistant's own test package, 2026.11.1) instead of the deprecated `pytest-homeassistant-custom-component`, on Python 3.14.
+- The coordinator lives in `entry.runtime_data`, the services are registered in `async_setup`, and pyright runs in CI. `validate.sh` is gone.
+- The card's styles have their own module, and the timeline helpers have unit tests.
 
 ## 2.1.0
 

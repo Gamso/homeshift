@@ -312,4 +312,76 @@ describe("schedules panel", () => {
     await settle(card);
     expect(hass.callWS).toHaveBeenCalledTimes(2);
   });
+
+  it("does not read the schedules again on other state changes", async () => {
+    const hass = schedulerHass();
+    const card = await render(hass);
+    const states = { ...hass.states };
+    states["climate.salon"] = entity("climate.salon", "heat", { current_temperature: 20 });
+    card.hass = { ...hass, states };
+    await settle(card);
+    expect(hass.callWS).toHaveBeenCalledTimes(1);
+  });
+
+  it("lists the registry only when it changes", async () => {
+    let scans = 0;
+    const registry = new Proxy(
+      { "switch.schedule_travail_salon": { entity_id: "switch.schedule_travail_salon" } },
+      {
+        ownKeys(target) {
+          scans++;
+          return Reflect.ownKeys(target);
+        },
+      },
+    );
+    const hass = { ...schedulerHass(), entities: registry };
+    const card = await render(hass);
+    const before = scans;
+    for (let i = 0; i < 3; i++) {
+      card.hass = { ...hass, states: { ...hass.states } };
+      await settle(card);
+    }
+    expect(scans).toBe(before);
+    card.hass = { ...hass, entities: { ...registry } };
+    await settle(card);
+    expect(scans).toBeGreaterThan(before);
+  });
+
+  it("tries a failed read again a minute later", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      vi.setSystemTime(new Date(2026, 0, 10, 12, 0));
+      const hass = schedulerHass();
+      hass.callWS.mockRejectedValueOnce(new Error("busy"));
+      const card = await render(hass);
+      expect($(card, ".schedules-open")).toBeNull();
+      card.hass = { ...hass, states: { ...hass.states } };
+      await settle(card);
+      expect(hass.callWS).toHaveBeenCalledTimes(1);
+
+      vi.setSystemTime(new Date(2026, 0, 10, 12, 1, 1));
+      card.hass = { ...hass, states: { ...hass.states } };
+      await settle(card);
+      expect(hass.callWS).toHaveBeenCalledTimes(2);
+      expect($(card, ".schedules-open")).not.toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("ignores an answer that arrives after a newer one", async () => {
+    const hass = schedulerHass();
+    let answerOld!: (list: Schedule[]) => void;
+    hass.callWS.mockReturnValueOnce(new Promise((resolve) => (answerOld = resolve)));
+    const card = await render(hass);
+    const states = { ...hass.states };
+    states["switch.schedule_travail_salon"] = entity("switch.schedule_travail_salon", "off");
+    card.hass = { ...hass, states };
+    await settle(card);
+    expect(hass.callWS).toHaveBeenCalledTimes(2);
+    expect($(card, ".schedules-open")).not.toBeNull();
+    answerOld([]);
+    await settle(card);
+    expect($(card, ".schedules-open")).not.toBeNull();
+  });
 });

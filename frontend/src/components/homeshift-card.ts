@@ -139,8 +139,19 @@ class HomeShiftCard extends LitElement {
   > = {};
   /** Whether the climate section is unfolded. */
   @state() private _heatPumpsOpen = false;
-  /** Fingerprint of the schedule switches, to read the schedules again when they change. */
-  private _schedulesKey?: string;
+  /** Entities found in the registry, for the registry object they come from. */
+  private _discovered?: {
+    registry: unknown;
+    found: ReturnType<typeof discoverEntities>;
+  };
+  /** The scheduler switches of the registry object they were listed from. */
+  private _scheduleIds?: { registry: unknown; ids: string[] };
+  /** State objects of the schedule switches when the schedules were last read. */
+  private _scheduleStates?: unknown[];
+  /** Number of the latest schedules request: an older answer is ignored. */
+  private _schedulesRequest = 0;
+  /** After a failed read, not before this time (ms) is it tried again. */
+  private _schedulesRetryAt = 0;
   private _midnightTimer?: ReturnType<typeof setTimeout>;
   /** Time zone the midnight refresh was computed in. */
   private _zone?: string;
@@ -208,7 +219,13 @@ class HomeShiftCard extends LitElement {
    */
   private _detectEntities(): boolean {
     if (!this._config || !this.hass) return false;
-    const found = discoverEntities(this.hass);
+    // The registry search only runs when the registry itself changes, not
+    // on every state change.
+    const registry = this.hass.entities;
+    if (!this._discovered || this._discovered.registry !== registry) {
+      this._discovered = { registry, found: discoverEntities(this.hass) };
+    }
+    const found = this._discovered.found;
     const next = { ...this._config };
     let moved = false;
     for (const field of ENTITY_FIELDS) {
@@ -621,26 +638,53 @@ class HomeShiftCard extends LitElement {
   /**
    * Reads the schedules again when a schedule switch changes: the Scheduler
    * integration updates them whenever a schedule is edited, toggled or run.
-   * Without the integration the call fails and the panel stays hidden.
+   * Without the integration the call fails and the panel stays hidden; a
+   * failed read is tried again a minute later, at the next update.
    */
   private _refreshSchedules() {
     if (!this._config?.show_schedules || this.preview || !this.hass?.callWS) {
       return;
     }
-    const key = Object.values(this.hass.states ?? {})
-      .filter((s: any) => s.entity_id.startsWith("switch.schedule"))
-      .map((s: any) => `${s.entity_id}:${s.last_updated}`)
-      .join("|");
-    if (key === this._schedulesKey) return;
-    this._schedulesKey = key;
+    const states = this._scheduleSwitchIds().map((id) => this.hass.states?.[id]);
+    const previous = this._scheduleStates;
+    if (previous) {
+      if (
+        previous.length === states.length &&
+        previous.every((state, i) => state === states[i])
+      ) {
+        return;
+      }
+    } else if (Date.now() < this._schedulesRetryAt) {
+      return;
+    }
+    this._scheduleStates = states;
+    const request = ++this._schedulesRequest;
     this.hass
       .callWS({ type: "scheduler" })
       .then((schedules: Schedule[]) => {
+        if (request !== this._schedulesRequest) return;
         this._schedules = Array.isArray(schedules) ? schedules : undefined;
       })
       .catch(() => {
+        if (request !== this._schedulesRequest) return;
         this._schedules = undefined;
+        this._scheduleStates = undefined;
+        this._schedulesRetryAt = Date.now() + 60_000;
       });
+  }
+
+  /**
+   * Entity ids of the Scheduler integration's switches, listed again only
+   * when the entity registry changes (or from the states without one).
+   */
+  private _scheduleSwitchIds(): string[] {
+    const isSchedule = (id: string) => id.startsWith("switch.schedule");
+    const registry = this.hass.entities;
+    if (!registry) return Object.keys(this.hass.states ?? {}).filter(isSchedule);
+    if (!this._scheduleIds || this._scheduleIds.registry !== registry) {
+      this._scheduleIds = { registry, ids: Object.keys(registry).filter(isSchedule) };
+    }
+    return this._scheduleIds.ids;
   }
 
   /** Whether a schedule is tagged with one of the day modes. */

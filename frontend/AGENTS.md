@@ -27,7 +27,7 @@ These rules guide AI agents working on the HomeShift card, bundled with the inte
 - **Missing entities:** stub data is only used when HA sets `preview`; otherwise show `card.entity_not_found`.
 - **Service calls:** `select.select_option` (day / thermostat mode), `number.set_value` (steppers), `button.press` on the integration buttons (or `cover.open_cover` / `close_cover` for a legacy `cover_entity`). Report failures with a `hass-notification` event, never leave a promise unhandled.
 - **Accessibility:** interactive elements are `<button>`s (the day mode is a `role="combobox"` button with a listbox) with a localized `aria-label`; no hover-only information.
-- **Styling:** add styles under `static styles = css\`...\``; the card is always dark: use its own variables (`--m`, `--hs-text`, `--hs-text-2`, `--hs-surface`, `--hs-ring`), and honour `prefers-reduced-motion`.
+- **Styling:** the card's styles live in [src/components/homeshift-card.styles.ts](src/components/homeshift-card.styles.ts) (`cardStyles`, used as `static styles`), the schedule elements keep theirs under `static styles = css\`...\``; the card is always dark: use its own variables (`--m`, `--hs-text`, `--hs-text-2`, `--hs-surface`, `--hs-ring`), and honour `prefers-reduced-motion`.
 
 ## Localization Conventions
 

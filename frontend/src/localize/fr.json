@@ -43,6 +43,8 @@
     "covers_paused": "En pause : {covers}",
     "covers_paused_count": "{count} volets en pause",
     "inhibit_failed": "Échec de la mise en pause : {error}",
+    "select_failed": "Impossible de changer le mode : {error}",
+    "set_value_failed": "Impossible de modifier le réglage : {error}",
     "calendar_unreadable": "Calendrier illisible",
     "calendar_unreadable_detail": "Depuis {time}. Mode du jour conservé : {mode}.",
     "heat_pumps": "Auto start/stop des équipements",
@@ -76,7 +78,8 @@
     "next_run": "Prochain lancement",
     "days": "Jours",
     "note_active": "Mode du jour actuel : ses plannings sont appliqués",
-    "note_inactive": "Mode non actif : ses plannings sont coupés"
+    "note_inactive": "Mode non actif : ses plannings sont coupés",
+    "toggle_failed": "Impossible de basculer le planning : {error}"
   },
   "editor": {
     "name": "Nom",

@@ -43,6 +43,8 @@
     "covers_paused": "Paused: {covers}",
     "covers_paused_count": "{count} covers paused",
     "inhibit_failed": "Could not pause or resume the cover: {error}",
+    "select_failed": "Could not change the mode: {error}",
+    "set_value_failed": "Could not change the setting: {error}",
     "calendar_unreadable": "Calendar unreadable",
     "calendar_unreadable_detail": "Since {time}. Day mode kept: {mode}.",
     "heat_pumps": "Climate auto start/stop",
@@ -76,7 +78,8 @@
     "next_run": "Next run",
     "days": "Days",
     "note_active": "Current day mode: its schedules are applied",
-    "note_inactive": "Not the current day mode: its schedules are off"
+    "note_inactive": "Not the current day mode: its schedules are off",
+    "toggle_failed": "Could not switch the schedule: {error}"
   },
   "editor": {
     "name": "Name",

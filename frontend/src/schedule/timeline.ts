@@ -1,3 +1,5 @@
+import { secondsOfDay } from "../time";
+
 /** A schedule as returned by the scheduler component's `scheduler` websocket command. */
 export interface Schedule {
   schedule_id: string;
@@ -50,19 +52,20 @@ export interface SunTimes {
 }
 
 /** Minutes since midnight of an ISO date, or undefined when it is not one. */
-function clockMinutes(iso: unknown): number | undefined {
+function clockMinutes(iso: unknown, zone?: string): number | undefined {
   if (typeof iso !== "string") return undefined;
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return undefined;
-  return date.getHours() * 60 + date.getMinutes();
+  return Math.floor(secondsOfDay(date, zone) / 60);
 }
 
 /** Sunrise and sunset from the `sun.sun` entity (its next_rising / next_setting). */
-export function sunTimes(sunState: any): SunTimes {
+/** In `zone` (the server's, like the timeslots), the browser's when undefined. */
+export function sunTimes(sunState: any, zone?: string): SunTimes {
   const attributes = sunState?.attributes ?? {};
   return {
-    sunrise: clockMinutes(attributes.next_rising),
-    sunset: clockMinutes(attributes.next_setting),
+    sunrise: clockMinutes(attributes.next_rising, zone),
+    sunset: clockMinutes(attributes.next_setting, zone),
   };
 }
 

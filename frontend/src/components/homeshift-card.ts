@@ -5,8 +5,14 @@ import "./homeshift-card-editor";
 import { ENTITY_FIELDS, HomeShiftCardConfig } from "../types";
 import { discoverEntities } from "../entities";
 import { formatMinutes, isUsable, numericState } from "../state";
-import { formatShortDate, formatTime } from "../time";
 import { callService, notifyFailure } from "../notify";
+import {
+  daysBetween,
+  formatShortDate,
+  formatTime,
+  secondsOfDay,
+  timeZone,
+} from "../time";
 import "../schedule/schedule-panel";
 import { Schedule } from "../schedule/timeline";
 
@@ -132,6 +138,8 @@ class HomeShiftCard extends LitElement {
   /** Fingerprint of the schedule switches, to read the schedules again when they change. */
   private _schedulesKey?: string;
   private _midnightTimer?: ReturnType<typeof setTimeout>;
+  /** Time zone the midnight refresh was computed in. */
+  private _zone?: string;
   private _settingTimeout?: ReturnType<typeof setTimeout>;
 
   connectedCallback() {
@@ -153,12 +161,15 @@ class HomeShiftCard extends LitElement {
   private _scheduleMidnightRefresh() {
     clearTimeout(this._midnightTimer);
     const now = new Date();
-    const nextMidnight = new Date(now);
-    nextMidnight.setHours(24, 0, 1, 0);
+    // Midnight in Home Assistant's time zone, one second past.
+    const zone = timeZone(this.hass);
+    this._zone = zone;
+    const delay =
+      (86_400 - secondsOfDay(now, zone) + 1) * 1000 - now.getMilliseconds();
     this._midnightTimer = setTimeout(() => {
       this._day++;
       this._scheduleMidnightRefresh();
-    }, nextMidnight.getTime() - now.getTime());
+    }, delay);
   }
 
   public static getStubConfig(): HomeShiftCardConfig {
@@ -214,6 +225,9 @@ class HomeShiftCard extends LitElement {
   protected shouldUpdate(changedProps: Map<string, unknown>): boolean {
     // Here rather than in willUpdate: most hass updates stop at this method.
     if (changedProps.has("hass")) {
+      if (this.isConnected && timeZone(this.hass) !== this._zone) {
+        this._scheduleMidnightRefresh();
+      }
       this._refreshSchedules();
       if (this._detectEntities()) return true;
     }
@@ -895,17 +909,16 @@ class HomeShiftCard extends LitElement {
     if (!isoString) return "";
     const dt = new Date(isoString);
     if (isNaN(dt.getTime())) return "";
-    const now = new Date();
-    const tomorrow = new Date(now);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    const timeStr = formatTime(dt, this.hass?.locale);
-    if (dt.toDateString() === now.toDateString()) {
+    const zone = timeZone(this.hass);
+    const timeStr = formatTime(dt, this.hass?.locale, zone);
+    const days = daysBetween(new Date(), dt, zone);
+    if (days === 0) {
       return `${localize(this.hass, "card.today")} ${timeStr}`;
     }
-    if (dt.toDateString() === tomorrow.toDateString()) {
+    if (days === 1) {
       return `${localize(this.hass, "card.tomorrow")} ${timeStr}`;
     }
-    return `${formatShortDate(dt, this.hass?.locale)} ${timeStr}`;
+    return `${formatShortDate(dt, this.hass?.locale, zone)} ${timeStr}`;
   }
 
   private _settingLabel(minutes: number | undefined): string {
@@ -918,12 +931,13 @@ class HomeShiftCard extends LitElement {
     return formatTime(
       new Date(Date.now() + minutes * 60000),
       this.hass?.locale,
+      timeZone(this.hass),
     );
   }
 
   private _clockAt(isoString: string, shiftMinutes = 0): string {
     const at = new Date(new Date(isoString).getTime() + shiftMinutes * 60000);
-    return formatTime(at, this.hass?.locale);
+    return formatTime(at, this.hass?.locale, timeZone(this.hass));
   }
 
   /** Open one setting at a time, and fold it back once it is left alone. */
@@ -1404,7 +1418,7 @@ class HomeShiftCard extends LitElement {
     const since = new Date(error.since);
     const time = Number.isNaN(since.getTime())
       ? ""
-      : formatTime(since, this.hass?.locale);
+      : formatTime(since, this.hass?.locale, timeZone(this.hass));
     return html`<div class="calendar-error" role="alert">
       <ha-icon icon="mdi:calendar-remove"></ha-icon>
       <span>

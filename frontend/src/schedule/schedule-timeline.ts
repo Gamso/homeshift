@@ -11,6 +11,8 @@ import {
   scheduleEntities,
   schedulesFor,
   segmentColors,
+  sunTimes,
+  SunTimes,
 } from "./timeline";
 
 const KIND_ICONS: Record<string, string> = {
@@ -129,8 +131,8 @@ export class HomeShiftScheduleTimeline extends LitElement {
     for (const room of rooms.values()) {
       room.schedules.sort(
         (a, b) =>
-          KIND_ORDER.indexOf(rowKind(daySegments(a))) -
-          KIND_ORDER.indexOf(rowKind(daySegments(b))),
+          KIND_ORDER.indexOf(rowKind(daySegments(a, this._sun()))) -
+          KIND_ORDER.indexOf(rowKind(daySegments(b, this._sun()))),
       );
     }
     return [...rooms.values()];
@@ -154,6 +156,11 @@ export class HomeShiftScheduleTimeline extends LitElement {
     `;
   }
 
+  /** Sunrise and sunset, for the timeslots set relative to them. */
+  private _sun(): SunTimes {
+    return sunTimes(this.hass.states["sun.sun"]);
+  }
+
   private _enabled(schedule: Schedule): boolean {
     const state = this.hass.states[schedule.entity_id];
     return state ? state.state !== "off" : schedule.enabled;
@@ -161,7 +168,7 @@ export class HomeShiftScheduleTimeline extends LitElement {
 
   /** One schedule: its kind, its timeline and its switch. */
   private _renderRow(schedule: Schedule, room: Room, nowMinutes: number) {
-    const segments = daySegments(schedule);
+    const segments = daySegments(schedule, this._sun());
     const kind = rowKind(segments);
     const enabled = this._enabled(schedule);
     const side = climateSide(kind);
@@ -258,10 +265,10 @@ export class HomeShiftScheduleTimeline extends LitElement {
       });
       return;
     }
-    const side = climateSide(rowKind(daySegments(schedule)));
+    const side = climateSide(rowKind(daySegments(schedule, this._sun())));
     const opposite = side
       ? room.schedules.filter((s) => {
-          const other = climateSide(rowKind(daySegments(s)));
+          const other = climateSide(rowKind(daySegments(s, this._sun())));
           return s !== schedule && other && other !== side && this._enabled(s);
         })
       : [];

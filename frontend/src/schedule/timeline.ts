@@ -43,10 +43,50 @@ export interface Segment {
 
 export const DAY_MINUTES = 24 * 60;
 
-/** "07:30:00" → 450. */
-export function parseTime(time: string): number {
-  const [h, m] = time.split(":").map(Number);
-  return h * 60 + (m || 0);
+/** Sunrise and sunset of the day, in minutes since midnight, when known. */
+export interface SunTimes {
+  sunrise?: number;
+  sunset?: number;
+}
+
+/** Minutes since midnight of an ISO date, or undefined when it is not one. */
+function clockMinutes(iso: unknown): number | undefined {
+  if (typeof iso !== "string") return undefined;
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return undefined;
+  return date.getHours() * 60 + date.getMinutes();
+}
+
+/** Sunrise and sunset from the `sun.sun` entity (its next_rising / next_setting). */
+export function sunTimes(sunState: any): SunTimes {
+  const attributes = sunState?.attributes ?? {};
+  return {
+    sunrise: clockMinutes(attributes.next_rising),
+    sunset: clockMinutes(attributes.next_setting),
+  };
+}
+
+const SUN_TIME = /^(sunrise|sunset)(?:([+-])(\d{1,2}):(\d{2})(?::\d{2})?)?$/;
+
+/**
+ * "07:30:00" → 450; "sunrise+00:30:00" → sunrise + 30 min. Undefined when
+ * the time cannot be resolved (a sun time without `sun`, or garbage).
+ */
+export function parseTime(time: string, sun: SunTimes = {}): number | undefined {
+  const text = String(time ?? "").trim();
+  const sunMatch = SUN_TIME.exec(text);
+  if (sunMatch) {
+    const base = sun[sunMatch[1] as keyof SunTimes];
+    if (base === undefined) return undefined;
+    const offset = sunMatch[2]
+      ? (Number(sunMatch[3]) * 60 + Number(sunMatch[4])) * (sunMatch[2] === "-" ? -1 : 1)
+      : 0;
+    return (((base + offset) % DAY_MINUTES) + DAY_MINUTES) % DAY_MINUTES;
+  }
+  const match = /^(\d{1,2}):(\d{2})(?::\d{2})?$/.exec(text);
+  if (!match) return undefined;
+  const minutes = Number(match[1]) * 60 + Number(match[2]);
+  return minutes <= DAY_MINUTES ? minutes : undefined;
 }
 
 /** "HH:MM" of a number of minutes since midnight. */
@@ -93,21 +133,30 @@ export function slotValue(slot: Timeslot): SlotValue {
  * Segments of the day a schedule covers. A timeslot with a stop time spans
  * start → stop (across midnight if stop is earlier); a timeslot without one
  * is a single action whose value holds until the next timeslot, wrapping
- * around midnight.
+ * around midnight. Sun times ("sunrise+00:30:00") resolve against `sun`;
+ * a timeslot whose times cannot be resolved is left out on its own.
  */
-export function daySegments(schedule: Schedule): Segment[] {
+export function daySegments(schedule: Schedule, sun: SunTimes = {}): Segment[] {
   const climate = drivesClimate(schedule);
   const slots = schedule.timeslots
     .filter((slot) => !climate || slot.actions.some(isClimate))
-    .map((slot) => ({ slot, start: parseTime(slot.start) }))
+    .map((slot) => ({
+      slot,
+      start: parseTime(slot.start, sun),
+      stop: slot.stop != null ? parseTime(slot.stop, sun) : null,
+    }))
+    .filter(
+      (s): s is { slot: Timeslot; start: number; stop: number | null } =>
+        s.start !== undefined && s.stop !== undefined,
+    )
     .sort((a, b) => a.start - b.start);
   const segments: Segment[] = [];
 
-  slots.forEach(({ slot, start }, i) => {
+  slots.forEach(({ slot, start, stop }, i) => {
     const value = slotValue(slot);
     let end: number;
-    if (slot.stop != null) {
-      end = parseTime(slot.stop);
+    if (stop !== null) {
+      end = stop;
       if (end <= start) end += DAY_MINUTES;
     } else {
       const next = slots[(i + 1) % slots.length].start;

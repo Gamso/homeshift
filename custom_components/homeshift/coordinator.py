@@ -63,15 +63,18 @@ def _parse_event_dt(start_str: str, fallback_tzinfo: Any) -> datetime | None:
 
     Handles timezone-aware strings like '2026-03-07T14:00:00+01:00',
     naive strings like '2026-03-07T14:00:00', and date-only '2026-03-07'.
-    When the parsed value is naive and fallback_tzinfo is provided, it is applied.
+    When fallback_tzinfo (the local time zone) is provided, a naive value is
+    read in it and an aware one is converted to it: the coordinator compares
+    wall-clock times with their zone stripped, so an event reported in UTC
+    ('...T08:00:00Z', 9:00 in Paris in winter) must not be read as 8:00.
     Returns None for unparseable values.
     """
     if not start_str:
         return None
     try:
         dt = datetime.fromisoformat(str(start_str))
-        if dt.tzinfo is None and fallback_tzinfo is not None:
-            dt = dt.replace(tzinfo=fallback_tzinfo)
+        if fallback_tzinfo is not None:
+            dt = dt.replace(tzinfo=fallback_tzinfo) if dt.tzinfo is None else dt.astimezone(fallback_tzinfo)
         return dt
     except (ValueError, TypeError):
         return None

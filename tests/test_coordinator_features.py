@@ -1293,6 +1293,51 @@ class TestCoverProactiveClose:
         assert "cover.volet_salon" in close_calls[0].args[2]["entity_id"]
         assert coordinator._cover_manager._heat_closed is True
 
+    async def test_the_forecast_of_today_is_picked_by_its_date(self):
+        """The list starts with yesterday's hot day; today's mild one decides: no close."""
+        hass = make_mock_hass()
+
+        async def _call(domain, service, data=None, **kwargs):
+            if (domain, service) == ("weather", "get_forecasts"):
+                return {
+                    data["entity_id"]: {
+                        "forecast": [
+                            {"datetime": "2026-06-30T10:00:00+00:00", "temperature": 35.0},
+                            {"datetime": "2026-07-01T10:00:00+00:00", "temperature": 22.0},
+                        ]
+                    }
+                }
+            return None
+
+        hass.services.async_call = AsyncMock(side_effect=_call)
+        entry = self._make_entry(forecast_threshold=28.0)
+        hass.states.get.side_effect = lambda entity_id: self._temp_state(20.0) if entity_id == "sensor.temp" else make_calendar_state(state="off")
+        coordinator = self._make_coordinator(hass, entry, open_time="08:35")
+
+        await coordinator._cover_manager.async_check_heat_protection(datetime(2026, 7, 1, 8, 35, 0))
+
+        assert not any(c.args[0] == "cover" for c in hass.services.async_call.call_args_list)
+        assert coordinator._cover_manager._proactive_checked_date == date(2026, 7, 1)
+
+    async def test_no_forecast_for_today_means_no_decision(self):
+        """Only tomorrow is forecast: nothing is closed, and the check is retried later."""
+        hass = make_mock_hass()
+
+        async def _call(domain, service, data=None, **kwargs):
+            if (domain, service) == ("weather", "get_forecasts"):
+                return {data["entity_id"]: {"forecast": [{"datetime": "2026-07-02T10:00:00+00:00", "temperature": 35.0}]}}
+            return None
+
+        hass.services.async_call = AsyncMock(side_effect=_call)
+        entry = self._make_entry(forecast_threshold=28.0)
+        hass.states.get.side_effect = lambda entity_id: self._temp_state(20.0) if entity_id == "sensor.temp" else make_calendar_state(state="off")
+        coordinator = self._make_coordinator(hass, entry, open_time="08:35")
+
+        await coordinator._cover_manager.async_check_heat_protection(datetime(2026, 7, 1, 8, 35, 0))
+
+        assert not any(c.args[0] == "cover" for c in hass.services.async_call.call_args_list)
+        assert coordinator._cover_manager._proactive_checked_date is None
+
     async def test_no_close_when_forecast_below_threshold(self):
         """No cover action when the forecast high stays under the threshold."""
         hass = make_mock_hass()

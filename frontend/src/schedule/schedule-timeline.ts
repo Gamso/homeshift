@@ -3,6 +3,7 @@ import { property } from "lit/decorators.js";
 import { localize } from "../localize/localize";
 import { callService } from "../notify";
 import { secondsOfDay } from "../time";
+import { isUsable } from "../state";
 import {
   DAY_MINUTES,
   Schedule,
@@ -166,9 +167,17 @@ export class HomeShiftScheduleTimeline extends LitElement {
     return sunTimes(this.hass.states["sun.sun"], this.hass.config?.time_zone || undefined);
   }
 
+  /** Whether the schedule runs: its switch is on (an unavailable one is not). */
   private _enabled(schedule: Schedule): boolean {
     const state = this.hass.states[schedule.entity_id];
-    return state ? state.state !== "off" : schedule.enabled;
+    if (!state) return schedule.enabled;
+    return isUsable(state) && state.state !== "off";
+  }
+
+  /** Whether the schedule's switch can be flipped: not unavailable or unknown. */
+  private _switchable(schedule: Schedule): boolean {
+    const state = this.hass.states[schedule.entity_id];
+    return !state || isUsable(state);
   }
 
   /** One schedule: its kind, its timeline and its switch. */
@@ -176,6 +185,7 @@ export class HomeShiftScheduleTimeline extends LitElement {
     const segments = daySegments(schedule, this._sun());
     const kind = rowKind(segments);
     const enabled = this._enabled(schedule);
+    const switchable = this._switchable(schedule);
     const side = climateSide(kind);
 
     return html`
@@ -190,7 +200,10 @@ export class HomeShiftScheduleTimeline extends LitElement {
           role="switch"
           style=${side ? `--c: ${SIDE_COLORS[side]}` : ""}
           aria-checked=${enabled ? "true" : "false"}
-          aria-label=${schedule.name}
+          aria-label=${switchable
+            ? schedule.name
+            : `${schedule.name} — ${localize(this.hass, "schedule.unavailable")}`}
+          ?disabled=${!switchable}
           @click=${() => this._toggle(schedule, room, enabled)}
         >
           <span class="knob">${enabled ? CHECK : CROSS}</span>
@@ -421,6 +434,10 @@ export class HomeShiftScheduleTimeline extends LitElement {
       margin-left: 20px;
       background: #fff;
       color: rgb(var(--c));
+    }
+    .switch:disabled {
+      cursor: default;
+      opacity: 0.4;
     }
     .switch:focus-visible {
       outline: 2px solid #fff;

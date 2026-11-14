@@ -79,7 +79,8 @@
     "days": "Days",
     "note_active": "Current day mode: its schedules are applied",
     "note_inactive": "Not the current day mode: its schedules are off",
-    "toggle_failed": "Could not switch the schedule: {error}"
+    "toggle_failed": "Could not switch the schedule: {error}",
+    "unavailable": "unavailable"
   },
   "editor": {
     "name": "Name",

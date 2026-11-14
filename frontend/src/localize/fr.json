@@ -79,7 +79,8 @@
     "days": "Jours",
     "note_active": "Mode du jour actuel : ses plannings sont appliqués",
     "note_inactive": "Mode non actif : ses plannings sont coupés",
-    "toggle_failed": "Impossible de basculer le planning : {error}"
+    "toggle_failed": "Impossible de basculer le planning : {error}",
+    "unavailable": "indisponible"
   },
   "editor": {
     "name": "Nom",

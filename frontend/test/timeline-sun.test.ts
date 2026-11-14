@@ -33,6 +33,15 @@ describe("sun times in schedules", () => {
     expect(sunTimes(undefined)).toEqual({ sunrise: undefined, sunset: undefined });
   });
 
+  it("reads them in the server's time zone when given", () => {
+    // 07:15 UTC is 08:15 in Paris in January.
+    const sun = sunTimes(
+      { attributes: { next_rising: "2026-01-10T07:15:00+00:00", next_setting: "2026-01-10T16:20:00+00:00" } },
+      "Europe/Paris",
+    );
+    expect(sun).toEqual({ sunrise: 495, sunset: 1040 });
+  });
+
   it("resolves sunrise / sunset with an offset", () => {
     expect(parseTime("sunrise", SUN)).toBe(480);
     expect(parseTime("sunrise+00:30:00", SUN)).toBe(510);

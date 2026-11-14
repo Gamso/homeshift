@@ -2,6 +2,7 @@ import { LitElement, html, svg, css, nothing } from "lit";
 import { property } from "lit/decorators.js";
 import { localize } from "../localize/localize";
 import { callService } from "../notify";
+import { secondsOfDay } from "../time";
 import {
   DAY_MINUTES,
   Schedule,
@@ -98,8 +99,10 @@ export class HomeShiftScheduleTimeline extends LitElement {
         ${localize(this.hass, "schedule.empty", { mode: this.tag })}
       </div>`;
     }
-    const now = new Date();
-    const nowMinutes = now.getHours() * 60 + now.getMinutes();
+    // The timeslots are times of the server's day, whatever the profile
+    // says: the "now" marker follows the server's clock too.
+    const zone = this.hass.config?.time_zone || undefined;
+    const nowMinutes = Math.floor(secondsOfDay(new Date(), zone) / 60);
     return html`
       ${this._rooms(schedules).map((room) => this._renderRoom(room, nowMinutes))}
       <div class="axis" aria-hidden="true">
@@ -159,7 +162,8 @@ export class HomeShiftScheduleTimeline extends LitElement {
 
   /** Sunrise and sunset, for the timeslots set relative to them. */
   private _sun(): SunTimes {
-    return sunTimes(this.hass.states["sun.sun"]);
+    // Server time, like the timeslots and the "now" marker.
+    return sunTimes(this.hass.states["sun.sun"], this.hass.config?.time_zone || undefined);
   }
 
   private _enabled(schedule: Schedule): boolean {

@@ -2233,7 +2233,7 @@ class TestServiceFailuresAreContained:
         entry.options = {CONF_DAILY_COVER_ITEMS: _cover_items("cover.volets"), **options}
         return entry
 
-    def _hass(self, fail_on: set[tuple[str, str]]):
+    def _hass(self, fail_on: set[tuple[str, str]], error: Exception | None = None):
         from homeassistant.exceptions import HomeAssistantError
 
         hass = make_mock_hass()
@@ -2241,7 +2241,7 @@ class TestServiceFailuresAreContained:
 
         async def _call(domain, service, data=None, **kwargs):
             if (domain, service) in fail_on:
-                raise HomeAssistantError("Somfy API timeout")
+                raise error or HomeAssistantError("Somfy API timeout")
             if (domain, service) == ("weather", "get_forecasts"):
                 return {data["entity_id"]: {"forecast": [{"temperature": 35.0}]}}
             return None
@@ -2263,6 +2263,21 @@ class TestServiceFailuresAreContained:
         hass.services.async_call.side_effect = None
         await manager.async_check_daily_schedule(datetime(2026, 7, 1, 8, 35, 0))
         assert manager._daily_opened_date == date(2026, 7, 1)
+
+    async def test_a_refused_service_payload_is_contained_too(self, caplog):
+        """A service schema error (vol.Invalid) is logged like any failure, not raised."""
+        import voluptuous as vol
+
+        hass = self._hass({("cover", "close_cover")}, vol.Invalid("not a cover"))
+        coordinator = HomeShiftCoordinator(hass, self._entry())
+        manager = coordinator._cover_manager
+        manager.daily_close_time = "21:30"
+
+        with caplog.at_level("WARNING"):
+            await manager.async_check_daily_schedule(datetime(2026, 7, 1, 21, 30, 0))
+
+        assert manager._daily_closed_date is None
+        assert "close_cover failed" in caplog.text
 
     async def test_a_failed_close_is_not_marked_done(self):
         hass = self._hass({("cover", "close_cover")})

@@ -6,7 +6,7 @@
 
 ```
 custom_components/homeshift/   L'intégration
-  www/homeshift-card.js        Le bundle de la carte, construit depuis frontend/ (commité)
+  www/homeshift-card.js        Le bundle de la carte, construit depuis frontend/ (non commité)
 frontend/                      Les sources de la carte (TypeScript, Lit), voir frontend/README.md
 tests/                         Les tests de l'intégration (pytest)
 docs/                          Cette documentation (en/, fr/, images/)
@@ -38,18 +38,23 @@ npm run lint
 npm test
 ```
 
-Commitez le bundle reconstruit avec les sources : la CI échoue s'il diffère d'un build neuf. L'intégration sert ce fichier sous `/homeshift/homeshift-card.js` et le charge dans tous les tableaux de bord (`custom_components/homeshift/frontend.py`) ; après un build, rechargez la page du navigateur.
+Le bundle n'est pas commité : ne commitez que les sources. L'intégration sert ce fichier sous `/homeshift/homeshift-card.js` et le charge dans tous les tableaux de bord (`custom_components/homeshift/frontend.py`) ; après un build, rechargez la page du navigateur. Sans build, HomeShift fonctionne sans sa carte et l'indique dans le journal.
 
 La carte est documentée pour les utilisateurs dans [La carte](card.md).
 
 ## Devcontainer
 
-**Dev Containers: Reopen in Container** dans VS Code démarre un Home Assistant sur http://localhost:8123 avec HomeShift, l'intégration Scheduler et sa carte, des plannings d'exemple, des volets simulés, une température extérieure et deux interrupteurs d'auto start/stop simulés. `./container restart` redémarre Home Assistant.
+**Dev Containers: Reopen in Container** dans VS Code construit la carte, puis démarre un Home Assistant sur http://localhost:8123 avec HomeShift, l'intégration Scheduler et sa carte, des plannings d'exemple, des volets simulés, une température extérieure et deux interrupteurs d'auto start/stop simulés. `./container card` reconstruit la carte et `./container restart` redémarre Home Assistant.
 
 ## Intégration continue
 
 - **Tests** : pytest
-- **Validate** : hassfest, HACS, ruff, la carte (typecheck, lint, tests, build, bundle à jour)
+- **Validate** : hassfest, HACS, ruff, pyright, la carte (typecheck, lint, tests, build)
+- **Release** : à la publication d'une release GitHub, construit la carte et y joint `homeshift.zip` (le contenu de `custom_components/homeshift/`, carte comprise). HACS installe cette archive (`zip_release` dans `hacs.json`). Il peut être lancé à la main sur un tag existant (*Run workflow*).
+
+## Publier une version
+
+Mettez la version dans `manifest.json`, fusionnez, puis publiez une release GitHub dont le tag est cette version : le workflow **Release** y joint `homeshift.zip`. Une release sans cette archive ne peut pas être installée par HACS.
 
 ## Documentation
 

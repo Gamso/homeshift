@@ -83,3 +83,6 @@ config/secrets.yaml
 
 # Local Home Assistant dev instance (database, logs, downloaded deps)
 /config/
+
+# The card bundle is built by CI and shipped in the release archive only.
+custom_components/homeshift/www/homeshift-card.js

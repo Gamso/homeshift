@@ -10,11 +10,11 @@ These rules guide AI agents working on the HomeShift card, bundled with the inte
 - **Editor:** [src/components/homeshift-card-editor.ts](src/components/homeshift-card-editor.ts) defines `homeshift-card-editor`, one `ha-entity-picker` per `ENTITY_FIELDS` entry.
 - **State helpers:** [src/state.ts](src/state.ts) (`isUsable`, `numericState`, `formatMinutes`) and [src/time.ts](src/time.ts) (time formatting from `hass.locale`).
 - **Localization:** [src/localize/localize.ts](src/localize/localize.ts) provides `localize(hass, key, params?, fallback?)` using [src/localize/en.json](src/localize/en.json) and [src/localize/fr.json](src/localize/fr.json). Lookup: user language, English, `fallback`, then the key.
-- **Build artifacts:** Rollup outputs a minified ES module to `custom_components/homeshift/www/homeshift-card.js` (committed, no sourcemap); the integration serves it as `/homeshift/homeshift-card.js` and loads it in every dashboard.
+- **Build artifacts:** Rollup outputs a minified ES module to `custom_components/homeshift/www/homeshift-card.js` (not committed, no sourcemap; the Release workflow builds it into `homeshift.zip`); the integration serves it as `/homeshift/homeshift-card.js` and loads it in every dashboard.
 
 ## Build & Dev Workflows
 
-- **Install & build:** `npm ci` then `npm run build` (Rollup; see [rollup.config.js](rollup.config.js)). Commit the rebuilt bundle; CI fails if it differs from a fresh build.
+- **Install & build:** `npm ci` then `npm run build` (Rollup; see [rollup.config.js](rollup.config.js)). Never commit the bundle (it is git-ignored): commit the sources only.
 - **Checks:** `npm run typecheck`, `npm run lint`, `npm test` (Vitest + happy-dom, tests in `test/`).
 - **Watch mode:** `npm run watch` for incremental builds.
 - **In Home Assistant:** the integration's DevContainer runs HomeShift, which loads the bundle; rebuild, then reload the browser page.

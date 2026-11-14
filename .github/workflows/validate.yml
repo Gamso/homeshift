@@ -71,13 +71,6 @@ jobs:
       - run: npm test
       - run: npm run build
 
-      - name: Committed bundle matches the sources
-        run: |
-          if ! git diff --exit-code --stat -- ../custom_components/homeshift/www/; then
-            echo "::error::The card bundle is out of date: run 'npm run build' in frontend/ and commit the result."
-            exit 1
-          fi
-
   typecheck:
     runs-on: ubuntu-latest
     name: Type check

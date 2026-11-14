@@ -18,6 +18,10 @@
     "next": "Next",
     "covers": "Covers",
     "duration_off": "No",
+    "duration_minutes": "{minutes} min",
+    "duration_hours": "{hours}h",
+    "duration_hours_minutes": "{hours}h {minutes}m",
+    "default_name": "Thermostat",
     "decrease": "Decrease: {setting}",
     "increase": "Increase: {setting}",
     "override_label": "Keep my manual choice",
@@ -80,7 +84,8 @@
     "note_active": "Current day mode: its schedules are applied",
     "note_inactive": "Not the current day mode: its schedules are off",
     "toggle_failed": "Could not switch the schedule: {error}",
-    "unavailable": "unavailable"
+    "unavailable": "unavailable",
+    "axis_hour": "{hour}:00"
   },
   "editor": {
     "name": "Name",

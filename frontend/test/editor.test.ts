@@ -50,8 +50,18 @@ describe("homeshift-card-editor", () => {
     for (const key of written) expect(cardKeys).toContain(key);
   });
 
+  it("titles a card without name in the user's language", async () => {
+    const { $, homeshiftStates, makeHass, renderCard } = await import("./helpers");
+    const card = await renderCard(makeHass(homeshiftStates()));
+    expect($(card, ".header .name")!.textContent).toBe("Thermostat");
+    card.setConfig({ name: "Salon" });
+    await card.updateComplete;
+    expect($(card, ".header .name")!.textContent).toBe("Salon");
+  });
+
   it("leaves the entities to the detection in a new card", () => {
-    expect(HomeShiftCard.getStubConfig()).toEqual({ name: "Thermostat" });
+    // No name either: the header follows the user's language.
+    expect(HomeShiftCard.getStubConfig()).toEqual({});
   });
 
   it("exposes every entity option of the card", async () => {

@@ -24,7 +24,13 @@ describe("state helpers", () => {
   it("formats minutes like the settings labels", () => {
     expect(formatMinutes(25)).toBe("25 min");
     expect(formatMinutes(60)).toBe("1h");
-    expect(formatMinutes(90)).toBe("1h30");
+    expect(formatMinutes(90)).toBe("1h 30m");
+  });
+
+  it("formats minutes in the user's language", () => {
+    const fr = { locale: { language: "fr" } };
+    expect(formatMinutes(25, fr)).toBe("25 min");
+    expect(formatMinutes(90, fr)).toBe("1h30");
   });
 });
 

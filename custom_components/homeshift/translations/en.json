@@ -338,7 +338,9 @@
       "no_climate": "No climate to read the setpoint from: pick one.",
       "no_threshold": "Set a threshold for at least one thermostat mode.",
       "duplicate_keyword": "A keyword is given for two modes: keep it in one.",
-      "no_cover_role": "Tick at least one of “Open and close it every day” and “Protect it from heat”."
+      "no_cover_role": "Tick at least one of “Open and close it every day” and “Protect it from heat”.",
+      "invalid_mode_name": "A name is empty or contains a comma: commas separate the modes, so a name cannot hold one.",
+      "duplicate_mode_name": "Two modes have the same name: give each one its own."
     },
     "abort": {
       "already_configured": "HomeShift is already configured",
@@ -684,7 +686,9 @@
       "no_climate": "No climate to read the setpoint from: pick one.",
       "no_threshold": "Set a threshold for at least one thermostat mode.",
       "duplicate_keyword": "A keyword is given for two modes: keep it in one.",
-      "no_cover_role": "Tick at least one of “Open and close it every day” and “Protect it from heat”."
+      "no_cover_role": "Tick at least one of “Open and close it every day” and “Protect it from heat”.",
+      "invalid_mode_name": "A name is empty or contains a comma: commas separate the modes, so a name cannot hold one.",
+      "duplicate_mode_name": "Two modes have the same name: give each one its own."
     }
   },
   "entity": {

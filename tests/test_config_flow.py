@@ -702,6 +702,38 @@ class TestConfigFlowMappingStep:
         assert "heating:Chauffe" in flow._data["thermostat_mode_map"]
         assert marked(result) == {"changed_names"}
 
+    async def test_a_name_with_a_comma_is_refused_and_redisplayed(self):
+        flow = await self._flow()
+        result = await flow.async_step_names(
+            {"day_modes_section": {"day_display_home": "Maison, repos"}, "thermostat_section": {}}
+        )
+        assert result["type"] == "form"
+        assert result["errors"] == {"base": "invalid_mode_name"}
+        assert _markers(result["data_schema"])["day_display_home"].default() == "Maison, repos"
+        assert "Maison, repos" not in flow._data.get(CONF_DAY_MODE_MAP, "")
+
+    async def test_an_empty_name_is_refused(self):
+        flow = await self._flow()
+        result = await flow.async_step_names(
+            {"day_modes_section": {}, "thermostat_section": {"thermostat_display_off": "  "}}
+        )
+        assert result["errors"] == {"base": "invalid_mode_name"}
+
+    async def test_two_modes_with_the_same_name_are_refused(self):
+        flow = await self._flow()
+        result = await flow.async_step_names(
+            {"day_modes_section": {"day_display_work": "home"}, "thermostat_section": {}}
+        )
+        assert result["errors"] == {"base": "duplicate_mode_name"}
+
+    async def test_names_are_stored_trimmed(self):
+        flow = await self._flow()
+        result = await flow.async_step_names(
+            {"day_modes_section": {"day_display_home": "  Maison "}, "thermostat_section": {}}
+        )
+        assert result["step_id"] == "menu"
+        assert "home:Maison," in flow._data[CONF_DAY_MODE_MAP]
+
 
 class TestConfigFlowSchedulersStep:
     """async_step_schedulers: extracts per-mode scheduler assignments, flags untagged ones."""

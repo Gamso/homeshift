@@ -338,7 +338,9 @@
       "no_climate": "Aucun climate où lire la consigne : choisissez-en un.",
       "no_threshold": "Réglez un seuil pour au moins un mode thermostat.",
       "duplicate_keyword": "Un mot-clé est donné pour deux modes : gardez-le dans un seul.",
-      "no_cover_role": "Cochez au moins « L'ouvrir et le fermer chaque jour » ou « Le protéger de la chaleur »."
+      "no_cover_role": "Cochez au moins « L'ouvrir et le fermer chaque jour » ou « Le protéger de la chaleur ».",
+      "invalid_mode_name": "Un nom est vide ou contient une virgule : la virgule sépare les modes, un nom ne peut donc pas en contenir.",
+      "duplicate_mode_name": "Deux modes portent le même nom : donnez-en un différent à chacun."
     },
     "abort": {
       "already_configured": "HomeShift est déjà configuré",
@@ -684,7 +686,9 @@
       "no_climate": "Aucun climate où lire la consigne : choisissez-en un.",
       "no_threshold": "Réglez un seuil pour au moins un mode thermostat.",
       "duplicate_keyword": "Un mot-clé est donné pour deux modes : gardez-le dans un seul.",
-      "no_cover_role": "Cochez au moins « L'ouvrir et le fermer chaque jour » ou « Le protéger de la chaleur »."
+      "no_cover_role": "Cochez au moins « L'ouvrir et le fermer chaque jour » ou « Le protéger de la chaleur ».",
+      "invalid_mode_name": "Un nom est vide ou contient une virgule : la virgule sépare les modes, un nom ne peut donc pas en contenir.",
+      "duplicate_mode_name": "Deux modes portent le même nom : donnez-en un différent à chacun."
     }
   },
   "entity": {

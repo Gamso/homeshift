@@ -146,8 +146,8 @@ def _parse_day_mode_map(map_str: str) -> dict[str, str]:
     return parse_key_value_map(map_str)
 
 
-def _day_mode_display_fields(data: dict[str, Any]) -> dict:
-    """Return one TextSelector field per day mode key (key = label)."""
+def _day_mode_display_fields(data: dict[str, Any], typed: dict[str, Any] | None = None) -> dict:
+    """Return one TextSelector field per day mode key (key = label), prefilled with `typed` when given."""
     current_map = _parse_day_mode_map(data.get(CONF_DAY_MODE_MAP, DEFAULT_DAY_MODE_MAP))
     fields: dict = {}
     for key, display in current_map.items():
@@ -155,7 +155,7 @@ def _day_mode_display_fields(data: dict[str, Any]) -> dict:
         fields[
             vol.Optional(
                 field_name,
-                default=display,
+                default=(typed or {}).get(field_name, display),
             )
         ] = selector.TextSelector(selector.TextSelectorConfig(type=selector.TextSelectorType.TEXT))
     return fields
@@ -177,8 +177,8 @@ def _parse_thermostat_map(map_str: str) -> dict[str, str]:
     return parse_key_value_map(map_str)
 
 
-def _thermostat_display_fields(data: dict[str, Any]) -> dict:
-    """Return one TextSelector field per thermostat key (key = label)."""
+def _thermostat_display_fields(data: dict[str, Any], typed: dict[str, Any] | None = None) -> dict:
+    """Return one TextSelector field per thermostat key (key = label), prefilled with `typed` when given."""
     current_map = _parse_thermostat_map(data.get(CONF_THERMOSTAT_MODE_MAP, DEFAULT_THERMOSTAT_MODE_MAP))
     fields: dict = {}
     for key, display in current_map.items():
@@ -186,7 +186,7 @@ def _thermostat_display_fields(data: dict[str, Any]) -> dict:
         fields[
             vol.Optional(
                 field_name,
-                default=display,
+                default=(typed or {}).get(field_name, display),
             )
         ] = selector.TextSelector(selector.TextSelectorConfig(type=selector.TextSelectorType.TEXT))
     return fields
@@ -307,21 +307,46 @@ def _mapping_schema(data: dict[str, Any]) -> vol.Schema:
 MAPPING_SECTIONS = ("defaults_section", "keywords_section")
 
 
-def _names_schema(data: dict[str, Any]) -> vol.Schema:
+def _names_schema(data: dict[str, Any], typed: dict[str, Any] | None = None) -> vol.Schema:
     """Build the display names form: the day modes, then the thermostat modes."""
     return vol.Schema(
         {
             vol.Required("day_modes_section"): section(
-                vol.Schema(_day_mode_display_fields(data)), {"collapsed": False}
+                vol.Schema(_day_mode_display_fields(data, typed)), {"collapsed": False}
             ),
             vol.Required("thermostat_section"): section(
-                vol.Schema(_thermostat_display_fields(data)), {"collapsed": False}
+                vol.Schema(_thermostat_display_fields(data, typed)), {"collapsed": False}
             ),
         }
     )
 
 
 NAMES_SECTIONS = ("day_modes_section", "thermostat_section")
+
+
+def _validate_names(flat: dict[str, Any], data: dict[str, Any]) -> dict[str, str]:
+    """Refuse a display name the stored "key:name, ..." maps cannot hold.
+
+    The maps are comma separated, so a comma would split a name ("Maison,
+    repos" kept as "Maison"), an empty name would drop its mode, and two
+    modes sharing a name could not be told apart (the current mode is
+    stored by name). The error is reported on the whole form: the fields
+    sit inside sections.
+    """
+    groups = (
+        ("day_display_", _parse_day_mode_map(data.get(CONF_DAY_MODE_MAP, DEFAULT_DAY_MODE_MAP))),
+        ("thermostat_display_", _parse_thermostat_map(data.get(CONF_THERMOSTAT_MODE_MAP, DEFAULT_THERMOSTAT_MODE_MAP))),
+    )
+    for prefix, current_map in groups:
+        seen: set[str] = set()
+        for key, display in current_map.items():
+            name = str(flat.get(f"{prefix}{key.lower()}", display) or "").strip()
+            if not name or "," in name:
+                return {"base": "invalid_mode_name"}
+            if name.lower() in seen:
+                return {"base": "duplicate_mode_name"}
+            seen.add(name.lower())
+    return {}
 
 
 def _event_keywords_summary(data: dict[str, Any]) -> str:
@@ -1256,17 +1281,27 @@ class _HomeShiftMenuSteps:
         user_input: dict[str, Any] | None = None,
     ) -> config_entries.ConfigFlowResult:
         """Rename the day modes and the thermostat modes (their keys never change)."""
+        data = self._effective_data()
+        errors: dict[str, str] = {}
+        typed: dict[str, Any] | None = None
         if user_input is not None:
-            flat = _flatten_sections(user_input, NAMES_SECTIONS)
-            data = self._effective_data()
-            flat[CONF_DAY_MODE_MAP] = _rebuild_day_mode_map(flat, data)
-            flat[CONF_THERMOSTAT_MODE_MAP] = _rebuild_thermostat_map(flat, data)
-            self._store("names", flat)
-            return await self.async_step_menu()
+            flat = {
+                key: value.strip() if isinstance(value, str) else value
+                for key, value in _flatten_sections(user_input, NAMES_SECTIONS).items()
+            }
+            errors = _validate_names(flat, data)
+            if not errors:
+                flat[CONF_DAY_MODE_MAP] = _rebuild_day_mode_map(flat, data)
+                flat[CONF_THERMOSTAT_MODE_MAP] = _rebuild_thermostat_map(flat, data)
+                self._store("names", flat)
+                return await self.async_step_menu()
+            # Redisplay what was typed, so the refused name is there to correct.
+            typed = flat
 
         return self.async_show_form(
             step_id="names",
-            data_schema=_names_schema(self._effective_data()),
+            data_schema=_names_schema(data, typed),
+            errors=errors,
         )
 
     # -- schedulers --------------------------------------------------------

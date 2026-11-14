@@ -11,6 +11,7 @@ from homeassistant.exceptions import ServiceValidationError
 from custom_components.homeshift import (
     async_migrate_entry,
     async_setup_entry,
+    async_setup,
     async_setup_services,
     async_unload_entry,
 )
@@ -107,8 +108,8 @@ class TestStartupCalendarSync:
 
             await async_setup_entry(hass, entry)
 
-        # hass.async_create_task should have been called (for the immediate sync)
-        hass.async_create_task.assert_called_once()
+        # A background task of the entry runs the immediate sync
+        entry.async_create_background_task.assert_called_once()
 
     async def test_event_listener_registered_when_ha_not_yet_running(self):
         """When HA is still starting, a listener is registered on EVENT_HOMEASSISTANT_STARTED."""
@@ -130,8 +131,8 @@ class TestStartupCalendarSync:
         # A listener should have been registered for EVENT_HOMEASSISTANT_STARTED
         hass.bus.async_listen_once.assert_called_once()
         assert hass.bus.async_listen_once.call_args[0][0] == EVENT_HOMEASSISTANT_STARTED
-        # async_create_task should NOT have been called (not yet running)
-        hass.async_create_task.assert_not_called()
+        # No sync task yet (not running)
+        entry.async_create_background_task.assert_not_called()
 
     async def test_listener_unsubscribe_registered_as_unload_hook(self):
         """The EVENT_HOMEASSISTANT_STARTED listener is cancelled on unload (if not yet fired)."""
@@ -223,7 +224,7 @@ class TestStartupCalendarSync:
         registered_callback(MagicMock())
         # async_sync_calendar() was called to obtain the coroutine for async_create_task.
         coord.async_sync_calendar.assert_called_once()
-        hass.async_create_task.assert_called()
+        entry.async_create_background_task.assert_called()
 class _MigrationHarness:
     """Shared harness: migrations chain, so the fake entry must record writes.
 
@@ -353,31 +354,21 @@ class TestMigrationToVersion3(_MigrationHarness):
         ]
         assert 3 not in versions
 
-class TestUnloadRemovesServices:
-    """async_unload_entry drops the services once the last entry is gone.
+class TestServicesLiveWithTheIntegration:
+    """The services are registered once by async_setup and survive unloads.
 
-    Services registered for good would keep showing up in Developer Tools and
-    would act on an unloaded coordinator (writing to its store, calling
-    cover/switch services).
+    A call made while no entry is loaded is refused with a clear error rather
+    than acting on an unloaded coordinator.
     """
 
-    def _hass_with_entries(self, *entry_ids: str) -> MagicMock:
+    async def test_async_setup_registers_every_service(self):
         hass = MagicMock()
-        hass.data = {DOMAIN: {entry_id: MagicMock() for entry_id in entry_ids}}
-        hass.config_entries.async_unload_platforms = AsyncMock(return_value=True)
-        hass.services.async_remove = MagicMock()
-        return hass
+        hass.services.async_register = MagicMock()
 
-    async def test_services_removed_with_the_last_entry(self):
-        hass = self._hass_with_entries("entry_a")
-        entry = make_mock_entry()
-        entry.entry_id = "entry_a"
+        assert await async_setup(hass, {}) is True
 
-        result = await async_unload_entry(hass, entry)
-
-        assert result is True
-        removed = {call.args[1] for call in hass.services.async_remove.call_args_list}
-        assert removed == {
+        registered = {call.args[1] for call in hass.services.async_register.call_args_list}
+        assert registered == {
             SERVICE_REFRESH_SCHEDULERS,
             SERVICE_SYNC_CALENDAR,
             "open_covers",
@@ -385,29 +376,15 @@ class TestUnloadRemovesServices:
             SERVICE_INHIBIT_COVERS,
             SERVICE_RESUME_COVERS,
         }
-        assert DOMAIN not in hass.data
 
-    async def test_services_kept_while_another_entry_is_loaded(self):
-        hass = self._hass_with_entries("entry_a", "entry_b")
-        entry = make_mock_entry()
-        entry.entry_id = "entry_a"
+    @pytest.mark.parametrize("unloaded", [True, False])
+    async def test_unload_only_unloads_the_platforms(self, unloaded):
+        hass = MagicMock()
+        hass.config_entries.async_unload_platforms = AsyncMock(return_value=unloaded)
+        hass.services.async_remove = MagicMock()
 
-        await async_unload_entry(hass, entry)
-
+        assert await async_unload_entry(hass, make_mock_entry()) is unloaded
         hass.services.async_remove.assert_not_called()
-        assert list(hass.data[DOMAIN]) == ["entry_b"]
-
-    async def test_nothing_removed_when_the_platforms_fail_to_unload(self):
-        hass = self._hass_with_entries("entry_a")
-        hass.config_entries.async_unload_platforms = AsyncMock(return_value=False)
-        entry = make_mock_entry()
-        entry.entry_id = "entry_a"
-
-        result = await async_unload_entry(hass, entry)
-
-        assert result is False
-        hass.services.async_remove.assert_not_called()
-        assert list(hass.data[DOMAIN]) == ["entry_a"]
 
 
 class TestServicesTargetTheLoadedCoordinator:
@@ -415,7 +392,10 @@ class TestServicesTargetTheLoadedCoordinator:
 
     def _register(self) -> tuple[MagicMock, dict]:
         hass = MagicMock()
-        hass.data = {DOMAIN: {}}
+        hass.loaded = {}
+        hass.config_entries.async_loaded_entries = lambda domain: [
+            MagicMock(runtime_data=coordinator) for coordinator in hass.loaded.values()
+        ] if domain == DOMAIN else []
         handlers: dict = {}
         hass.services.async_register = MagicMock(
             side_effect=lambda _domain, name, handler, **_kwargs: handlers.__setitem__(name, handler)
@@ -428,22 +408,24 @@ class TestServicesTargetTheLoadedCoordinator:
         hass, handlers = self._register()
         coordinator = MagicMock()
         coordinator.async_sync_calendar = AsyncMock()
-        hass.data[DOMAIN]["entry_a"] = coordinator
+        hass.loaded["entry_a"] = coordinator
 
         await handlers[SERVICE_SYNC_CALENDAR](None)
 
         coordinator.async_sync_calendar.assert_awaited_once()
 
-    async def test_refresh_schedulers_is_a_noop_once_unloaded(self):
-        """No loaded entry: the call does nothing instead of touching a dead coordinator."""
+    async def test_a_call_with_no_loaded_entry_is_refused(self):
+        """No loaded entry: the call is refused instead of touching a dead coordinator."""
         hass, handlers = self._register()
         stale = MagicMock()
         stale.async_refresh_schedulers = AsyncMock()
-        hass.data[DOMAIN]["entry_a"] = stale
-        hass.data[DOMAIN].clear()  # entry unloaded
+        hass.loaded["entry_a"] = stale
+        hass.loaded.clear()  # entry unloaded
 
-        await handlers[SERVICE_REFRESH_SCHEDULERS](None)
+        with pytest.raises(ServiceValidationError) as raised:
+            await handlers[SERVICE_REFRESH_SCHEDULERS](None)
 
+        assert raised.value.translation_key == "not_loaded"
         stale.async_refresh_schedulers.assert_not_called()
 
 
@@ -452,7 +434,7 @@ class TestServicesTargetTheLoadedCoordinator:
         coordinator.managed_covers = covers
         coordinator.async_inhibit_covers = AsyncMock()
         coordinator.async_resume_covers = AsyncMock()
-        hass.data[DOMAIN][entry_id] = coordinator
+        hass.loaded[entry_id] = coordinator
         return coordinator
 
     async def test_inhibit_covers_reaches_the_coordinator_driving_them(self):

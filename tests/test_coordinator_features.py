@@ -2539,11 +2539,11 @@ class TestNextModeTimerScheduling:
         assert len(captured_callbacks) == 1
 
         # Simulate the timer firing
-        hass.async_create_task = MagicMock()
+        coordinator.config_entry.async_create_background_task = MagicMock()
         with patch.object(coordinator, "async_sync_calendar", new_callable=AsyncMock):
             captured_callbacks[0](datetime(2026, 3, 11, 18, 0, 0))
 
-        hass.async_create_task.assert_called_once()
+        coordinator.config_entry.async_create_background_task.assert_called_once()
         assert coordinator._cancel_next_mode_timer is None
 
 
@@ -2727,10 +2727,11 @@ class TestCoverTimerScheduling:
 
         assert len(captured_callbacks) == 1
 
-        hass.async_create_task = MagicMock()
-        captured_callbacks[0](datetime(2026, 7, 1, 8, 30, 0))
+        coordinator.config_entry.async_create_background_task = MagicMock()
+        with patch.object(coordinator, "_async_run_cover_checks", new=MagicMock()):
+            captured_callbacks[0](datetime(2026, 7, 1, 8, 30, 0))
 
-        hass.async_create_task.assert_called_once()
+        coordinator.config_entry.async_create_background_task.assert_called_once()
 
 
 class TestAsyncRunCoverChecks:
@@ -4017,7 +4018,7 @@ class TestCloseWhenTheWindowShuts:
         await self._evening_close(manager)
         on_change = MagicMock()
         tasks = []
-        manager._hass.async_create_task = tasks.append
+        manager._entry.async_create_background_task = lambda _hass, coro, _name: tasks.append(coro)
         with patch.object(module, "async_track_state_change_event", return_value=MagicMock()) as track:
             manager.async_setup_listeners(on_change=on_change)
         listener = track.call_args.args[2]

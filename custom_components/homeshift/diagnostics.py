@@ -7,7 +7,6 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
-from .const import DOMAIN
 from .coordinator import HomeShiftCoordinator
 
 
@@ -17,7 +16,7 @@ async def async_get_config_entry_diagnostics(hass: HomeAssistant, entry: ConfigE
     Nothing here is secret: the configuration only holds entity ids, mode
     maps and times.
     """
-    coordinator: HomeShiftCoordinator | None = hass.data.get(DOMAIN, {}).get(entry.entry_id)
+    coordinator: HomeShiftCoordinator | None = getattr(entry, "runtime_data", None)
     diagnostics: dict[str, Any] = {
         "entry": {
             "version": entry.version,

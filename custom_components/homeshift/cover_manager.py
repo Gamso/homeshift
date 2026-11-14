@@ -464,7 +464,9 @@ class CoverManager:
 
             @callback
             def _on_temp_change(_event: Event[EventStateChangedData]) -> None:
-                self._hass.async_create_task(self.async_check_heat_protection(dt_util.now()))
+                self._entry.async_create_background_task(
+                    self._hass, self.async_check_heat_protection(dt_util.now()), "homeshift heat protection"
+                )
 
             _LOGGER.debug("Cover heat protection: listening for changes on '%s'", temp_sensor)
             unsubs.append(async_track_state_change_event(self._hass, [temp_sensor], _on_temp_change))
@@ -482,7 +484,9 @@ class CoverManager:
             def _on_window_change(event: Event[EventStateChangedData]) -> None:
                 new_state = event.data["new_state"]
                 if new_state is not None and new_state.state in WINDOW_CLOSED_STATES:
-                    self._hass.async_create_task(_close_and_notify())
+                    self._entry.async_create_background_task(
+                        self._hass, _close_and_notify(), "homeshift close behind shut window"
+                    )
 
             _LOGGER.info("Daily cover schedule: closing covers behind shut windows, listening on %s", window_sensors)
             unsubs.append(async_track_state_change_event(self._hass, window_sensors, _on_window_change))

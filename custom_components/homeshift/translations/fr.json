@@ -811,6 +811,9 @@
     },
     "inhibition_end_in_past": {
       "message": "La fin de l'inhibition doit être dans le futur."
+    },
+    "not_loaded": {
+      "message": "HomeShift n'est pas chargé : configurez-le, ou attendez la fin de son chargement, puis réessayez."
     }
   }
 }

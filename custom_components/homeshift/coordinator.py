@@ -80,6 +80,9 @@ def _parse_event_dt(start_str: str, fallback_tzinfo: Any) -> datetime | None:
         return None
 
 
+type HomeShiftConfigEntry = ConfigEntry[HomeShiftCoordinator]
+
+
 class HomeShiftCoordinator(DataUpdateCoordinator):
     """Class to manage fetching HomeShift data."""
 
@@ -305,7 +308,9 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
         def _on_timer(_now: datetime) -> None:
             self._cancel_next_mode_timer = None
             _LOGGER.debug("Next-mode timer fired (scheduled for %s), triggering sync", fire_at)
-            self.hass.async_create_task(self.async_sync_calendar())
+            self.config_entry.async_create_background_task(
+                self.hass, self.async_sync_calendar(), f"{DOMAIN} next mode change"
+            )
 
         self._cancel_next_mode_timer = async_track_point_in_time(self.hass, _on_timer, fire_at)
         _LOGGER.debug("Scheduled next-mode timer at %s (predicted mode: %s)", fire_at, self._next_mode)
@@ -344,7 +349,9 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
 
         @callback
         def _on_cover_timer(_now: datetime) -> None:
-            self.hass.async_create_task(self._async_run_cover_checks())
+            self.config_entry.async_create_background_task(
+                self.hass, self._async_run_cover_checks(), f"{DOMAIN} cover open/close"
+            )
 
         # On a 'skip' day the covers do not open, but heat protection's
         # window still starts (at the sunrise-based time): fire then instead.

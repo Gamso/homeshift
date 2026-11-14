@@ -9,8 +9,8 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN, SELECT_DAY_MODE, SELECT_THERMOSTAT_MODE
-from .coordinator import HomeShiftCoordinator
+from .const import SELECT_DAY_MODE, SELECT_THERMOSTAT_MODE
+from .coordinator import HomeShiftConfigEntry, HomeShiftCoordinator
 from .entity import setup_entity
 
 _LOGGER = logging.getLogger(__name__)
@@ -18,11 +18,11 @@ _LOGGER = logging.getLogger(__name__)
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: ConfigEntry,
+    entry: HomeShiftConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up HomeShift select entities."""
-    coordinator: HomeShiftCoordinator = hass.data[DOMAIN][entry.entry_id]
+    coordinator: HomeShiftCoordinator = entry.runtime_data
 
     async_add_entities(
         [

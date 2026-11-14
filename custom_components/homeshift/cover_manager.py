@@ -1000,9 +1000,20 @@ class CoverManager:
         written after its service call is awaited, so overlapping callers must
         not interleave here.
         """
+        close_time = _parse_time_str(self.daily_close_time) if self.daily_close_time else None
         if self._daily_opened_date != today and self.cover_open_time:
             open_time = _parse_time_str(self.cover_open_time)
-            if open_time is not None and now.time() >= open_time:
+            if open_time is not None and close_time is not None and now.time() >= close_time:
+                # The morning open was missed (Home Assistant down, a failed
+                # call retried all day) and the evening close is due: opening
+                # now would only raise the covers to lower them again in the
+                # same run.
+                _LOGGER.debug(
+                    "Daily cover schedule: open at %s missed and close time %s passed — not caught up",
+                    self.cover_open_time,
+                    self.daily_close_time,
+                )
+            elif open_time is not None and now.time() >= open_time:
                 open_targets = self._without_inhibited(targets, now)
                 if not open_targets:
                     _LOGGER.info(
@@ -1026,7 +1037,6 @@ class CoverManager:
                         await self._async_save_state()
 
         if self._daily_closed_date != today and self.daily_close_time:
-            close_time = _parse_time_str(self.daily_close_time)
             if close_time is not None and now.time() >= close_time:
                 succeeded, blocked = await self._async_close_targets(
                     targets, f"Daily cover schedule (close_time={self.daily_close_time})", now

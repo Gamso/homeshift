@@ -2,7 +2,7 @@ import { LitElement, html, svg, css, nothing } from "lit";
 import { property } from "lit/decorators.js";
 import { localize } from "../localize/localize";
 import { callService } from "../notify";
-import { secondsOfDay } from "../time";
+import { formatClock, secondsOfDay, timeFormat, uses12h } from "../time";
 import { isUsable } from "../state";
 import {
   DAY_MINUTES,
@@ -10,7 +10,6 @@ import {
   Segment,
   SlotValue,
   daySegments,
-  formatMinutes,
   scheduleEntities,
   schedulesFor,
   segmentColors,
@@ -108,7 +107,7 @@ export class HomeShiftScheduleTimeline extends LitElement {
       ${this._rooms(schedules).map((room) => this._renderRoom(room, nowMinutes))}
       <div class="axis" aria-hidden="true">
         ${[0, 6, 12, 18, 24].map(
-          (h) => html`<span style="left: ${(h / 24) * 100}%">${h}h</span>`,
+          (h) => html`<span style="left: ${(h / 24) * 100}%">${this._axisLabel(h)}</span>`,
         )}
       </div>
     `;
@@ -224,7 +223,8 @@ export class HomeShiftScheduleTimeline extends LitElement {
   }
 
   private _range(segment: Segment): string {
-    return `${formatMinutes(segment.start)} – ${formatMinutes(segment.end)}`;
+    const locale = this.hass.locale;
+    return `${formatClock(segment.start, locale)} – ${formatClock(segment.end, locale)}`;
   }
 
   private _renderSegment(segment: Segment) {
@@ -242,6 +242,17 @@ export class HomeShiftScheduleTimeline extends LitElement {
     >
       ${fits ? label : nothing}
     </div>`;
+  }
+
+  /** Hour under the timelines: "6:00" / "6h", or "6 AM" on a 12 h clock. */
+  private _axisLabel(hour: number): string {
+    if (uses12h(this.hass.locale)) {
+      return new Date(Date.UTC(2000, 0, 1, hour % 24)).toLocaleTimeString(
+        timeFormat(this.hass.locale).locale,
+        { hour: "numeric", hour12: true, timeZone: "UTC" },
+      );
+    }
+    return localize(this.hass, "schedule.axis_hour", { hour: String(hour) });
   }
 
   /** A number in the user's format (20.5 / 20,5). */

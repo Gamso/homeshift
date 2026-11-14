@@ -15,6 +15,29 @@ export function timeFormat(hassLocale: any): {
   return { locale, hour12 };
 }
 
+/** Whether the HA profile shows times on a 12 h clock (its own choice, else the locale's). */
+export function uses12h(hassLocale: any): boolean {
+  const { locale, hour12 } = timeFormat(hassLocale);
+  if (hour12 !== undefined) return hour12;
+  return new Intl.DateTimeFormat(locale, { hour: "numeric" }).resolvedOptions().hour12 ?? false;
+}
+
+/**
+ * Clock time of a number of minutes since midnight ("07:30" / "7:30 AM"),
+ * in the HA profile's 12 / 24 h format; 24:00 reads as midnight.
+ */
+export function formatClock(minutes: number, hassLocale: any): string {
+  const { locale } = timeFormat(hassLocale);
+  const day = 24 * 60;
+  const m = ((minutes % day) + day) % day;
+  return new Date(Date.UTC(2000, 0, 1, 0, m)).toLocaleTimeString(locale, {
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "UTC",
+    ...(uses12h(hassLocale) ? { hour12: true } : { hourCycle: "h23" }),
+  });
+}
+
 /**
  * Time zone dates are shown in, as the Home Assistant frontend picks it:
  * the browser's when the profile asks for "local" (and the browser is not

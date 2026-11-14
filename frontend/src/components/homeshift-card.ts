@@ -189,7 +189,8 @@ class HomeShiftCard extends LitElement {
   }
 
   public static getStubConfig(): HomeShiftCardConfig {
-    return { name: "Thermostat" };
+    // No name: the header then reads "Thermostat" in the user's language.
+    return {};
   }
 
   public static getConfigElement() {
@@ -202,7 +203,7 @@ class HomeShiftCard extends LitElement {
     }
     this._written = config;
     const normalized: HomeShiftCardConfig = {
-      name: config.name ?? "Thermostat",
+      name: config.name,
     };
     for (const field of ENTITY_FIELDS) {
       normalized[field.key] = config[field.key] ?? field.default;
@@ -521,7 +522,7 @@ class HomeShiftCard extends LitElement {
   /** "4h", "3 d" / "3 j", or "Until resumed". */
   private _inhibitLabel(minutes: number): string {
     if (!minutes) return localize(this.hass, "card.inhibit_forever");
-    if (minutes < 1440) return formatMinutes(minutes);
+    if (minutes < 1440) return formatMinutes(minutes, this.hass);
     return `${minutes / 1440} ${localize(this.hass, "card.days_short")}`;
   }
 
@@ -974,7 +975,7 @@ class HomeShiftCard extends LitElement {
   private _settingLabel(minutes: number | undefined): string {
     if (minutes === undefined) return localize(this.hass, "card.unavailable");
     if (!minutes) return localize(this.hass, "card.duration_off");
-    return formatMinutes(minutes);
+    return formatMinutes(minutes, this.hass);
   }
 
   private _clockIn(minutes: number): string {
@@ -1465,7 +1466,9 @@ class HomeShiftCard extends LitElement {
           <div class="header">
             <span class="badge"><ha-icon icon=${style.icon}></ha-icon></span>
             <span class="heading">
-              <span class="name">${this._config.name}</span>
+              <span class="name"
+                >${this._config.name || localize(this.hass, "card.default_name")}</span
+              >
               <span class="status">
                 <span class="dot"></span>${modeLabel} · ${isUsable(day)
                   ? day.state

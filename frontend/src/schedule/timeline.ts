@@ -92,12 +92,6 @@ export function parseTime(time: string, sun: SunTimes = {}): number | undefined 
   return minutes <= DAY_MINUTES ? minutes : undefined;
 }
 
-/** "HH:MM" of a number of minutes since midnight. */
-export function formatMinutes(minutes: number): string {
-  const m = minutes % DAY_MINUTES;
-  return `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
-}
-
 const isClimate = (action: Timeslot["actions"][number]) => action.service.startsWith("climate.");
 
 /** Whether a schedule drives a thermostat: its timeline then shows only the thermostat. */

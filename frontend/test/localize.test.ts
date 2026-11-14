@@ -60,10 +60,12 @@ describe("localize", () => {
 
   it("has no key the sources never use", () => {
     // Vitest runs from the repository root.
-    const source = ["src/components", "src/schedule"]
+    const source = ["src", "src/components", "src/schedule"]
       .map((sub) => join(process.cwd(), sub))
       .flatMap((dir) =>
-        readdirSync(dir).map((f) => readFileSync(join(dir, f), "utf-8")),
+        readdirSync(dir)
+          .filter((f) => f.endsWith(".ts"))
+          .map((f) => readFileSync(join(dir, f), "utf-8")),
       )
       .join("\n");
     // Keys built at runtime: `thermostat.${key}`, `preview.${key}`,

@@ -3,12 +3,12 @@ import {
   Schedule,
   Timeslot,
   daySegments,
-  formatMinutes,
   parseTime,
   scheduleEntities,
   schedulesFor,
   slotValue,
 } from "../src/schedule/timeline";
+import { formatClock } from "../src/time";
 
 const heat = (temperature: number, entity_id = "climate.salon") => ({
   service: "climate.set_temperature",
@@ -39,7 +39,7 @@ function schedule(timeslots: Timeslot[], extra: Partial<Schedule> = {}): Schedul
 const spans = (s: Schedule) =>
   daySegments(s).map((seg) => [seg.start, seg.end, seg.value.label]);
 
-describe("parseTime / formatMinutes", () => {
+describe("parseTime / formatClock", () => {
   it("reads HH:MM[:SS] as minutes since midnight", () => {
     expect(parseTime("07:30:00")).toBe(450);
     expect(parseTime("7:05")).toBe(425);
@@ -47,9 +47,10 @@ describe("parseTime / formatMinutes", () => {
   });
 
   it("writes minutes as HH:MM, 24:00 as midnight", () => {
-    expect(formatMinutes(450)).toBe("07:30");
-    expect(formatMinutes(0)).toBe("00:00");
-    expect(formatMinutes(1440)).toBe("00:00");
+    const h24 = { language: "en", time_format: "24" };
+    expect(formatClock(450, h24)).toBe("07:30");
+    expect(formatClock(0, h24)).toBe("00:00");
+    expect(formatClock(1440, h24)).toBe("00:00");
   });
 });
 

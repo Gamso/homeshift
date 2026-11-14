@@ -312,6 +312,26 @@ describe("schedules panel", () => {
     expect(hass.callService).not.toHaveBeenCalled();
   });
 
+  it("writes hours in the profile's 24 h format and language", async () => {
+    const hass = schedulerHass();
+    hass.locale = { language: "fr", time_format: "24" };
+    const root = await open(await render(hass));
+    const axis = [...root.querySelectorAll(".axis span")].map((s) => s.textContent);
+    expect(axis).toEqual(["0h", "6h", "12h", "18h", "24h"]);
+    expect(root.querySelector(".segment")!.getAttribute("title")).toMatch(/^00:00 – 07:00/);
+  });
+
+  it("writes hours on a 12 h clock when the profile asks for it", async () => {
+    const hass = schedulerHass();
+    hass.locale = { language: "en", time_format: "12" };
+    const root = await open(await render(hass));
+    const axis = [...root.querySelectorAll(".axis span")].map((s) => s.textContent);
+    expect(axis).toEqual(["12 AM", "6 AM", "12 PM", "6 PM", "12 AM"]);
+    expect(root.querySelector(".segment")!.getAttribute("title")).toMatch(
+      /^12:00\sAM – 07:00\sAM/,
+    );
+  });
+
   it("reads the schedules again when a schedule switch changes", async () => {
     const hass = schedulerHass();
     const card = await render(hass);

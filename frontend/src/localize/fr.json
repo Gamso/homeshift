@@ -18,6 +18,10 @@
     "next": "Prochain",
     "covers": "Volets",
     "duration_off": "Non",
+    "duration_minutes": "{minutes} min",
+    "duration_hours": "{hours}h",
+    "duration_hours_minutes": "{hours}h{minutes}",
+    "default_name": "Thermostat",
     "decrease": "Diminuer : {setting}",
     "increase": "Augmenter : {setting}",
     "override_label": "Garder mon choix manuel",
@@ -80,7 +84,8 @@
     "note_active": "Mode du jour actuel : ses plannings sont appliqués",
     "note_inactive": "Mode non actif : ses plannings sont coupés",
     "toggle_failed": "Impossible de basculer le planning : {error}",
-    "unavailable": "indisponible"
+    "unavailable": "indisponible",
+    "axis_hour": "{hour}h"
   },
   "editor": {
     "name": "Nom",

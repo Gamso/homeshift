@@ -17,7 +17,6 @@ from .const import (
     CONF_DAILY_COVER_CLOSE_ELEVATION,
     CONF_DAILY_COVER_ITEMS,
     DEFAULT_DAILY_COVER_CLOSE_ELEVATION,
-    DOMAIN,
     SENSOR_AUTO_START_STOP,
     SENSOR_COVER_CLOSE_TIME,
     SENSOR_COVER_OPEN_TIME,
@@ -25,7 +24,7 @@ from .const import (
     SENSOR_NEXT_MODE,
     SENSOR_NEXT_MODE_AT,
 )
-from .coordinator import HomeShiftCoordinator
+from .coordinator import HomeShiftConfigEntry, HomeShiftCoordinator
 from .entity import async_remove_stale_entities, setup_entity
 
 _LOGGER = logging.getLogger(__name__)
@@ -33,11 +32,11 @@ _LOGGER = logging.getLogger(__name__)
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: ConfigEntry,
+    entry: HomeShiftConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up HomeShift sensor entities."""
-    coordinator: HomeShiftCoordinator = hass.data[DOMAIN][entry.entry_id]
+    coordinator: HomeShiftCoordinator = entry.runtime_data
     entities = [
         HomeShiftNextModeSensor(coordinator, entry),
         HomeShiftNextModeAtSensor(coordinator, entry),

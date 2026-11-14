@@ -9,6 +9,7 @@ import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EVENT_HOMEASSISTANT_STARTED, Platform
 from homeassistant.core import CoreState, Event, HomeAssistant, ServiceCall, callback
+from homeassistant.helpers.typing import ConfigType
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import config_validation as cv, entity_registry as er
 from homeassistant.helpers.event import async_track_state_change_event
@@ -46,7 +47,7 @@ from .const import (
     parse_key_value_map,
 )
 from . import coordinator as coordinator_module, cover_manager as cover_manager_module
-from .coordinator import HomeShiftCoordinator
+from .coordinator import HomeShiftConfigEntry, HomeShiftCoordinator
 from .cover_manager import elevation_for_sunset_offset
 from .frontend import async_register_card
 
@@ -60,14 +61,8 @@ PLATFORMS: list[Platform] = [
     Platform.BUTTON,
 ]
 
-SERVICES = (
-    SERVICE_REFRESH_SCHEDULERS,
-    SERVICE_SYNC_CALENDAR,
-    SERVICE_OPEN_COVERS,
-    SERVICE_CLOSE_COVERS,
-    SERVICE_INHIBIT_COVERS,
-    SERVICE_RESUME_COVERS,
-)
+# Set up from the UI only; a YAML key is refused with a clear message.
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 # With neither a duration nor an end date, an inhibition lasts until resumed.
 INHIBIT_COVERS_SCHEMA = vol.Schema(
@@ -274,10 +269,19 @@ def _migrated_close_elevation(hass: HomeAssistant, merged: dict) -> float | None
     return clamped
 
 
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Set up HomeShift from a config entry."""
-    hass.data.setdefault(DOMAIN, {})
+async def async_setup(hass: HomeAssistant, _config: ConfigType) -> bool:
+    """Register the services, once, whether or not an entry is loaded.
 
+    Registered here rather than with the entry, they stay valid in
+    automations and the UI while the entry is reloading or not loaded; a call
+    then gets a clear error instead of "unknown service".
+    """
+    async_setup_services(hass)
+    return True
+
+
+async def async_setup_entry(hass: HomeAssistant, entry: HomeShiftConfigEntry) -> bool:
+    """Set up HomeShift from a config entry."""
     await async_register_card(hass)
 
     # Create coordinator
@@ -294,7 +298,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
         @callback
         def _on_setpoint_change(_event: Event) -> None:
-            hass.async_create_task(coordinator.auto_start_stop.async_on_setpoint_change())
+            entry.async_create_background_task(
+                hass, coordinator.auto_start_stop.async_on_setpoint_change(), f"{DOMAIN} auto start/stop"
+            )
 
         entry.async_on_unload(
             async_track_state_change_event(hass, coordinator.auto_start_stop.climates, _on_setpoint_change)
@@ -304,13 +310,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await coordinator.cover_manager.async_restore_state()
     await coordinator.async_config_entry_first_refresh()
 
-    hass.data[DOMAIN][entry.entry_id] = coordinator
+    entry.runtime_data = coordinator
 
     # Forward the setup to platforms
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
-
-    # Register services
-    async_setup_services(hass)
 
     # React immediately when the temperature sensor or a window sensor changes
     # (no need to wait for the poll)
@@ -325,7 +328,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # day_mode reflects the current calendar state rather than just the restored value.
     if hass.state == CoreState.running:
         # Integration was loaded/reloaded while HA was already running; sync now.
-        hass.async_create_task(coordinator.async_sync_calendar())
+        entry.async_create_background_task(hass, coordinator.async_sync_calendar(), f"{DOMAIN} startup sync")
     else:
         # HA is still starting — schedule the sync for when all entities are ready.
         # Use a mutable container so the callback can clear the cancel reference
@@ -337,7 +340,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         @callback
         def _ha_started_cb(_event: Event) -> None:
             _ha_started_cancel[0] = None  # fired — disable the cancel guard
-            hass.async_create_task(coordinator.async_sync_calendar())
+            entry.async_create_background_task(hass, coordinator.async_sync_calendar(), f"{DOMAIN} startup sync")
 
         _ha_started_cancel[0] = hass.bus.async_listen_once(
             EVENT_HOMEASSISTANT_STARTED, _ha_started_cb
@@ -372,20 +375,9 @@ async def _async_reload_on_options_update(hass: HomeAssistant, entry: ConfigEntr
     await hass.config_entries.async_reload(entry.entry_id)
 
 
-async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Unload a config entry."""
-    if unload_ok := await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
-        hass.data[DOMAIN].pop(entry.entry_id)
-
-        if not hass.data[DOMAIN]:
-            # Last entry gone: drop the services too. Left registered, they
-            # would still appear in the UI and act on an unloaded coordinator
-            # (writing to its store, calling cover/switch services).
-            hass.data.pop(DOMAIN)
-            for service in SERVICES:
-                hass.services.async_remove(DOMAIN, service)
-
-    return unload_ok
+async def async_unload_entry(hass: HomeAssistant, entry: HomeShiftConfigEntry) -> bool:
+    """Unload a config entry (its background tasks are cancelled with it)."""
+    return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
 
 @callback
@@ -395,10 +387,18 @@ def async_setup_services(hass: HomeAssistant) -> None:
     The handlers resolve the loaded coordinators at call time rather than
     capturing one: a captured coordinator outlives its entry (a reload builds
     a new one) and would keep answering service calls after being unloaded.
+    With no loaded entry, a call is refused rather than silently ignored.
     """
 
     def _coordinators() -> list[HomeShiftCoordinator]:
-        return list(hass.data.get(DOMAIN, {}).values())
+        coordinators = [entry.runtime_data for entry in hass.config_entries.async_loaded_entries(DOMAIN)]
+        if not coordinators:
+            raise ServiceValidationError(
+                "HomeShift is not loaded",
+                translation_domain=DOMAIN,
+                translation_key="not_loaded",
+            )
+        return coordinators
 
     async def handle_refresh_schedulers(_call) -> None:
         """Handle the refresh_schedulers service call."""

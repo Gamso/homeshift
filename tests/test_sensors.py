@@ -875,13 +875,11 @@ class TestCoversLeftOpenSensorRegistration:
 
     async def _added(self, options):
         from custom_components.homeshift.binary_sensor import async_setup_entry
-        from custom_components.homeshift.const import DOMAIN
-
         entry = make_mock_entry()
         entry.options = options
         hass = make_mock_hass()
         coordinator = HomeShiftCoordinator(hass, entry)
-        hass.data = {DOMAIN: {entry.entry_id: coordinator}}
+        entry.runtime_data = coordinator
         added = []
         # The entity registry needs a real hass: covered by test_integration.
         with patch("custom_components.homeshift.entity.er"):

@@ -21,9 +21,8 @@ from .const import (
     CONF_COVER_ENTITIES,
     CONF_COVER_TEMP_SENSOR,
     CONF_DAILY_COVER_ITEMS,
-    DOMAIN,
 )
-from .coordinator import HomeShiftCoordinator
+from .coordinator import HomeShiftConfigEntry, HomeShiftCoordinator
 from .entity import async_remove_stale_entities, setup_entity
 
 _LOGGER = logging.getLogger(__name__)
@@ -31,11 +30,11 @@ _LOGGER = logging.getLogger(__name__)
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: ConfigEntry,
+    entry: HomeShiftConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up HomeShift binary sensor entities."""
-    coordinator: HomeShiftCoordinator = hass.data[DOMAIN][entry.entry_id]
+    coordinator: HomeShiftCoordinator = entry.runtime_data
     config = {**entry.data, **entry.options}
     entities = []
     stale: list[str] = []

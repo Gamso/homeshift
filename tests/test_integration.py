@@ -172,7 +172,7 @@ async def test_setup_and_unload(hass: HomeAssistant) -> None:
     await setup_entry(hass, entry)
 
     assert entry.state is ConfigEntryState.LOADED
-    coordinator = hass.data[DOMAIN][entry.entry_id]
+    coordinator = entry.runtime_data
     assert hass.services.has_service(DOMAIN, "sync_calendar")
     assert hass.services.has_service(DOMAIN, "refresh_schedulers")
 
@@ -180,8 +180,8 @@ async def test_setup_and_unload(hass: HomeAssistant) -> None:
     await hass.async_block_till_done()
 
     assert entry.state is ConfigEntryState.NOT_LOADED
-    assert DOMAIN not in hass.data
-    assert not hass.services.has_service(DOMAIN, "sync_calendar")
+    # The services stay registered (async_setup); a call is refused, see below.
+    assert hass.services.has_service(DOMAIN, "sync_calendar")
     assert hass.states.get("select.homeshift_day_mode").state == STATE_UNAVAILABLE
     # No timer of the unloaded coordinator may fire later.
     assert coordinator._cancel_next_mode_timer is None
@@ -194,14 +194,14 @@ async def test_saving_options_reloads_the_entry(hass: HomeAssistant) -> None:
 
     entry = make_entry()
     await setup_entry(hass, entry)
-    first = hass.data[DOMAIN][entry.entry_id]
+    first = entry.runtime_data
 
     hass.config_entries.async_update_entry(
         entry, options={CONF_DAY_MODE_MAP: "home:House, work:Office, remote:Remote, away:Away"}
     )
     await hass.async_block_till_done()
 
-    second = hass.data[DOMAIN][entry.entry_id]
+    second = entry.runtime_data
     assert second is not first
     assert "Office" in hass.states.get("select.homeshift_day_mode").attributes["options"]
 
@@ -485,17 +485,20 @@ async def test_a_failing_cover_leaves_the_buttons_available(hass: HomeAssistant)
     assert hass.states.get("select.homeshift_day_mode").state != STATE_UNAVAILABLE
 
 
-async def test_cover_services_are_removed_with_the_entry(hass: HomeAssistant) -> None:
+async def test_cover_services_are_refused_once_the_entry_is_unloaded(hass: HomeAssistant) -> None:
+    from homeassistant.exceptions import ServiceValidationError
+
     entry = make_entry(options={CONF_DAILY_COVER_ITEMS: COVER_ITEMS})
     await setup_entry(hass, entry)
     assert hass.services.has_service(DOMAIN, "open_covers")
-    assert hass.services.has_service(DOMAIN, "close_covers")
 
     assert await hass.config_entries.async_unload(entry.entry_id)
     await hass.async_block_till_done()
 
-    assert not hass.services.has_service(DOMAIN, "open_covers")
-    assert not hass.services.has_service(DOMAIN, "close_covers")
+    assert hass.services.has_service(DOMAIN, "open_covers")
+    with pytest.raises(ServiceValidationError) as raised:
+        await hass.services.async_call(DOMAIN, "open_covers", {}, blocking=True)
+    assert raised.value.translation_key == "not_loaded"
 
 
 HEAT_PUMP_SWITCH = "switch.salon_enable_auto_start_stop"

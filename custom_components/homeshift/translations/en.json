@@ -807,6 +807,9 @@
     },
     "inhibition_end_in_past": {
       "message": "The end of the inhibition must be in the future."
+    },
+    "not_loaded": {
+      "message": "HomeShift is not loaded: set it up, or wait for it to finish loading, then try again."
     }
   }
 }

@@ -6,21 +6,21 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import BUTTON_CLOSE_COVERS, BUTTON_OPEN_COVERS, CONF_DAILY_COVER_ITEMS, DOMAIN
-from .coordinator import HomeShiftCoordinator
+from .const import BUTTON_CLOSE_COVERS, BUTTON_OPEN_COVERS, CONF_DAILY_COVER_ITEMS
+from .coordinator import HomeShiftConfigEntry, HomeShiftCoordinator
 from .entity import async_remove_stale_entities, setup_entity
 
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: ConfigEntry,
+    entry: HomeShiftConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up the cover buttons, only when the daily schedule drives covers.
 
     Same condition as the cover open/close time sensors.
     """
-    coordinator: HomeShiftCoordinator = hass.data[DOMAIN][entry.entry_id]
+    coordinator: HomeShiftCoordinator = entry.runtime_data
     config = {**entry.data, **entry.options}
     if not config.get(CONF_DAILY_COVER_ITEMS):
         async_remove_stale_entities(hass, entry, BUTTON_DOMAIN, [BUTTON_OPEN_COVERS, BUTTON_CLOSE_COVERS])

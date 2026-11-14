@@ -181,6 +181,29 @@ class TestApply:
         await manager.async_apply()
         hass.services.async_call.assert_not_awaited()
 
+    async def test_a_switch_unavailable_at_first_is_written_once_it_appears(self):
+        """Versatile Thermostat loads after HomeShift: the switch is set at the next run."""
+        states = {SWITCH: _switch("unavailable"), CLIMATE: _climate(17.0)}
+        hass, manager, *_ = _manager(states, [SALON])
+        await manager.async_apply()
+        hass.services.async_call.assert_not_awaited()
+
+        states[SWITCH] = _switch("off")
+        await manager.async_apply()
+        _turned(hass, "turn_on")
+
+    async def test_a_failed_write_is_tried_again(self):
+        from homeassistant.exceptions import HomeAssistantError
+
+        hass, manager, *_ = _manager({SWITCH: _switch("off"), CLIMATE: _climate(17.0)}, [SALON])
+        hass.services.async_call.side_effect = HomeAssistantError("unreachable")
+        await manager.async_apply()
+        hass.services.async_call.side_effect = None
+        hass.services.async_call.reset_mock()
+
+        await manager.async_apply()
+        _turned(hass, "turn_on")
+
     async def test_without_items_nothing_happens(self):
         hass, manager, *_ = _manager({}, [])
         await manager.async_apply()

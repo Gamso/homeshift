@@ -213,6 +213,18 @@ def _parse_stored_date(value: str | None) -> date | None:
         return None
 
 
+def _forecast_date(item: dict) -> date | None:
+    """Return the local date a forecast entry is for, or None when it has no usable 'datetime'."""
+    raw = item.get("datetime")
+    if not raw:
+        return None
+    try:
+        parsed = datetime.fromisoformat(str(raw))
+    except ValueError:
+        return None
+    return dt_util.as_local(parsed).date() if parsed.tzinfo is not None else parsed.date()
+
+
 class CoverManager:
     """Manages cover heat-protection and the native daily open/close schedule."""
 
@@ -619,7 +631,7 @@ class CoverManager:
         if open_time is None or now.time() < open_time:
             return
 
-        forecast_high = await self._async_get_forecast_high(weather_entity)
+        forecast_high = await self._async_get_forecast_high(weather_entity, today)
         if forecast_high is None:
             return
 
@@ -641,8 +653,14 @@ class CoverManager:
         self._heat_closed = True
         await self._async_save_state()
 
-    async def _async_get_forecast_high(self, weather_entity: str) -> float | None:
-        """Return today's forecast high temperature for weather_entity, or None on failure."""
+    async def _async_get_forecast_high(self, weather_entity: str, today: date) -> float | None:
+        """Return today's forecast high temperature for weather_entity, or None on failure.
+
+        The daily forecast is picked by its date rather than assumed to be the
+        first entry: some providers start the list with tomorrow once the day
+        is under way, or keep yesterday's entry until they refresh. Entries
+        without a usable date fall back to the first one.
+        """
         try:
             response = await self._hass.services.async_call(
                 "weather",
@@ -655,12 +673,20 @@ class CoverManager:
             _LOGGER.warning("Cover proactive close: get_forecasts failed for '%s': %s", weather_entity, err)
             return None
 
-        forecasts = (response or {}).get(weather_entity, {}).get("forecast") or []
+        forecasts = [item for item in (response or {}).get(weather_entity, {}).get("forecast") or [] if isinstance(item, dict)]
         if not forecasts:
             return None
 
+        todays = forecasts[0]
+        dated = [(item, _forecast_date(item)) for item in forecasts]
+        if any(day is not None for _item, day in dated):
+            todays = next((item for item, day in dated if day == today), None)
+            if todays is None:
+                _LOGGER.debug("Cover proactive close: '%s' has no forecast for %s", weather_entity, today)
+                return None
+
         try:
-            return float(forecasts[0].get("temperature"))
+            return float(todays.get("temperature"))
         except (TypeError, ValueError):
             return None
 

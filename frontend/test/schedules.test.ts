@@ -279,6 +279,25 @@ describe("schedules panel", () => {
     expect(tabs()[1].getAttribute("aria-selected")).toBe("true");
   });
 
+  it("reports a refused switch and leaves the other side alone", async () => {
+    const hass = schedulerHass();
+    hass.callService.mockRejectedValue(new Error("refused"));
+    const card = await render(hass);
+    const messages: string[] = [];
+    card.addEventListener("hass-notification", (ev: any) =>
+      messages.push(ev.detail.message),
+    );
+    const root = await open(card);
+    const [, coolSwitch] = root.querySelectorAll<HTMLElement>(".switch");
+    coolSwitch.click();
+    await settle(card);
+    expect(messages).toEqual(["Could not switch the schedule: refused"]);
+    // The heating could not be turned off: the cooling is not turned on.
+    expect(hass.callService.mock.calls).toEqual([
+      ["switch", "turn_off", { entity_id: ["switch.schedule_travail_salon"] }],
+    ]);
+  });
+
   it("reads the schedules again when a schedule switch changes", async () => {
     const hass = schedulerHass();
     const card = await render(hass);

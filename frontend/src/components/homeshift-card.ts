@@ -6,6 +6,7 @@ import { ENTITY_FIELDS, HomeShiftCardConfig } from "../types";
 import { discoverEntities } from "../entities";
 import { formatMinutes, isUsable, numericState } from "../state";
 import { formatShortDate, formatTime } from "../time";
+import { callService, notifyFailure } from "../notify";
 import "../schedule/schedule-panel";
 import { Schedule } from "../schedule/timeline";
 
@@ -332,21 +333,9 @@ class HomeShiftCard extends LitElement {
 
   /** Flip a climate's auto start/stop by hand; HomeShift takes over at the next change. */
   private async _toggleHeatPump(pump: HeatPump) {
-    try {
-      await this.hass.callService("switch", "toggle", { entity_id: pump.switch });
-    } catch (err: any) {
-      this.dispatchEvent(
-        new CustomEvent("hass-notification", {
-          detail: {
-            message: localize(this.hass, "card.heat_pump_failed", {
-              error: err?.message ?? String(err),
-            }),
-          },
-          bubbles: true,
-          composed: true,
-        }),
-      );
-    }
+    await callService(this, this.hass, "card.heat_pump_failed", "switch", "toggle", {
+      entity_id: pump.switch,
+    });
   }
 
   /**
@@ -463,23 +452,9 @@ class HomeShiftCard extends LitElement {
   }
 
   /** Call a HomeShift cover service; show a refusal as Home Assistant's toast. */
-  private async _callInhibitService(service: string, data: object) {
+  private async _callInhibitService(service: string, data: Record<string, unknown>) {
     this._armSettingTimeout();
-    try {
-      await this.hass.callService("homeshift", service, data);
-    } catch (err: any) {
-      this.dispatchEvent(
-        new CustomEvent("hass-notification", {
-          detail: {
-            message: localize(this.hass, "card.inhibit_failed", {
-              error: err?.message ?? String(err),
-            }),
-          },
-          bubbles: true,
-          composed: true,
-        }),
-      );
-    }
+    await callService(this, this.hass, "card.inhibit_failed", "homeshift", service, data);
   }
 
   private _inhibitCover(entityId: string) {
@@ -718,7 +693,7 @@ class HomeShiftCard extends LitElement {
 
   private _pickDay(entityId: string, option: string) {
     this._closeDayList();
-    this.hass.callService("select", "select_option", {
+    void callService(this, this.hass, "card.select_failed", "select", "select_option", {
       entity_id: entityId,
       option,
     });
@@ -833,7 +808,7 @@ class HomeShiftCard extends LitElement {
   }
 
   private onThermostatSelect(entityId: string, option: string) {
-    this.hass.callService("select", "select_option", {
+    void callService(this, this.hass, "card.select_failed", "select", "select_option", {
       entity_id: entityId,
       option,
     });
@@ -883,19 +858,8 @@ class HomeShiftCard extends LitElement {
           setTimeout(resolve, HomeShiftCard.COVER_FEEDBACK_MS),
         ),
       ]);
-    } catch (err: any) {
-      // Same toast Home Assistant uses for its own failed actions.
-      this.dispatchEvent(
-        new CustomEvent("hass-notification", {
-          detail: {
-            message: localize(this.hass, `card.cover_${action}_failed`, {
-              error: err?.message ?? String(err),
-            }),
-          },
-          bubbles: true,
-          composed: true,
-        }),
-      );
+    } catch (err) {
+      notifyFailure(this, this.hass, `card.cover_${action}_failed`, err);
     } finally {
       this._coverPending = undefined;
     }
@@ -998,7 +962,7 @@ class HomeShiftCard extends LitElement {
         : [...presets].reverse().find((value) => value < current);
     if (next === undefined) return;
     this._armSettingTimeout();
-    this.hass.callService("number", "set_value", {
+    void callService(this, this.hass, "card.set_value_failed", "number", "set_value", {
       entity_id: entityId,
       value: next,
     });

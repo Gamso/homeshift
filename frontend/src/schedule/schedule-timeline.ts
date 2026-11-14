@@ -1,6 +1,7 @@
 import { LitElement, html, svg, css, nothing } from "lit";
 import { property } from "lit/decorators.js";
 import { localize } from "../localize/localize";
+import { callService } from "../notify";
 import {
   DAY_MINUTES,
   Schedule,
@@ -256,13 +257,16 @@ export class HomeShiftScheduleTimeline extends LitElement {
   /**
    * Turns a schedule on or off. Heating and cooling the same room at once
    * makes no sense: turning one on first turns off the room's enabled
-   * schedules of the other side.
+   * schedules of the other side. A refused call is reported as a toast; if
+   * the other side cannot be turned off, this one is not turned on.
    */
   private async _toggle(schedule: Schedule, room: Room, enabled: boolean) {
-    if (enabled) {
-      await this.hass.callService("switch", "turn_off", {
-        entity_id: schedule.entity_id,
+    const call = (service: string, entity_id: string | string[]) =>
+      callService(this, this.hass, "schedule.toggle_failed", "switch", service, {
+        entity_id,
       });
+    if (enabled) {
+      await call("turn_off", schedule.entity_id);
       return;
     }
     const side = climateSide(rowKind(daySegments(schedule, this._sun())));
@@ -272,14 +276,10 @@ export class HomeShiftScheduleTimeline extends LitElement {
           return s !== schedule && other && other !== side && this._enabled(s);
         })
       : [];
-    if (opposite.length) {
-      await this.hass.callService("switch", "turn_off", {
-        entity_id: opposite.map((s) => s.entity_id),
-      });
+    if (opposite.length && !(await call("turn_off", opposite.map((s) => s.entity_id)))) {
+      return;
     }
-    await this.hass.callService("switch", "turn_on", {
-      entity_id: schedule.entity_id,
-    });
+    await call("turn_on", schedule.entity_id);
   }
 
   static styles = css`

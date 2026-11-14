@@ -4,7 +4,8 @@ line-length = 180
 
 [tool.ruff]
 line-length = 180
-target-version = "py313"
+# Home Assistant 2026.11, the minimum, runs on Python 3.14.
+target-version = "py314"
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "B", "UP"]

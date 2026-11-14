@@ -133,6 +133,10 @@ class HomeShiftCard extends LitElement {
   /** Whether the day mode list is open, and the option the keyboard is on. */
   @state() private _dayOpen = false;
   @state() private _dayActive = 0;
+  /** Value each stepper sent, with the entity state it was stepped from. */
+  @state() private _pendingSetting: Partial<
+    Record<"override" | "early", { value: number; from: unknown }>
+  > = {};
   /** Whether the climate section is unfolded. */
   @state() private _heatPumpsOpen = false;
   /** Fingerprint of the schedule switches, to read the schedules again when they change. */
@@ -242,6 +246,7 @@ class HomeShiftCard extends LitElement {
       changedProps.has("_schedulesOpen") ||
       changedProps.has("_dayOpen") ||
       changedProps.has("_heatPumpsOpen") ||
+      changedProps.has("_pendingSetting") ||
       changedProps.has("_dayActive")
     )
       return true;
@@ -956,7 +961,18 @@ class HomeShiftCard extends LitElement {
     }, delay);
   }
 
-  private _stepSetting(
+  /**
+   * A stepper's value: the one it last sent while Home Assistant has not
+   * answered with a new state yet, else the entity's.
+   */
+  private _settingValue<T>(name: "override" | "early", entityId: string | undefined, value: T): T | number {
+    const pending = this._pendingSetting[name];
+    return pending && typeof value === "number" && this.getEntityState(entityId) === pending.from
+      ? pending.value
+      : value;
+  }
+
+  private async _stepSetting(
     name: "override" | "early",
     presets: number[],
     current: number,
@@ -976,10 +992,19 @@ class HomeShiftCard extends LitElement {
         : [...presets].reverse().find((value) => value < current);
     if (next === undefined) return;
     this._armSettingTimeout();
-    void callService(this, this.hass, "card.set_value_failed", "number", "set_value", {
+    // Shown, and stepped from, until the entity's new state arrives: a second
+    // quick click then sends the following preset, not the same one again.
+    const from = this.getEntityState(entityId);
+    this._pendingSetting = { ...this._pendingSetting, [name]: { value: next, from } };
+    const sent = await callService(this, this.hass, "card.set_value_failed", "number", "set_value", {
       entity_id: entityId,
       value: next,
     });
+    // Refused (and reported): show the entity's own value again.
+    if (!sent && this._pendingSetting[name]?.value === next) {
+      const { [name]: _dropped, ...rest } = this._pendingSetting;
+      this._pendingSetting = rest;
+    }
   }
 
   /**
@@ -1093,8 +1118,16 @@ class HomeShiftCard extends LitElement {
 
     const nextMode = this.getEntityState(this._config.next_mode_entity);
     const nextModeAt = this.getEntityState(this._config.next_mode_at_entity);
-    const earlySwitch = this._minutes(this._config.early_switch_entity);
-    const override = this._minutes(this._config.override_duration_entity);
+    const earlySwitch = this._settingValue(
+      "early",
+      this._config.early_switch_entity,
+      this._minutes(this._config.early_switch_entity),
+    );
+    const override = this._settingValue(
+      "override",
+      this._config.override_duration_entity,
+      this._minutes(this._config.override_duration_entity),
+    );
 
     // The next-mode sensors are unknown when no switch is scheduled.
     const hasNextMode = isUsable(nextMode);

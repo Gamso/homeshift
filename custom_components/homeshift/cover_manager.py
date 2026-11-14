@@ -12,7 +12,7 @@ import asyncio
 import logging
 from collections.abc import Callable
 from datetime import date, datetime, time as dt_time, timedelta
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 
 # astral is a dependency of Home Assistant itself; hassfest forbids listing it
 # in the manifest of a custom integration, so it is used here undeclared.
@@ -627,12 +627,16 @@ class CoverManager:
     async def _async_get_forecast_high(self, weather_entity: str) -> float | None:
         """Return today's forecast high temperature for weather_entity, or None on failure."""
         try:
-            response = await self._hass.services.async_call(
-                "weather",
-                "get_forecasts",
-                {"entity_id": weather_entity, "type": "daily"},
-                blocking=True,
-                return_response=True,
+            # The response is plain JSON, read defensively below.
+            response = cast(
+                dict[str, Any] | None,
+                await self._hass.services.async_call(
+                    "weather",
+                    "get_forecasts",
+                    {"entity_id": weather_entity, "type": "daily"},
+                    blocking=True,
+                    return_response=True,
+                ),
             )
         except Exception as err:  # noqa: BLE001 - defensive boundary around an external service call
             _LOGGER.warning("Cover proactive close: get_forecasts failed for '%s': %s", weather_entity, err)

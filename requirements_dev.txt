@@ -1,2 +1,3 @@
 homeassistant
 ruff==0.16.10
+pyright==1.1.414

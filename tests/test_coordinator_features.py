@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import date, datetime, timedelta, timezone, UTC
+from datetime import date, datetime, time, timedelta, timezone, UTC
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -1609,8 +1609,12 @@ class TestDailyCoverScheduleCompute:
         return state
 
     async def _run_compute(self, hass, entry, now, day_mode_key):
+        """Compute the schedule, sunrise read from the mocked sun.sun (the location fallback)."""
         coordinator = HomeShiftCoordinator(hass, entry)
-        with patch("custom_components.homeshift.cover_manager.dt_util") as mock_dt:
+        with (
+            patch("custom_components.homeshift.cover_manager.dt_util") as mock_dt,
+            patch("custom_components.homeshift.cover_manager.sunrise_time", return_value=None),
+        ):
             from datetime import timezone, timedelta as tdelta
             tz_paris = timezone(tdelta(hours=2))
             mock_dt.as_local.side_effect = lambda dt: dt.astimezone(tz_paris)
@@ -3027,7 +3031,10 @@ class TestHeatProtectionResetIsPerCalendarDay:
         return hass
 
     async def _compute(self, manager, now):
-        with patch("custom_components.homeshift.cover_manager.dt_util") as mock_dt:
+        with (
+            patch("custom_components.homeshift.cover_manager.dt_util") as mock_dt,
+            patch("custom_components.homeshift.cover_manager.sunrise_time", return_value=None),
+        ):
             from datetime import timezone, timedelta as tdelta
             tz_paris = timezone(tdelta(hours=2))
             mock_dt.as_local.side_effect = lambda dt: dt.astimezone(tz_paris)
@@ -3939,3 +3946,67 @@ class TestCloseWhenTheWindowShuts:
             await self._evening_close(manager)
 
         assert "will close once window sensor 'binary_sensor.fenetre_chambre'" in caplog.text
+
+
+class TestSunriseFromTheLocation:
+    """The 'sunrise' open time comes from the location, not from sun.sun."""
+
+    @pytest.fixture(autouse=True)
+    def _paris_time_zone(self):
+        """Local time is Home Assistant's time zone: Paris here, like the location."""
+        from zoneinfo import ZoneInfo
+
+        from homeassistant.util import dt as dt_util
+
+        previous = dt_util.get_default_time_zone()
+        dt_util.set_default_time_zone(ZoneInfo("Europe/Paris"))
+        yield
+        dt_util.set_default_time_zone(previous)
+
+    def _hass(self, sun_rising: str | None = None):
+        hass = TestSunTimeAtElevation._hass(None)
+        sun_state = MagicMock()
+        sun_state.attributes = {"next_rising": sun_rising} if sun_rising else {}
+        hass.states.get.side_effect = lambda eid: sun_state if eid == "sun.sun" else None
+        return hass
+
+    def test_sunrise_is_computed_for_the_given_day(self):
+        from custom_components.homeshift.cover_manager import sunrise_time
+
+        winter = sunrise_time(self._hass(), date(2026, 12, 21))
+        summer = sunrise_time(self._hass(), date(2026, 6, 21))
+        assert winter is not None and summer is not None
+        # Paris: about 08:40 in December, 05:47 in June (local time).
+        assert time(8, 30) < winter < time(8, 50)
+        assert time(5, 40) < summer < time(5, 55)
+
+    async def test_the_open_time_does_not_need_sun_sun(self):
+        """sun.sun not there yet (startup): the opening time is still known."""
+        from custom_components.homeshift.const import (
+            CONF_DAILY_COVER_ITEMS,
+            CONF_DAILY_COVER_OPEN_TIME_MAP,
+            CONF_SUNRISE_EARLIEST,
+        )
+
+        hass = self._hass()
+        hass.states.get.side_effect = lambda _eid: None
+        entry = make_mock_entry()
+        entry.options = {
+            CONF_DAILY_COVER_ITEMS: _cover_items("cover.volets"),
+            CONF_DAILY_COVER_OPEN_TIME_MAP: "work:sunrise",
+            CONF_SUNRISE_EARLIEST: "07:00:00",
+        }
+        manager = HomeShiftCoordinator(hass, entry)._cover_manager
+        manager._async_save_state = AsyncMock()
+
+        await manager.async_compute_daily_schedule(datetime(2026, 12, 21, 0, 5), "work")
+
+        assert manager.cover_open_time is not None
+        assert "08:30" < manager.cover_open_time < "08:50"
+
+    def test_sun_sun_is_the_fallback_when_the_location_is_unusable(self):
+        from custom_components.homeshift.cover_manager import sunrise_time
+
+        hass = make_mock_hass()
+        hass.config.latitude = None  # no usable location
+        assert sunrise_time(hass, date(2026, 7, 1)) is None

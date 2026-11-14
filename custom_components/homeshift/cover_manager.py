@@ -20,6 +20,7 @@ from astral import Observer
 from astral.sun import (
     SunDirection,
     elevation as astral_elevation,
+    sunrise as astral_sunrise,
     sunset as astral_sunset,
     time_at_elevation as astral_time_at_elevation,
 )
@@ -123,6 +124,22 @@ def sunset_time(hass: HomeAssistant) -> dt_time | None:
     """
     sunset = next_sun_datetime(hass, "next_setting")
     return sunset.time() if sunset is not None else None
+
+
+def sunrise_time(hass: HomeAssistant, on_date: date) -> dt_time | None:
+    """Return the local time of sunrise on `on_date`, or None.
+
+    Computed from the location with astral rather than read from sun.sun:
+    at startup sun.sun may not exist yet, and after today's sunrise its
+    next_rising is already tomorrow's. Returns None when the location is not
+    usable or the sun does not rise that day (polar latitudes).
+    """
+    try:
+        event = astral_sunrise(_astral_observer(hass), date=on_date)
+    except (ValueError, TypeError, AttributeError) as err:
+        _LOGGER.debug("No sunrise on %s: %s", on_date, err)
+        return None
+    return dt_util.as_local(event).time()
 
 
 def elevation_for_sunset_offset(hass: HomeAssistant, offset_minutes: int, year: int) -> float | None:
@@ -888,7 +905,7 @@ class CoverManager:
         if raw_value == "skip":
             self.cover_open_time = None
         elif raw_value == "sunrise":
-            target = self._sunrise_open_time()
+            target = self._sunrise_open_time(now.date())
             if target is not None:
                 self.cover_open_time = target.strftime("%H:%M")
             else:
@@ -911,7 +928,7 @@ class CoverManager:
         # time (or the earliest allowed one when sunrise is unknown).
         fallback = None
         if self.cover_open_time is None:
-            fallback = self._sunrise_open_time() or _parse_time_str(
+            fallback = self._sunrise_open_time(now.date()) or _parse_time_str(
                 self._config.get(CONF_SUNRISE_EARLIEST, DEFAULT_SUNRISE_EARLIEST)
             )
         self._heat_window_fallback = fallback.strftime("%H:%M") if fallback is not None else None
@@ -924,13 +941,16 @@ class CoverManager:
             day_mode_key,
         )
 
-    def _sunrise_open_time(self) -> dt_time | None:
-        """Return sunrise floored at CONF_SUNRISE_EARLIEST, or None when unknown."""
-        sunrise_time = self._get_next_sun_time("next_rising")
-        earliest_time = _parse_time_str(self._config.get(CONF_SUNRISE_EARLIEST, DEFAULT_SUNRISE_EARLIEST))
-        if sunrise_time is None or earliest_time is None:
+    def _sunrise_open_time(self, on_date: date) -> dt_time | None:
+        """Return sunrise on `on_date` floored at CONF_SUNRISE_EARLIEST, or None when unknown.
+
+        Falls back to sun.sun's next_rising when the location cannot give one.
+        """
+        sunrise = sunrise_time(self._hass, on_date) or self._get_next_sun_time("next_rising")
+        earliest = _parse_time_str(self._config.get(CONF_SUNRISE_EARLIEST, DEFAULT_SUNRISE_EARLIEST))
+        if sunrise is None or earliest is None:
             return None
-        return sunrise_time if sunrise_time > earliest_time else earliest_time
+        return max(sunrise, earliest)
 
     def opened_on(self, day: date) -> bool:
         """Return True once the scheduled morning open has run on `day`."""

@@ -44,6 +44,16 @@ describe("localize", () => {
     );
   });
 
+  it("inserts a parameter as is, without replacement patterns", () => {
+    expect(
+      localize(FR, "card.cover_open_failed", { error: "bad $& and $' and $$" }),
+    ).toBe("Impossible d'ouvrir les volets : bad $& and $' and $$");
+  });
+
+  it("substitutes every occurrence of a parameter", () => {
+    expect(localize(FR, "card.not_a_key", { x: "a" }, "{x} / {x}")).toBe("a / a");
+  });
+
   it("has the same keys in every language", () => {
     expect(leafKeys(fr).sort()).toEqual(leafKeys(en).sort());
   });

@@ -36,7 +36,11 @@ export function localize(
     fallback) as string | undefined;
   if (text == null) return key;
   if (params) {
-    Object.entries(params).forEach(([k, v]) => (text = (text as string).replace(`{${k}}`, v)));
+    // Every occurrence, and the value as is: String.replace would read "$&"
+    // or "$'" in it (a cover or an error message) as replacement patterns.
+    Object.entries(params).forEach(
+      ([k, v]) => (text = (text as string).split(`{${k}}`).join(String(v))),
+    );
   }
   return text as string;
 }

@@ -8,6 +8,7 @@
 
 ### 🔧 Development
 
+- The card bundle is no longer committed. Each GitHub release gets a `homeshift.zip`, built by CI, which HACS installs (`zip_release`).
 - Tests run on `pytest-homeassistant` (Home Assistant's own test package, 2026.11.1) instead of the deprecated `pytest-homeassistant-custom-component`, on Python 3.14.
 
 ## 2.1.0

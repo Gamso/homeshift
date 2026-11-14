@@ -5,6 +5,12 @@
         "dockerfile": "Dockerfile"
     },
     "name": "HomeShift Dev Container",
+    // Node builds the card (frontend/), which HomeShift serves to the dashboards.
+    "features": {
+        "ghcr.io/devcontainers/features/node:1": {
+            "version": "24"
+        }
+    },
     "appPort": [
         "8123:8123"
     ],

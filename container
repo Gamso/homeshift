@@ -4,9 +4,15 @@
 
 . .bashrc
 
+function build_card() {
+    # The card bundle is not committed: build it so HomeShift can serve it.
+    (cd frontend && npm ci && npm run build)
+}
+
 function get_dev() {
      pip install -r requirements_dev.txt
      pip install -r requirements_test.txt
+     build_card
      if [ -d /home/vscode/core ]; then
         sudo chown -R vscode:  /home/vscode/core
     fi
@@ -21,6 +27,9 @@ case $1 in
     ;;
     dev-setup)
         get_dev
+    ;;
+    card)
+        build_card
     ;;
     install)
         echo "Running container post installation"

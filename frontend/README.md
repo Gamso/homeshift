@@ -16,7 +16,7 @@ npm run lint
 npm test
 ```
 
-Commit the rebuilt bundle with the sources: CI fails when it differs from a fresh build.
+The bundle is not committed: the **Release** workflow builds it and ships it in the release archive (`homeshift.zip`).
 
 ## Layout
 

@@ -6,6 +6,8 @@ from collections.abc import Callable
 from datetime import datetime, date, timedelta
 from typing import Any
 
+import voluptuous as vol
+
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import STATE_UNAVAILABLE, STATE_UNKNOWN
 from homeassistant.core import HomeAssistant, callback
@@ -838,7 +840,7 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
                     await self.hass.services.async_call(
                         "scheduler", "run_action", {"entity_id": entity_id}, blocking=True
                     )
-                except HomeAssistantError as err:
+                except (HomeAssistantError, vol.Invalid) as err:
                     _LOGGER.warning("scheduler.run_action failed for %s: %s", entity_id, err)
 
     async def _async_set_climate_hvac_mode(self, climate_id: str, hvac_mode: str) -> None:
@@ -861,7 +863,7 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
                 {"entity_id": climate_id, "hvac_mode": hvac_mode},
                 blocking=True,
             )
-        except HomeAssistantError as err:
+        except (HomeAssistantError, vol.Invalid) as err:
             _LOGGER.warning("climate.set_hvac_mode failed for %s: %s", climate_id, err)
 
     async def async_update_data(self) -> dict:
@@ -1639,5 +1641,5 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
         """
         try:
             await self.hass.services.async_call("switch", service, {"entity_id": entity_ids}, blocking=True)
-        except HomeAssistantError as err:
+        except (HomeAssistantError, vol.Invalid) as err:
             _LOGGER.warning("Scheduler switch.%s failed for %s: %s", service, entity_ids, err)

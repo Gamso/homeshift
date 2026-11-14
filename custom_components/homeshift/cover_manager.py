@@ -25,6 +25,8 @@ from astral.sun import (
     time_at_elevation as astral_time_at_elevation,
 )
 
+import voluptuous as vol
+
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
@@ -577,7 +579,7 @@ class CoverManager:
         """
         try:
             await self._hass.services.async_call(domain, service, {"entity_id": entity_id}, blocking=True)
-        except HomeAssistantError as err:
+        except (HomeAssistantError, vol.Invalid) as err:
             _LOGGER.warning("%s: %s.%s failed for %s: %s", context, domain, service, entity_id, err)
             return False
         return True

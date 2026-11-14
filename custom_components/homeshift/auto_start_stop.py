@@ -20,6 +20,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
+import voluptuous as vol
+
 from homeassistant.const import STATE_ON, STATE_UNAVAILABLE, STATE_UNKNOWN
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
@@ -226,7 +228,7 @@ class AutoStartStopManager:
             await self._hass.services.async_call(
                 "switch", "turn_on" if on else "turn_off", {"entity_id": switch}, blocking=True
             )
-        except HomeAssistantError as err:
+        except (HomeAssistantError, vol.Invalid) as err:
             _LOGGER.warning("Auto start/stop: could not turn %s %s: %s", switch, "on" if on else "off", err)
             return False
         return True

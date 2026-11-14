@@ -110,6 +110,30 @@ class TestIcsHalfDayEventsBasic:
 # Manual override duration
 # ---------------------------------------------------------------------------
 
+class TestPredictionAfterAManualChange:
+    """A manual mode change recomputes the prediction at once, not at the next poll."""
+
+    async def test_the_prediction_follows_the_mode_picked_by_hand(self):
+        hass = make_mock_hass()
+        hass.states.get.return_value = make_calendar_state(state="off")
+        hass.services.async_call = AsyncMock(return_value={"calendar.teletravail": {"events": []}})
+        entry = make_mock_entry()
+        coordinator = HomeShiftCoordinator(hass, entry)
+        now = datetime(2026, 3, 11, 9, 0, 0)  # Wednesday, a work day
+
+        with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
+            mock_dt.now.return_value = now
+            await coordinator.async_update_data()
+            assert coordinator.day_mode == "Travail"
+            assert coordinator.next_mode_predicted == "Maison"  # Saturday
+
+            await coordinator.async_set_day_mode("Télétravail")
+
+        # Back to work at the next midnight, no longer only on Saturday.
+        assert coordinator.next_mode_predicted == "Travail"
+        assert coordinator.next_mode_at == datetime(2026, 3, 12, 0, 0, 0)
+
+
 class TestManualOverrideDuration:
     """Verify that a manual override duration blocks automatic calendar-driven changes."""
 

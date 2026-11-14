@@ -677,7 +677,15 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
             _LOGGER.info("Manual change: day_mode '%s' -> '%s' (key=%s)", old_mode, resolved, self.day_mode_key)
         await self.async_refresh_schedulers()
         if self._day_mode != old_mode:
-            await self._async_follow_mode_change(dt_util.now(), "manual mode change")
+            now = dt_util.now()
+            await self._async_follow_mode_change(now, "manual mode change")
+            # The prediction compares the coming modes with the current one:
+            # computed for the old mode, it would stay wrong until the next poll.
+            await self._async_refresh_next_mode_prediction(
+                self._readable_calendar_state(now),
+                now,
+                context="Next-mode prediction updated after a manual change",
+            )
         # Rebuild and broadcast the full data dict so downstream sensors pick up
         # the new day_mode and override_until immediately (rather than stale data).
         self.async_set_updated_data(self._build_result())
@@ -930,6 +938,14 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
         await self._cover_manager.async_check_heat_protection(now)
 
         return self._build_result()
+
+    def _readable_calendar_state(self, now: datetime):
+        """Return the calendar entity's state, or None while a calendar cannot be read."""
+        calendar_entity = self._config.get(CONF_CALENDAR_ENTITY)
+        calendar_state = self.hass.states.get(calendar_entity) if calendar_entity else None
+        if self._unreadable_calendars(calendar_entity, calendar_state):
+            return None
+        return calendar_state
 
     def _unreadable_calendars(self, calendar_entity: str | None, calendar_state) -> list[str]:
         """Return a description of each calendar that cannot be read right now.

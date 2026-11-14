@@ -2079,10 +2079,38 @@ class TestDailyCoverScheduleCheck:
         entry = self._make_entry()
         coordinator = self._make_coordinator(hass, entry, open_time="08:30", close_time="21:40")
 
+        await coordinator._cover_manager.async_check_daily_schedule(datetime(2026, 7, 1, 8, 30, 0))
+        await coordinator._cover_manager.async_check_daily_schedule(datetime(2026, 7, 1, 12, 0, 0))
         await coordinator._cover_manager.async_check_daily_schedule(datetime(2026, 7, 1, 21, 40, 0))
         await coordinator._cover_manager.async_check_daily_schedule(datetime(2026, 7, 1, 22, 0, 0))
 
         assert hass.services.async_call.call_count == 2  # one open + one close, not repeated
+
+    async def test_a_missed_open_is_not_caught_up_after_the_close_time(self):
+        """Back after the close time with no open today: close only, never open-then-close."""
+        hass = make_mock_hass()
+        hass.services.async_call = AsyncMock()
+        hass.states.get.return_value = make_calendar_state(state="off")
+        entry = self._make_entry()
+        coordinator = self._make_coordinator(hass, entry, open_time="08:30", close_time="21:40")
+
+        await coordinator._cover_manager.async_check_daily_schedule(datetime(2026, 7, 1, 22, 15, 0))
+
+        services = [call.args[1] for call in hass.services.async_call.call_args_list]
+        assert services == ["close_cover"]
+
+    async def test_a_missed_open_is_caught_up_before_the_close_time(self):
+        """Back in the afternoon: the missed open still runs."""
+        hass = make_mock_hass()
+        hass.services.async_call = AsyncMock()
+        hass.states.get.return_value = make_calendar_state(state="off")
+        entry = self._make_entry()
+        coordinator = self._make_coordinator(hass, entry, open_time="08:30", close_time="21:40")
+
+        await coordinator._cover_manager.async_check_daily_schedule(datetime(2026, 7, 1, 15, 0, 0))
+
+        services = [call.args[1] for call in hass.services.async_call.call_args_list]
+        assert services == ["open_cover"]
 
 
 # ---------------------------------------------------------------------------

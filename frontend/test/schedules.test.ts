@@ -298,6 +298,20 @@ describe("schedules panel", () => {
     ]);
   });
 
+  it("shows an unavailable schedule switch as off and disabled", async () => {
+    const hass = schedulerHass();
+    hass.states["switch.schedule_travail_salon"].state = "unavailable";
+    const card = await render(hass);
+    const root = await open(card);
+    const [heatSwitch] = root.querySelectorAll<HTMLButtonElement>(".switch");
+    expect(heatSwitch.disabled).toBe(true);
+    expect(heatSwitch.getAttribute("aria-checked")).toBe("false");
+    expect(heatSwitch.getAttribute("aria-label")).toBe("Travail salon — unavailable");
+    heatSwitch.click();
+    await settle(card);
+    expect(hass.callService).not.toHaveBeenCalled();
+  });
+
   it("reads the schedules again when a schedule switch changes", async () => {
     const hass = schedulerHass();
     const card = await render(hass);

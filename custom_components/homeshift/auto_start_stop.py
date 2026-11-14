@@ -199,19 +199,28 @@ class AutoStartStopManager:
         for heat_pump in self._heat_pumps:
             wanted = self._wanted(heat_pump, thermostat_key)
             previous = self._applied.get(heat_pump.switch)
-            self._applied[heat_pump.switch] = wanted
-            if wanted is None or (wanted == previous and not force):
+            if wanted is None:
+                self._applied[heat_pump.switch] = None
                 continue
-            await self._async_set(heat_pump.switch, wanted)
+            if wanted == previous and not force:
+                continue
+            # Only remembered once written: a switch not there yet (Versatile
+            # Thermostat still loading) or a failed call is tried again at
+            # the next run instead of waiting for the next transition.
+            if await self._async_set(heat_pump.switch, wanted):
+                self._applied[heat_pump.switch] = wanted
 
-    async def _async_set(self, switch: str, on: bool) -> None:
-        """Turn a switch on or off, unless it is already there or cannot be reached."""
+    async def _async_set(self, switch: str, on: bool) -> bool:
+        """Turn a switch on or off, unless it is already there or cannot be reached.
+
+        Returns whether the switch is now in the wanted state.
+        """
         state = self._hass.states.get(switch)
         if state is None or state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN):
             _LOGGER.debug("Auto start/stop: %s unavailable, left as it is", switch)
-            return
+            return False
         if (state.state == STATE_ON) == on:
-            return
+            return True
         _LOGGER.info("Auto start/stop: %s -> %s", switch, "on" if on else "off (comfort)")
         try:
             await self._hass.services.async_call(
@@ -219,6 +228,8 @@ class AutoStartStopManager:
             )
         except HomeAssistantError as err:
             _LOGGER.warning("Auto start/stop: could not turn %s %s: %s", switch, "on" if on else "off", err)
+            return False
+        return True
 
     async def async_on_setpoint_change(self) -> None:
         """Apply a setpoint that crossed its threshold, and show it."""

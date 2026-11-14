@@ -869,6 +869,43 @@ def _mock_get_events(calendar_entity: str, events: list[dict]):
     return AsyncMock(return_value={calendar_entity: {"events": events}})
 
 
+class TestEventsReportedInAnotherTimeZone:
+    """Event times in UTC are read as the local wall-clock time they stand for."""
+
+    def test_an_aware_event_is_converted_to_the_local_zone(self):
+        from zoneinfo import ZoneInfo
+
+        from custom_components.homeshift.coordinator import _parse_event_dt
+
+        paris = ZoneInfo("Europe/Paris")
+        parsed = _parse_event_dt("2026-03-11T08:00:00+00:00", paris)
+        assert parsed is not None
+        assert (parsed.hour, parsed.tzinfo) == (9, paris)
+
+    async def test_a_utc_event_running_locally_sets_the_mode(self):
+        """Remote work 13:00-17:00 UTC is 14:00-18:00 in Paris: at 13:30 Paris it has not started."""
+        from zoneinfo import ZoneInfo
+
+        paris = ZoneInfo("Europe/Paris")
+        hass = make_mock_hass()
+        entry = make_mock_entry(early_switch_minutes=20)
+        hass.states.get.return_value = make_calendar_state(state="off")
+        hass.services.async_call = _mock_get_events(
+            "calendar.teletravail",
+            [{"summary": "Télétravail", "start": "2026-03-11T13:00:00+00:00", "end": "2026-03-11T17:00:00+00:00"}],
+        )
+        coordinator = HomeShiftCoordinator(hass, entry)
+
+        with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
+            # 13:30 in Paris: 30 min before the local start, outside the 20 min early window.
+            # Read naively as 13:00-17:00 it would look already started, and the 13:40 switch would be missed.
+            mock_dt.now.return_value = datetime(2026, 3, 11, 13, 30, 0, tzinfo=paris)
+            await coordinator.async_update_data()
+
+        assert coordinator.day_mode == "Travail"
+        assert coordinator.next_mode_at == datetime(2026, 3, 11, 13, 40, 0, tzinfo=paris)
+
+
 class TestEarlySwitch:
     """Verify the early_switch_minutes feature pre-activates timed events."""
 

@@ -880,3 +880,67 @@ class TestCoversDoNotWaitForTheCalendar:
         await self._poll(coordinator, datetime(2026, 3, 3, 0, 11, 0))
         await self._poll(coordinator, datetime(2026, 3, 3, 0, 16, 0))
         assert coordinator._cover_manager.async_compute_daily_schedule.await_count == 2
+
+
+# ---------------------------------------------------------------------------
+# Overlapping events: the entity reports one, get_events sees them all
+# ---------------------------------------------------------------------------
+
+class TestOverlappingEvents:
+    """An unmapped event shown by the entity must not hide a mapped one running too."""
+
+    async def test_mapped_event_behind_an_unmapped_one_sets_the_mode(self):
+        """All-day birthday on the entity, remote work 9:00-18:00 underneath → remote."""
+        hass = make_mock_hass()
+        entry = make_mock_entry()
+        hass.states.get.return_value = make_calendar_state(
+            state="on", message="Anniversaire",
+            start_time="2026-03-04 00:00:00", end_time="2026-03-05 00:00:00",
+        )
+        hass.services.async_call = AsyncMock(
+            return_value={
+                "calendar.teletravail": {
+                    "events": [
+                        {"summary": "Anniversaire", "start": "2026-03-04", "end": "2026-03-05"},
+                        {"summary": "Télétravail", "start": "2026-03-04T09:00:00", "end": "2026-03-04T18:00:00"},
+                    ]
+                }
+            }
+        )
+        coordinator = HomeShiftCoordinator(hass, entry)
+        set_day_mode(coordinator, DEFAULT_MODE_DEFAULT)
+
+        with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
+            mock_dt.now.return_value = datetime(2026, 3, 4, 10, 0, 0)  # Wednesday
+            result = await coordinator.async_update_data()
+
+        assert coordinator.day_mode == "Télétravail"
+        assert result["today_type"] == EVENT_REMOTE
+
+    async def test_mapped_event_not_running_yet_is_ignored(self):
+        """The remote-work event starts later: the unmapped one alone counts → default."""
+        hass = make_mock_hass()
+        entry = make_mock_entry()
+        birthday = make_calendar_state(
+            state="on", message="Anniversaire",
+            start_time="2026-03-04 00:00:00", end_time="2026-03-05 00:00:00",
+        )
+        no_holiday = make_calendar_state(state="off")
+        hass.states.get.side_effect = lambda entity_id: birthday if entity_id == "calendar.teletravail" else no_holiday
+        hass.services.async_call = AsyncMock(
+            return_value={
+                "calendar.teletravail": {
+                    "events": [
+                        {"summary": "Télétravail", "start": "2026-03-04T14:00:00", "end": "2026-03-04T18:00:00"},
+                    ]
+                }
+            }
+        )
+        coordinator = HomeShiftCoordinator(hass, entry)
+        set_day_mode(coordinator, "Maison")
+
+        with patch("custom_components.homeshift.coordinator.dt_util") as mock_dt:
+            mock_dt.now.return_value = datetime(2026, 3, 4, 10, 0, 0)
+            await coordinator.async_update_data()
+
+        assert coordinator.day_mode == DEFAULT_MODE_DEFAULT

@@ -1021,6 +1021,11 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
                     if kw in event_message.lower():
                         matched_keyword = kw
                         break
+                if matched_keyword is None:
+                    # The entity shows a single event. With an unmapped one
+                    # (a birthday, all day) overlapping a mapped one (remote
+                    # work, 9:00-18:00), the mapped one must still win.
+                    matched_keyword = await self._async_running_mapped_keyword(calendar_entity, now)
                 today_type = matched_keyword if matched_keyword is not None else event_message
                 # Persist the day-level type once a known event is seen for today
                 if today_type != EVENT_NONE:
@@ -1096,6 +1101,30 @@ class HomeShiftCoordinator(DataUpdateCoordinator):
                     self._day_mode,
                     self._current_event,
                 )
+
+    async def _async_running_mapped_keyword(self, calendar_entity: str, now: datetime) -> str | None:
+        """Return the keyword of an event running at `now` that maps to a day mode, or None.
+
+        Asks calendar.get_events for the events overlapping `now`: the
+        calendar entity's own state only reports one of them.
+        """
+        events = await self._async_get_upcoming_events(calendar_entity, now, now + timedelta(minutes=1))
+        now_naive = self._to_naive(now)
+        for event in events:
+            start = _parse_event_dt(event.get("start", ""), now.tzinfo)
+            end = _parse_event_dt(event.get("end", ""), now.tzinfo)
+            if start is None or end is None or not self._to_naive(start) <= now_naive < self._to_naive(end):
+                continue
+            summary = str(event.get("summary", "")).lower()
+            for kw in self._event_mode_map:
+                if kw in summary:
+                    _LOGGER.debug(
+                        "Calendar '%s' shows an unmapped event; '%s' also runs now and maps to a mode",
+                        calendar_entity,
+                        event.get("summary", ""),
+                    )
+                    return kw
+        return None
 
     def _build_result(self) -> dict:
         """Build the data dict returned by the coordinator."""

@@ -111,14 +111,20 @@ export class HomeShiftSchedulePanel extends LitElement {
     this._selected = mode;
   }
 
+  /** Arrows move to the previous / next tab (wrapping), Home / End to the first / last. */
   private _onTabKeydown(ev: KeyboardEvent) {
-    const step = ({ ArrowRight: 1, ArrowLeft: -1 } as Record<string, number>)[
-      ev.key
-    ];
-    if (!step) return;
+    const count = this.modes.length;
     const index = this.modes.indexOf(this._selected ?? "");
-    const next = this.modes[(index + step + this.modes.length) % this.modes.length];
-    this._select(next);
+    const target = (
+      {
+        ArrowRight: (index + 1) % count,
+        ArrowLeft: (index - 1 + count) % count,
+        Home: 0,
+        End: count - 1,
+      } as Record<string, number>
+    )[ev.key];
+    if (target === undefined || !count) return;
+    this._select(this.modes[target]);
     ev.preventDefault();
     this.updateComplete.then(() =>
       this.shadowRoot
@@ -137,12 +143,15 @@ export class HomeShiftSchedulePanel extends LitElement {
     return html`
       <div class="header">
         <div class="tabs" role="tablist" @keydown=${this._onTabKeydown}>
-          ${this.modes.map((mode) => {
+          ${this.modes.map((mode, index) => {
             const isSelected = mode === selected;
+            // Only the selected tab's panel is rendered: only it controls one.
             return html`<button
+              id="schedule-tab-${index}"
               class="tab ${isSelected ? "selected" : ""}"
               role="tab"
               aria-selected=${isSelected ? "true" : "false"}
+              aria-controls=${isSelected ? "schedule-tabpanel" : nothing}
               tabindex=${isSelected ? 0 : -1}
               @click=${() => this._select(mode)}
             >
@@ -150,6 +159,7 @@ export class HomeShiftSchedulePanel extends LitElement {
               ${mode === this.activeMode
                 ? html`<span
                     class="active-dot"
+                    role="img"
                     title=${localize(this.hass, "schedule.active_mode")}
                     aria-label=${localize(this.hass, "schedule.active_mode")}
                   ></span>`
@@ -184,7 +194,12 @@ export class HomeShiftSchedulePanel extends LitElement {
                 : "schedule.note_inactive",
             )}
           </p>`}
-      <div class="content" role="tabpanel">
+      <div
+        id="schedule-tabpanel"
+        class="content"
+        role="tabpanel"
+        aria-labelledby="schedule-tab-${this.modes.indexOf(selected)}"
+      >
         ${this._editing
           ? (this._card(selected) ?? nothing)
           : html`<homeshift-schedule-timeline

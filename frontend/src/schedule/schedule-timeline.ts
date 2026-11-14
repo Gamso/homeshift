@@ -169,7 +169,7 @@ export class HomeShiftScheduleTimeline extends LitElement {
     return html`
       <div class="row ${enabled ? "" : "disabled"}" title=${schedule.name}>
         <ha-icon class="kind ${kind}" icon=${KIND_ICONS[kind]}></ha-icon>
-        <div class="bar">
+        <div class="bar" role="img" aria-label=${this._summary(schedule, segments)}>
           ${segments.map((s) => this._renderSegment(s))}
           <div class="now" style="left: ${(nowMinutes / DAY_MINUTES) * 100}%"></div>
         </div>
@@ -187,10 +187,25 @@ export class HomeShiftScheduleTimeline extends LitElement {
     `;
   }
 
+  /**
+   * What the timeline shows, for screen readers: the schedule's name, then
+   * each segment's range and value ("Travail salon: 00:00 – 07:00 18°, …").
+   */
+  private _summary(schedule: Schedule, segments: Segment[]): string {
+    const parts = segments.map(
+      (s) => `${this._range(s)} ${this._label(s.value)}`.trim(),
+    );
+    return parts.length ? `${schedule.name}: ${parts.join(", ")}` : schedule.name;
+  }
+
+  private _range(segment: Segment): string {
+    return `${formatMinutes(segment.start)} – ${formatMinutes(segment.end)}`;
+  }
+
   private _renderSegment(segment: Segment) {
     const { background, color } = segmentColors(segment.value);
     const width = ((segment.end - segment.start) / DAY_MINUTES) * 100;
-    const range = `${formatMinutes(segment.start)} – ${formatMinutes(segment.end)}`;
+    const range = this._range(segment);
     const label = this._label(segment.value);
     // The card is narrow: a label is written only where it fits, about 2 %
     // of the bar per character ("18°" fits in 10 %, "Confort" needs 16 %).

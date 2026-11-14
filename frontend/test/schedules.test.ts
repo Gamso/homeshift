@@ -243,6 +243,42 @@ describe("schedules panel", () => {
     ]);
   });
 
+  it("describes each timeline to screen readers", async () => {
+    const card = await render(schedulerHass());
+    const root = await open(card);
+    const bars = [...root.querySelectorAll<HTMLElement>(".bar")];
+    expect(bars.every((bar) => bar.getAttribute("role") === "img")).toBe(true);
+    expect(bars[0].getAttribute("aria-label")).toBe(
+      "Travail salon: 00:00 – 07:00 18°, 07:00 – 00:00 20.5°",
+    );
+    expect(bars[1].getAttribute("aria-label")).toBe(
+      "Travail salon clim: 14:00 – 18:00 26°",
+    );
+  });
+
+  it("links the tabs to their panel and moves with Home / End", async () => {
+    const card = await render(schedulerHass());
+    await open(card);
+    const root = await panel(card);
+    const tabs = () => [...root.querySelectorAll<HTMLElement>(".tab")];
+    const panelEl = root.querySelector<HTMLElement>('[role="tabpanel"]')!;
+    expect(panelEl.id).toBe("schedule-tabpanel");
+    expect(panelEl.getAttribute("aria-labelledby")).toBe(tabs()[1].id);
+    expect(tabs()[1].getAttribute("aria-controls")).toBe("schedule-tabpanel");
+    // The other tab's panel is not rendered: no aria-controls pointing at it.
+    expect(tabs()[0].hasAttribute("aria-controls")).toBe(false);
+    expect(tabs()[1].querySelector(".active-dot")!.getAttribute("role")).toBe("img");
+
+    tabs()[1].dispatchEvent(new KeyboardEvent("keydown", { key: "Home", bubbles: true }));
+    await panel(card);
+    expect(tabs()[0].getAttribute("aria-selected")).toBe("true");
+    expect(panelEl.getAttribute("aria-labelledby")).toBe(tabs()[0].id);
+
+    tabs()[0].dispatchEvent(new KeyboardEvent("keydown", { key: "End", bubbles: true }));
+    await panel(card);
+    expect(tabs()[1].getAttribute("aria-selected")).toBe("true");
+  });
+
   it("reads the schedules again when a schedule switch changes", async () => {
     const hass = schedulerHass();
     const card = await render(hass);
